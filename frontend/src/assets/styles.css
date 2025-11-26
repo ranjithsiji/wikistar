@@ -1,0 +1,14 @@
+body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#fbfbfb; color:#222; }
+.container-max { max-width:1100px; margin:auto; }
+.card .card-title { font-weight:700; }
+.editathon-card { transition: transform .12s ease, box-shadow .12s ease; }
+.editathon-card:hover { transform: translateY(-4px); box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+.badge-jury { background:#2b8cff; color:#fff; margin-right:6px; }
+.chart-card { min-height:260px; }
+.article-preview { border:1px solid #eee; padding:12px; border-radius:6px; max-height:420px; overflow:auto; background:#fff; }
+.vote-panel { background: linear-gradient(90deg,#fff9e6,#fff); border:1px solid #ffe6a7; padding:12px; border-radius:6px; box-shadow:0 4px 10px rgba(0,0,0,0.04); margin-bottom:12px; }
+.vote-btn-yes { background:#2b8cff; color:#fff; }
+.vote-btn-no { background:#ff6b6b; color:#fff; }
+.vote-btn-skip { background:#6c757d; color:#fff; }
+.jury-badge-reviewed { background:#28a745; color:#fff; }
+.jury-badge-not { background:#6c757d; color:#fff; }
