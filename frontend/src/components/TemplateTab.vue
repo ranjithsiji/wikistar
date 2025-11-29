@@ -1,95 +1,417 @@
 <template>
   <div class="template-tab">
-    <h3>Template</h3>
-    <div class="accordion" id="templateAccordion">
-      <div class="accordion-item">
-        <h2 class="accordion-header">
-          <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#templateCollapse">
-            Template Configuration
-          </button>
-        </h2>
-        <div id="templateCollapse" class="accordion-collapse collapse show" data-bs-parent="#templateAccordion">
-          <div class="accordion-body">
-            <div class="form-group">
-              <label for="templateName">Template name</label>
-              <input id="templateName" v-model="localEditathon.template_name" class="form-control" placeholder="Template name" />
-            </div>
-            <div class="form-group">
-              <label>On the page</label>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" id="onPageYes" v-model="localEditathon.onThePage" value="yes" />
-                <label class="form-check-label" for="onPageYes">Yes</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" id="onPageNo" v-model="localEditathon.onThePage" value="no" />
-                <label class="form-check-label" for="onPageNo">No</label>
-              </div>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="created" v-model="localEditathon.created" />
-              <label class="form-check-label" for="created">Created</label>
-            </div>
-            <div class="form-group mt-3">
-              <label>Preview</label>
-              <div class="border p-3 bg-light">
-                <code>{{ preview }}</code>
-              </div>
-            </div>
+    <!-- Automatically add template -->
+    <div class="checkbox-section">
+      <label class="checkbox-label">
+        <input type="checkbox" v-model="localTemplate.autoAdd" @change="markUnsaved" />
+        <span>Automatically add template</span>
+      </label>
+    </div>
+
+    <!-- Template Configuration -->
+    <div class="form-section">
+      <div class="form-group">
+        <label for="templateName">Template name</label>
+        <input 
+          id="templateName" 
+          v-model="localTemplate.name" 
+          @input="markUnsaved"
+          class="input" 
+          placeholder="Enter template name" 
+        />
+      </div>
+
+      <div class="form-group">
+        <label>Template placement</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input 
+              type="radio" 
+              v-model="localTemplate.placement" 
+              @change="markUnsaved"
+              value="article" 
+            />
+            <span>in the article</span>
+          </label>
+          <label class="radio-label">
+            <input 
+              type="radio" 
+              v-model="localTemplate.placement" 
+              @change="markUnsaved"
+              value="talk" 
+            />
+            <span>on the talk page</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Arguments</label>
+        <div class="arguments-list">
+          <div v-for="(arg, index) in localTemplate.arguments" :key="index" class="argument-row">
+            <input 
+              v-model="arg.key" 
+              @input="markUnsaved"
+              class="input arg-key" 
+              placeholder="key" 
+            />
+            <span class="equals">=</span>
+            <input 
+              v-model="arg.value" 
+              @input="markUnsaved"
+              class="input arg-value" 
+              placeholder="value" 
+            />
+            <button @click="removeArgument(index)" class="btn-remove">×</button>
           </div>
+        </div>
+        <button @click="addArgument" class="btn-add">add</button>
+      </div>
+
+      <!-- Preview Section -->
+      <div class="preview-section">
+        <label>Preview</label>
+        <div class="preview-box">
+          <code>{{ templatePreview }}</code>
         </div>
       </div>
     </div>
-    <div class="d-flex justify-content-end gap-2 mt-3">
-      <button class="btn btn-secondary" @click="$emit('cancel')">Cancel</button>
-      <button class="btn btn-primary" @click="$emit('save', templateData.value)" :disabled="!localEditathon.template_name">Save</button>
+
+    <!-- Save Button with Status -->
+    <div class="save-section">
+      <span class="status-badge" :class="isSaved ? 'saved' : 'unsaved'">
+        {{ isSaved ? 'Saved' : 'Unsaved' }}
+      </span>
+      <button v-if="!isSaved" @click="saveChanges" class="btn-save">
+        Save
+      </button>
     </div>
-    <p class="text-muted mt-3 small">Please contact us if you have problems with this page. Translate this page, technical information.</p>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
-  editathon: Object
+  editathon: {
+    type: Object,
+    default: () => ({})
+  }
 })
 
-const emit = defineEmits(['update', 'save'])
+const emit = defineEmits(['update'])
 
-const localEditathon = ref({ ...props.editathon })
+const isSaved = ref(false)
 
-watch(() => props.editathon, (newVal) => {
-  localEditathon.value = { ...newVal }
-}, { deep: true })
-
-const templateData = computed(() => ({
-  name: localEditathon.value.template_name || '',
-  onThePage: localEditathon.value.onThePage || 'no',
-  created: localEditathon.value.created || false
-}))
-
-const preview = computed(() => {
-  if (!localEditathon.value.template_name) return ''
-  const placement = localEditathon.value.onThePage === 'yes' ? 'Yes' : 'No'
-  const created = localEditathon.value.created ? 'Yes' : 'No'
-  return `{{${localEditathon.value.template_name}|placement=${placement}|created=${created}}}`
+const localTemplate = ref({
+  autoAdd: props.editathon?.template?.autoAdd || false,
+  name: props.editathon?.template?.name || '',
+  placement: props.editathon?.template?.placement || 'talk',
+  arguments: props.editathon?.template?.arguments || [{ key: '', value: '' }]
 })
 
-watch(templateData, (newVal) => {
-  emit('update', { template: newVal.value })
+function addArgument() {
+  localTemplate.value.arguments.push({ key: '', value: '' })
+  markUnsaved()
+}
+
+function removeArgument(index) {
+  localTemplate.value.arguments.splice(index, 1)
+  if (localTemplate.value.arguments.length === 0) {
+    localTemplate.value.arguments.push({ key: '', value: '' })
+  }
+  markUnsaved()
+}
+
+function markUnsaved() {
+  isSaved.value = false
+  updateParent()
+}
+
+function updateParent() {
+  emit('update', { template: localTemplate.value, _templateSaved: isSaved.value })
+}
+
+function saveChanges() {
+  isSaved.value = true
+  updateParent()
+}
+
+const templatePreview = computed(() => {
+  if (!localTemplate.value.name) return ''
+  
+  let preview = `{{${localTemplate.value.name}`
+  
+  // Add arguments with non-empty keys
+  const validArgs = localTemplate.value.arguments.filter(arg => arg.key.trim())
+  validArgs.forEach(arg => {
+    preview += `|${arg.key}=${arg.value}`
+  })
+  
+  preview += '}}'
+  return preview
+})
+
+watch(() => props.editathon?.template, (newTemplate) => {
+  if (newTemplate) {
+    localTemplate.value = {
+      autoAdd: newTemplate.autoAdd || false,
+      name: newTemplate.name || '',
+      placement: newTemplate.placement || 'talk',
+      arguments: newTemplate.arguments?.length ? [...newTemplate.arguments] : [{ key: '', value: '' }]
+    }
+  }
 }, { deep: true })
+
+watch(() => props.editathon?._templateSaved, (newSaved) => {
+  if (newSaved !== undefined) {
+    isSaved.value = newSaved
+  }
+})
 </script>
 
 <style scoped>
 .template-tab {
-  padding: 20px;
+  max-width: 800px;
+  padding: 0;
+}
+
+/* Checkbox Section */
+.checkbox-section {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* Form Section */
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .form-group {
-  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-.form-check {
-  margin-bottom: 15px;
+.form-group label {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 0.95rem;
+}
+
+.input {
+  padding: 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Radio Group */
+.radio-group {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  color: #495057;
+}
+
+.radio-label input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Arguments */
+.arguments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.argument-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.arg-key {
+  max-width: 200px;
+}
+
+.arg-value {
+  flex: 1;
+}
+
+.equals {
+  font-weight: bold;
+  color: #6c757d;
+}
+
+.btn-remove {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  transition: background 0.2s;
+}
+
+.btn-remove:hover {
+  background: #c82333;
+}
+
+.btn-add {
+  padding: 0.5rem 1rem;
+  background: white;
+  color: #667eea;
+  border: 2px solid #667eea;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+  align-self: flex-start;
+}
+
+.btn-add:hover {
+  background: #667eea;
+  color: white;
+}
+
+/* Preview Section */
+.preview-section {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.preview-section label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.preview-box {
+  padding: 1rem;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  min-height: 60px;
+}
+
+.preview-box code {
+  color: #495057;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .argument-row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  
+  .equals {
+    display: none;
+  }
+  
+  .btn-remove {
+    justify-self: end;
+  }
+  
+  .arg-key {
+    max-width: 100%;
+  }
+  
+  .radio-group {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+/* Save Section */
+.save-section {
+  margin-top: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.status-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.status-badge.saved {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-badge.unsaved {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.btn-save {
+  padding: 0.6rem 1.2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 </style>

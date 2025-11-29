@@ -1,76 +1,106 @@
-import axios from 'axios'
+// src/services/api.js
 
-const API = axios.create({ baseURL: '/api', timeout: 5000 })
+const API_BASE = 'http://localhost:5000/api'
 
-// --- mock (fallback) data so UI runs without backend
-const mock = {
-  editathons: [
-    {
-      id: 1, name: "Feminism and Folklore 2025",
-      startDate: "2025-02-25", endDate: "2025-04-15",
-      description: "Regional editathon focusing on folklore",
-      juries: [{id:11, username:'Meenakshi'},{id:12, username:'Ranjithsiji'}],
-      articles: [
-        {id:101, title:'Article A', addedOn:'2025-03-01', lastEdit:'2025-03-02', bytes:1200, wordCount:220, marksBy:{Meenakshi:1}, reviewedBy:['Meenakshi']},
-        {id:102, title:'Article B', addedOn:'2025-03-05', lastEdit:'2025-03-06', bytes:950, wordCount:150, marksBy:{}, reviewedBy:[]}
-      ]
-    },
-    {
-      id: 2, name: "Wikipedia Asian Month 2024",
-      startDate: "2024-11-01", endDate: "2024-11-30",
-      description: "Regional month",
-      juries: [{id:21, username:'JuryA'},{id:22, username:'JuryB'},{id:23, username:'JuryC'}],
-      articles: [
-        {id:201, title:'Article X', addedOn:'2024-11-03', lastEdit:'2024-11-04', bytes:3100, wordCount:420, marksBy:{JuryA:2}, reviewedBy:['JuryA']}
-      ]
-    }
-  ]
-}
-
-// fetch all editathons
-export async function fetchEditathons(){
-  try{
-    const r = await API.get('/editathons')
-    return r.data
-  }catch(e){
-    console.warn('Using mock editathons', e.message)
-    return mock.editathons
+// Fetch all editathons - REAL DATA from MariaDB
+export async function fetchEditathons() {
+  try {
+    const response = await fetch(`${API_BASE}/editathons`)
+    if (!response.ok) throw new Error('Failed to fetch editathons')
+    return await response.json()
+  } catch (error) {
+    console.error('Error fetching editathons:', error)
+    throw error // No fallback - force real data
   }
 }
 
-// fetch specific editathon
-export async function fetchEditathon(id){
-  try{
-    const r = await API.get(`/editathons/${id}`)
-    return r.data
-  }catch(e){
-    console.warn('Using mock editathon', e.message)
-    return mock.editathons.find(x=>x.id===Number(id)) || null
+// Fetch personal cabinet data - REAL DATA from MariaDB
+export async function fetchPersonalCabinet(username) {
+  try {
+    const response = await fetch(`${API_BASE}/personal-cabinet/${username}`)
+    if (!response.ok) throw new Error('Failed to fetch personal cabinet data')
+    return await response.json()
+  } catch (error) {
+    console.error('Error fetching personal cabinet:', error)
+    throw error // No fallback - force real data
   }
 }
 
-// create editathon (draft)
-export async function createEditathon(payload){
-  try{
-    const r = await API.post('/editathons', payload)
-    return r.data
-  }catch(e){
-    console.warn('Create failed; returning mock created', e.message)
-    const newid = Math.floor(Math.random()*900)+100
-    const created = { id:newid, ...payload, juries: payload.juries.map((u,i)=>({id:newid*10+i, username:u})), articles:[] }
-    mock.editathons.unshift(created)
-    return created
+// Fetch editathon dashboard data - REAL DATA from MariaDB
+export async function fetchEditathonDashboard(editathonId) {
+  try {
+    const response = await fetch(`${API_BASE}/editathon/${editathonId}`)
+    if (!response.ok) throw new Error('Failed to fetch editathon data')
+    return await response.json()
+  } catch (error) {
+    console.error('Error fetching editathon dashboard:', error)
+    throw error // No fallback - force real data
   }
 }
 
-// toggle jury review for an article
-export async function toggleReview(articleId, juryUsername){
-  try{
-    const r = await API.post(`/articles/${articleId}/toggle-review`, { jury_username: juryUsername })
-    return r.data
-  }catch(e){
-    console.warn('toggleReview failed (mock)', e.message)
-    // no-op in mock
-    return { success:true }
+// Submit article to editathon
+export async function submitArticle(editathonId, articleData) {
+  try {
+    const response = await fetch(`${API_BASE}/editathon/${editathonId}/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(articleData)
+    })
+    if (!response.ok) throw new Error('Failed to submit article')
+    return await response.json()
+  } catch (error) {
+    console.error('Error submitting article:', error)
+    throw error
   }
+}
+
+// Judge article
+export async function judgeArticle(editathonId, judgeData) {
+  try {
+    const response = await fetch(`${API_BASE}/editathon/${editathonId}/judge`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(judgeData)
+    })
+    if (!response.ok) throw new Error('Failed to judge article')
+    return await response.json()
+  } catch (error) {
+    console.error('Error judging article:', error)
+    throw error
+  }
+}
+
+// Get user statistics - REAL DATA from MariaDB
+export async function fetchUserStats(username) {
+  try {
+    const response = await fetch(`${API_BASE}/user/${username}`)
+    if (!response.ok) throw new Error('Failed to fetch user stats')
+    return await response.json()
+  } catch (error) {
+    console.error('Error fetching user stats:', error)
+    throw error // No fallback - force real data
+  }
+}
+
+// Create new editathon - PLACEHOLDER (backend doesn't support yet)
+export async function createEditathon(editathonData) {
+  // TODO: Implement when backend supports editathon creation
+  throw new Error('Editathon creation not yet implemented in backend')
+}
+
+// Fetch editathon data for judge view - alias for fetchEditathonDashboard
+export async function fetchEditathon(editathonId) {
+  return fetchEditathonDashboard(editathonId)
+}
+
+// Toggle review status for article - PLACEHOLDER (backend doesn't support yet)
+export async function toggleReview(articleId, username) {
+  // TODO: Implement when backend supports review toggling
+  console.log(`Toggling review for article ${articleId} by ${username}`)
+  // For now, just return success
+  return { success: true }
 }

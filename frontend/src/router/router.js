@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from './views/Home.vue'
 import CreateEditathon from './views/CreateEditathon.vue'
-import EditathonDashboard from './views/EditathonDashboard.vue'
+import EditathonDashboard from './views/EditathonDashboard.vue' // ✅ CHANGED
 import JudgeView from './views/JudgeView.vue'
 import PersonalCabinet from './views/PersonalCabinet.vue'
 
@@ -18,8 +18,8 @@ const routes = [
   },
   {
     path: '/editathon/:id',
-    name: 'EditathonDashboard',
-    component: EditathonDashboard,
+    name: 'EditathonDashboard', // ✅ CHANGED
+    component: EditathonDashboard, // ✅ CHANGED
     props: true
   },
   {
@@ -32,6 +32,11 @@ const routes = [
     path: '/personal-cabinet',
     name: 'PersonalCabinet',
     component: PersonalCabinet
+  },
+  {
+    path: '/wiki-user-inspector',
+    name: 'WikiUserInspector',
+    component: WikiUserInspector
   }
 ]
 

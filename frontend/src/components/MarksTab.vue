@@ -2,6 +2,7 @@
 $marksTabContent = @'
 <template>
   <div class="marks-content">
+    <MarkSelector @add="addMark" />
     <h3>Please pick compulsory mark controls below to test the mark</h3>
     
     <!-- Added Controls Summary -->
@@ -24,7 +25,7 @@ $marksTabContent = @'
     </div>
 
     <!-- Toggle Button Section -->
-    <div class="control-section compact" :class="{ saved: toggleButton.saved }">
+    <div v-if="toggleButton.visible" class="control-section compact" :class="{ saved: toggleButton.saved }">
       <div class="section-header">
         <h4>Toggle Button</h4>
         <button @click="removeToggleButton" class="btn-remove" v-if="toggleButton.saved">×</button>
@@ -96,13 +97,8 @@ $marksTabContent = @'
       </div>
     </div>
 
-    <!-- Add Radio Group Button -->
-    <div class="add-section" v-if="unsavedRadioGroups.length === 0">
-      <button @click="addRadioGroup" class="add-btn">+ Add Radio Group</button>
-    </div>
-
     <!-- Numeric Input Section -->
-    <div class="control-section compact" :class="{ saved: numericInput.saved }">
+    <div v-if="numericInput.visible" class="control-section compact" :class="{ saved: numericInput.saved }">
       <div class="section-header">
         <h4>Numeric Input</h4>
         <button @click="removeNumericInput" class="btn-remove" v-if="numericInput.saved">×</button>
@@ -197,9 +193,11 @@ $marksTabContent = @'
 
 <script>
 import { ref, reactive, computed } from 'vue'
+import MarkSelector from './MarkSelector.vue'
 
 export default {
   name: 'MarksTab',
+  components: { MarkSelector },
   props: {
     editathon: {
       type: Object,
@@ -209,29 +207,49 @@ export default {
   emits: ['update'],
   
   setup(props, { emit }) {
-    // Mark controls data
+    // Mark controls data - start with null/empty to hide until selected
     const toggleButton = reactive({
       title: '',
       value: 0,
       description: '',
-      saved: false
+      saved: false,
+      visible: false
     })
 
-    const radioGroups = ref([
-      {
-        title: '',
-        value: 0,
-        description: '',
-        saved: false
-      }
-    ])
+    const radioGroups = ref([])
 
     const numericInput = reactive({
       title: '',
       min: 1,
       max: 5,
-      saved: false
+      saved: false,
+      visible: false
     })
+
+    // Add via selector
+    const addMark = (type) => {
+      switch(type){
+        case 'toggle':
+          if (toggleButton.visible && !toggleButton.saved) {
+            alert('Please save or cancel the current toggle button first')
+            return
+          }
+          Object.assign(toggleButton, { title: '', value: 0, description: '', saved: false, visible: true })
+          break
+        case 'radio':
+          radioGroups.value.push({ title: '', value: 0, description: '', saved: false })
+          break
+        case 'numeric':
+          if (numericInput.visible && !numericInput.saved) {
+            alert('Please save or cancel the current numeric input first')
+            return
+          }
+          Object.assign(numericInput, { title: '', min: 1, max: 5, saved: false, visible: true })
+          break
+      }
+      // Scroll to bottom where newly added control appears
+      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50)
+    }
 
     // Preview data
     const previewToggle = ref(false)
@@ -263,14 +281,14 @@ export default {
 
     const removeToggleButton = () => {
       if (confirm('Remove this toggle button?')) {
-        Object.assign(toggleButton, { title: '', value: 0, description: '', saved: false })
+        Object.assign(toggleButton, { title: '', value: 0, description: '', saved: false, visible: false })
         previewToggle.value = false
         emit('update', { type: 'toggleButton', data: null })
       }
     }
 
     const cancelToggleButton = () => {
-      Object.assign(toggleButton, { title: '', value: 0, description: '', saved: false })
+      Object.assign(toggleButton, { title: '', value: 0, description: '', saved: false, visible: false })
     }
 
     const saveRadioGroup = (index) => {
@@ -307,14 +325,14 @@ export default {
 
     const removeNumericInput = () => {
       if (confirm('Remove this numeric input?')) {
-        Object.assign(numericInput, { title: '', min: 1, max: 5, saved: false })
+        Object.assign(numericInput, { title: '', min: 1, max: 5, saved: false, visible: false })
         previewNumeric.value = 1
         emit('update', { type: 'numericInput', data: null })
       }
     }
 
     const cancelNumericInput = () => {
-      Object.assign(numericInput, { title: '', min: 1, max: 5, saved: false })
+      Object.assign(numericInput, { title: '', min: 1, max: 5, saved: false, visible: false })
     }
 
     const addRadioGroup = () => {
@@ -336,6 +354,7 @@ export default {
       toggleButton,
       radioGroups,
       numericInput,
+      addMark,
       previewToggle,
       previewRadio,
       previewNumeric,

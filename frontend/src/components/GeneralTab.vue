@@ -11,7 +11,7 @@
           type="text"
           class="form-input"
           placeholder="Enter editathon title"
-          @input="updateParent"
+          @input="markUnsaved"
         />
       </div>
 
@@ -23,7 +23,7 @@
           type="text"
           class="form-input"
           placeholder="Enter editathon code (optional)"
-          @input="updateParent"
+          @input="markUnsaved"
         />
       </div>
 
@@ -33,7 +33,7 @@
           id="project"
           v-model="localData.project"
           class="form-select"
-          @change="updateParent"
+          @change="markUnsaved"
         >
           <option value="en.wikipedia.org">English Wikipedia</option>
           <option value="ml.wikipedia.org">Malayalam Wikipedia</option>
@@ -51,7 +51,7 @@
           class="form-textarea"
           placeholder="Enter editathon description"
           rows="4"
-          @input="updateParent"
+          @input="markUnsaved"
         ></textarea>
       </div>
     </div>
@@ -66,7 +66,7 @@
           v-model="localData.startDate"
           type="date"
           class="form-input"
-          @change="updateParent"
+          @change="markUnsaved"
         />
       </div>
 
@@ -77,7 +77,7 @@
           v-model="localData.endDate"
           type="date"
           class="form-input"
-          @change="updateParent"
+          @change="markUnsaved"
         />
       </div>
     </div>
@@ -91,7 +91,7 @@
           v-model="localData.consensualVote"
           type="checkbox"
           class="form-checkbox"
-          @change="updateParent"
+          @change="markUnsaved"
         />
         <label for="consensualVote" class="checkbox-label">
           Consensual Vote
@@ -105,7 +105,7 @@
           v-model="localData.hiddenMarks"
           type="checkbox"
           class="form-checkbox"
-          @change="updateParent"
+          @change="markUnsaved"
         />
         <label for="hiddenMarks" class="checkbox-label">
           Hidden Marks
@@ -113,11 +113,21 @@
         </label>
       </div>
     </div>
+
+    <!-- Save Button with Status -->
+    <div class="save-section">
+      <span class="status-badge" :class="isSaved ? 'saved' : 'unsaved'">
+        {{ isSaved ? 'Saved' : 'Unsaved' }}
+      </span>
+      <button v-if="!isSaved" @click="saveChanges" class="btn-save">
+        Save
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 
 const props = defineProps({
   editathon: {
@@ -127,6 +137,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update'])
+
+const isSaved = ref(false)
 
 const localData = reactive({
   title: '',
@@ -152,11 +164,22 @@ watch(() => props.editathon, (newEditathon) => {
       consensualVote: newEditathon.consensualVote || false,
       hiddenMarks: newEditathon.hiddenMarks || false
     })
+    isSaved.value = newEditathon._generalSaved || false
   }
 }, { immediate: true })
 
+function markUnsaved() {
+  isSaved.value = false
+  updateParent()
+}
+
 function updateParent() {
-  emit('update', { ...localData })
+  emit('update', { ...localData, _generalSaved: isSaved.value })
+}
+
+function saveChanges() {
+  isSaved.value = true
+  updateParent()
 }
 </script>
 
@@ -240,5 +263,51 @@ function updateParent() {
   font-size: 12px;
   color: #666;
   font-weight: normal;
+}
+
+.save-section {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-badge.saved {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-badge.unsaved {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.btn-save {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 </style>

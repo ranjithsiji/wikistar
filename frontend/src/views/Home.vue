@@ -5,18 +5,19 @@
       <router-link to="/create" class="btn btn-primary">Create New Editathon</router-link>
     </div>
 
-    <div class="row g-3">
-      <div class="col-lg-6 col-md-12">
-        <ChartYearArticles />
-      </div>
-      <div class="col-lg-6 col-md-12">
-        <ChartTimeline />
+    <!-- Timeline Component -->
+    <EditathonTimeline />
+
+    <h4 class="mt-4">Ongoing</h4>
+    <div class="row mt-2">
+      <div class="col-md-6" v-for="e in ongoingEditathons" :key="e.id">
+        <EditathonCard :editathon="e" />
       </div>
     </div>
 
     <h4 class="mt-4">Finished</h4>
     <div class="row mt-2">
-      <div class="col-md-6" v-for="e in editathons" :key="e.id">
+      <div class="col-md-6" v-for="e in finishedEditathons" :key="e.id">
         <EditathonCard :editathon="e" />
       </div>
     </div>
@@ -24,15 +25,32 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { fetchEditathons } from '../services/api'
-import ChartYearArticles from '../components/ChartYearArticles.vue'
-import ChartTimeline from '../components/ChartTimeline.vue'
+import { ref, onMounted, computed } from 'vue'
+import { fetchEditathons } from '../services/api' // This will now use the updated API
 import EditathonCard from '../components/EditathonCard.vue'
+import EditathonTimeline from '../components/EditathonTimeline.vue'
 
 const editathons = ref([])
 
-onMounted(async ()=>{
-  editathons.value = await fetchEditathons()
+const ongoingEditathons = computed(() => {
+  const now = new Date()
+  return editathons.value.filter(editathon => {
+    if (!editathon.endDate) return true
+    const endDate = new Date(editathon.endDate)
+    return endDate >= now
+  })
+})
+
+const finishedEditathons = computed(() => {
+  const now = new Date()
+  return editathons.value.filter(editathon => {
+    if (!editathon.endDate) return false
+    const endDate = new Date(editathon.endDate)
+    return endDate < now
+  })
+})
+
+onMounted(async () => {
+  editathons.value = await fetchEditathons() // This will now fetch from your backend
 })
 </script>
