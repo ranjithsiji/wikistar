@@ -1,84 +1,74 @@
 <template>
-  <div class="created-editathons">
-    <div class="header-section">
-      <div>
-        <h3>🛠️ Editathons Created by You</h3>
-        <p class="subtitle">Manage and track your editathon submissions</p>
-      </div>
-      <router-link to="/create" class="btn btn-create">
-        <span class="btn-icon">+</span> Create New Editathon
+  <div class="created-section">
+    <div class="section-header">
+      <h2 class="section-title">Created Editathons</h2>
+      <router-link to="/create" class="btn-add">
+        + New Editathon
       </router-link>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading" class="loading">
       <div class="spinner"></div>
-      <p>Loading your editathons...</p>
+      <p>Loading editathons...</p>
     </div>
 
     <div v-else-if="editathons.length === 0" class="empty-state">
-      <div class="empty-icon">📝</div>
-      <h4>No Editathons Yet</h4>
-      <p>You haven't created any editathons. Start by creating your first one!</p>
-      <router-link to="/create" class="btn btn-primary">Create Your First Editathon</router-link>
+      <p>You haven't created any editathons yet.</p>
+      <router-link to="/create" class="link">Create your first editathon</router-link>
     </div>
 
-    <div v-else class="editathons-grid">
-      <div v-for="editathon in editathons" :key="editathon.id" class="editathon-card">
-        <div class="card-header-status">
+    <div v-else class="editathons-list">
+      <div v-for="editathon in editathons" :key="editathon.id" class="editathon-box">
+        <div class="box-header">
+          <h3 class="box-title">{{ editathon.name }}</h3>
           <span class="status-badge" :class="`status-${editathon.status}`">
-            <span class="status-icon">{{ getStatusIcon(editathon.status) }}</span>
             {{ getStatusText(editathon.status) }}
           </span>
-          <span class="created-date">{{ formatDate(editathon.created) }}</span>
         </div>
 
-        <div class="card-content">
-          <h4 class="editathon-title">{{ editathon.name }}</h4>
-          <p class="editathon-description">{{ editathon.description }}</p>
-          
-          <div class="editathon-meta">
-            <div class="meta-item">
-              <span class="meta-label">Language:</span>
-              <span class="meta-value">{{ editathon.wiki_language || 'ml' }}</span>
-            </div>
-            <div class="meta-item">
-              <span class="meta-label">Duration:</span>
-              <span class="meta-value">{{ formatDateRange(editathon.startDate, editathon.endDate) }}</span>
-            </div>
-          </div>
+        <p class="box-description">{{ editathon.description }}</p>
 
-          <div v-if="editathon.status === 'pending'" class="pending-note">
-            ⏳ Awaiting admin approval
+        <div class="box-meta">
+          <div class="meta-item">
+            <span class="meta-label">Duration:</span>
+            <span class="meta-value">{{ formatDateRange(editathon.startDate, editathon.endDate) }}</span>
           </div>
-          <div v-if="editathon.status === 'rejected'" class="rejection-note">
-            ❌ Rejected: {{ editathon.rejection_reason || 'Please contact admin' }}
+          <div class="meta-item">
+            <span class="meta-label">Language:</span>
+            <span class="meta-value">{{ editathon.wiki_language || 'N/A' }}</span>
           </div>
         </div>
 
-        <div class="card-actions">
+        <div v-if="editathon.status === 'pending'" class="note warning">
+          Awaiting admin review
+        </div>
+        <div v-if="editathon.status === 'rejected'" class="note error">
+          {{ editathon.rejection_reason || 'Rejected by admin' }}
+        </div>
+
+        <div class="box-actions">
           <router-link 
             v-if="editathon.status === 'approved'" 
             :to="`/editathon/${editathon.id}`" 
-            class="btn btn-manage">
-            Manage Editathon
+            class="btn-action btn-manage">
+            Manage
           </router-link>
           <button 
             v-else-if="editathon.status === 'pending'" 
-            class="btn btn-secondary" 
+            class="btn-action btn-pending" 
             disabled>
-            Pending Approval
+            Pending Review
           </button>
           <button 
             v-else-if="editathon.status === 'rejected'" 
             @click="editEditathon(editathon)" 
-            class="btn btn-warning">
+            class="btn-action btn-edit">
             Edit & Resubmit
           </button>
           <button 
             @click="deleteEditathon(editathon.id)" 
-            class="btn btn-danger-outline"
-            title="Delete editathon">
-            🗑️
+            class="btn-action btn-delete">
+            Delete
           </button>
         </div>
       </div>
@@ -199,68 +189,59 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.created-editathons {
-  padding: 1rem;
+.created-section {
+  padding: 0;
 }
 
-.header-section {
+.section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   flex-wrap: wrap;
   gap: 1rem;
 }
 
-.header-section h3 {
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
   margin: 0;
-  font-size: 1.8rem;
-  color: #2c3e50;
 }
 
-.subtitle {
-  color: #7f8c8d;
-  margin: 0.25rem 0 0 0;
-}
-
-.btn {
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
+.btn-add {
+  padding: 0.7rem 1.4rem;
+  background: #667eea;
+  color: white;
   border: none;
-  transition: all 0.3s ease;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  transition: all 0.3s ease;
 }
 
-.btn-create {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+.btn-add:hover {
+  background: #5568d3;
 }
 
-.btn-create:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
-}
-
-.btn-icon {
-  font-size: 1.2rem;
-}
-
-.loading-state, .empty-state {
+.loading {
+  padding: 2rem;
   text-align: center;
-  padding: 3rem;
+  background: #f9fafb;
+  border: 2px dashed #e5e7eb;
+  border-radius: 8px;
 }
 
 .spinner {
   width: 50px;
   height: 50px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #667eea;
+  border: 4px solid #e5e7eb;
+  border-top-color: #667eea;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 1rem;
@@ -270,193 +251,212 @@ onMounted(async () => {
   to { transform: rotate(360deg); }
 }
 
-.empty-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  background: #f9fafb;
+  border: 2px dashed #e5e7eb;
+  border-radius: 8px;
+  color: #6b7280;
+  font-weight: 500;
 }
 
-.empty-state h4 {
-  color: #2c3e50;
-  margin-bottom: 0.5rem;
+.link {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s ease;
 }
 
-.empty-state p {
-  color: #7f8c8d;
-  margin-bottom: 1.5rem;
+.link:hover {
+  color: #5568d3;
+  text-decoration: underline;
 }
 
-.editathons-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 1.5rem;
+.editathons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.editathon-card {
+.editathon-box {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
   transition: all 0.3s ease;
 }
 
-.editathon-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  transform: translateY(-4px);
+.editathon-box:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
 }
 
-.card-header-status {
-  padding: 1rem;
-  background: #f8f9fa;
+.box-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid #e9ecef;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.box-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
 }
 
 .status-badge {
-  padding: 0.4rem 1rem;
+  padding: 0.4rem 0.8rem;
   border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.status-pending {
-  background-color: #fff3cd;
-  color: #856404;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .status-approved {
-  background-color: #d4edda;
-  color: #155724;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pending {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .status-rejected {
-  background-color: #f8d7da;
-  color: #721c24;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .status-draft {
-  background-color: #e2e3e5;
-  color: #383d41;
+  background: #f3f4f6;
+  color: #4b5563;
 }
 
-.created-date {
-  font-size: 0.85rem;
-  color: #6c757d;
-}
-
-.card-content {
-  padding: 1.5rem;
-}
-
-.editathon-title {
-  font-size: 1.3rem;
-  margin: 0 0 0.5rem 0;
-  color: #2c3e50;
-}
-
-.editathon-description {
-  color: #7f8c8d;
+.box-description {
+  color: #6b7280;
+  font-size: 0.95rem;
   margin-bottom: 1rem;
   line-height: 1.5;
 }
 
-.editathon-meta {
+.box-meta {
   display: flex;
-  gap: 1.5rem;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid #f3f4f6;
   margin-bottom: 1rem;
-  flex-wrap: wrap;
 }
 
 .meta-item {
   display: flex;
-  gap: 0.5rem;
-  font-size: 0.9rem;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .meta-label {
-  color: #7f8c8d;
+  font-size: 0.75rem;
+  color: #9ca3af;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .meta-value {
-  color: #2c3e50;
+  font-size: 0.9rem;
+  color: #1f2937;
+  font-weight: 600;
 }
 
-.pending-note, .rejection-note {
+.note {
   padding: 0.75rem;
   border-radius: 6px;
   font-size: 0.9rem;
-  margin-top: 1rem;
+  margin-bottom: 1rem;
 }
 
-.pending-note {
-  background-color: #fff3cd;
-  color: #856404;
+.note.warning {
+  background: #fef3c7;
+  color: #92400e;
 }
 
-.rejection-note {
-  background-color: #f8d7da;
-  color: #721c24;
+.note.error {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
-.card-actions {
-  padding: 1rem 1.5rem;
-  background: #f8f9fa;
+.box-actions {
   display: flex;
-  gap: 0.5rem;
-  border-top: 2px solid #e9ecef;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-action {
+  padding: 0.65rem 1.2rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 .btn-manage {
-  flex: 1;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   color: white;
-  justify-content: center;
 }
 
-.btn-secondary {
-  flex: 1;
-  background-color: #6c757d;
-  color: white;
-  justify-content: center;
+.btn-manage:hover {
+  background: #5568d3;
 }
 
-.btn-warning {
-  flex: 1;
-  background-color: #ffc107;
-  color: #212529;
-  justify-content: center;
+.btn-pending {
+  background: #d1d5db;
+  color: #6b7280;
+  cursor: not-allowed;
 }
 
-.btn-danger-outline {
+.btn-edit {
+  background: #fbbf24;
+  color: #78350f;
+}
+
+.btn-edit:hover {
+  background: #f59e0b;
+}
+
+.btn-delete {
   background: white;
   color: #dc3545;
   border: 2px solid #dc3545;
-  padding: 0.5rem 1rem;
 }
 
-.btn-danger-outline:hover {
-  background-color: #dc3545;
+.btn-delete:hover {
+  background: #dc3545;
   color: white;
 }
 
 @media (max-width: 768px) {
-  .editathons-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .header-section {
+  .section-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
-  
-  .btn-create {
+
+  .btn-add {
     width: 100%;
     justify-content: center;
+  }
+
+  .box-meta {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
   }
 }
 </style>

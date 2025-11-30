@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Home from './views/Home.vue'
 import CreateEditathon from './views/CreateEditathon.vue'
 import EditathonDashboard from './views/EditathonDashboard.vue' // ✅ CHANGED
-import JudgeView from './views/JudgeView.vue'
 import PersonalCabinet from './views/PersonalCabinet.vue'
 
 const routes = [
@@ -20,12 +19,6 @@ const routes = [
     path: '/editathon/:id',
     name: 'EditathonDashboard', // ✅ CHANGED
     component: EditathonDashboard, // ✅ CHANGED
-    props: true
-  },
-  {
-    path: '/editathon/:id/judge',
-    name: 'JudgeView',
-    component: JudgeView,
     props: true
   },
   {

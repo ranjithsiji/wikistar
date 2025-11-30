@@ -75,7 +75,7 @@ function getDefaultConfig(type) {
     case 'namespace':
       return { namespace: 'Main' }
     case 'size':
-      return { min: 1000, max: 10000 }
+      return { min: 1000, max: 10000, metric: 'bytes', maxMetric: 'bytes', hasMax: false }
     case 'creation_date':
       return { notBefore: '', notAfter: '' }
     case 'created_by_submitter':

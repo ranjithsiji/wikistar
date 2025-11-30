@@ -1,665 +1,278 @@
-# Create compact MarksTab with better UI
-$marksTabContent = @'
 <template>
-  <div class="marks-content">
-    <MarkSelector @add="addMark" />
-    <h3>Please pick compulsory mark controls below to test the mark</h3>
-    
-    <!-- Added Controls Summary -->
-    <div class="summary-section" v-if="hasSavedControls">
-      <h4>Added Controls</h4>
-      <div class="controls-list">
-        <div v-if="toggleButton.saved" class="control-badge toggle-badge">
-          <span>Toggle: {{ toggleButton.title || 'Untitled' }}</span>
-          <button @click="removeToggleButton" class="badge-remove">×</button>
-        </div>
-        <div v-for="(radio, index) in savedRadioGroups" :key="index" class="control-badge radio-badge">
-          <span>Radio: {{ radio.title || 'Untitled' }}</span>
-          <button @click="removeRadioGroup(index)" class="badge-remove">×</button>
-        </div>
-        <div v-if="numericInput.saved" class="control-badge numeric-badge">
-          <span>Numeric: {{ numericInput.title || 'Untitled' }}</span>
-          <button @click="removeNumericInput" class="badge-remove">×</button>
-        </div>
-      </div>
+  <div class="marks-tab">
+    <div class="marks-header">
+      <h3>Mark Controls</h3>
+      <MarkSelector @add="addMark" />
     </div>
 
-    <!-- Toggle Button Section -->
-    <div v-if="toggleButton.visible" class="control-section compact" :class="{ saved: toggleButton.saved }">
-      <div class="section-header">
-        <h4>Toggle Button</h4>
-        <button @click="removeToggleButton" class="btn-remove" v-if="toggleButton.saved">×</button>
-        <div class="section-actions" v-else>
-          <button @click="saveToggleButton" class="btn-save">Save</button>
-          <button @click="cancelToggleButton" class="btn-cancel">Cancel</button>
-        </div>
-      </div>
-      <div class="control-item" v-if="!toggleButton.saved">
-        <div class="compact-controls">
-          <input 
-            type="text" 
-            v-model="toggleButton.title" 
-            placeholder="title" 
-            class="compact-input"
-          >
-          <div class="value-control compact">
-            <button @click="toggleButton.value--">-</button>
-            <span class="value-display">{{ toggleButton.value }}</span>
-            <button @click="toggleButton.value++">+</button>
-          </div>
-          <input 
-            type="text" 
-            v-model="toggleButton.description" 
-            placeholder="description (optional)" 
-            class="compact-input"
-          >
-        </div>
-      </div>
-      <div class="saved-indicator" v-else>
-        ✓ Saved
-      </div>
+    <div v-if="localMarks.length === 0" class="empty-state">
+      <p>No marks added yet. Add a mark using the dropdown above.</p>
     </div>
 
-    <!-- Radio Group Sections -->
-    <div class="control-section compact" v-for="(radio, index) in radioGroups" :key="index" 
-         :class="{ saved: radio.saved }">
-      <div class="section-header">
-        <h4>Radio Group {{ index + 1 }}</h4>
-        <button @click="removeRadioGroup(index)" class="btn-remove" v-if="radio.saved">×</button>
-        <div class="section-actions" v-else>
-          <button @click="saveRadioGroup(index)" class="btn-save">Save</button>
-          <button @click="cancelRadioGroup(index)" class="btn-cancel">Cancel</button>
-        </div>
-      </div>
-      <div class="control-item" v-if="!radio.saved">
-        <div class="compact-controls">
-          <input 
-            type="text" 
-            v-model="radio.title" 
-            placeholder="title" 
-            class="compact-input"
-          >
-          <div class="value-control compact">
-            <button @click="radio.value--">-</button>
-            <span class="value-display">{{ radio.value }}</span>
-            <button @click="radio.value++">+</button>
-          </div>
-          <input 
-            type="text" 
-            v-model="radio.description" 
-            placeholder="description (optional)" 
-            class="compact-input"
-          >
-        </div>
-      </div>
-      <div class="saved-indicator" v-else>
-        ✓ Saved
-      </div>
-    </div>
-
-    <!-- Numeric Input Section -->
-    <div v-if="numericInput.visible" class="control-section compact" :class="{ saved: numericInput.saved }">
-      <div class="section-header">
-        <h4>Numeric Input</h4>
-        <button @click="removeNumericInput" class="btn-remove" v-if="numericInput.saved">×</button>
-        <div class="section-actions" v-else>
-          <button @click="saveNumericInput" class="btn-save">Save</button>
-          <button @click="cancelNumericInput" class="btn-cancel">Cancel</button>
-        </div>
-      </div>
-      <div class="control-item" v-if="!numericInput.saved">
-        <div class="compact-controls">
-          <input 
-            type="text" 
-            v-model="numericInput.title" 
-            placeholder="title" 
-            class="compact-input"
-          >
-          <div class="numeric-controls compact">
-            <div class="min-max">
-              <label>min:</label>
-              <div class="value-control compact">
-                <button @click="numericInput.min--">-</button>
-                <span class="value-display">{{ numericInput.min }}</span>
-                <button @click="numericInput.min++">+</button>
-              </div>
-            </div>
-            <div class="min-max">
-              <label>max:</label>
-              <div class="value-control compact">
-                <button @click="numericInput.max--">-</button>
-                <span class="value-display">{{ numericInput.max }}</span>
-                <button @click="numericInput.max++">+</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="saved-indicator" v-else>
-        ✓ Saved
-      </div>
+    <div v-else class="marks-list">
+      <MarkCard
+        v-for="(mark, index) in localMarks"
+        :key="mark.id"
+        :mark="mark"
+        :index="index"
+        @save="(updated) => updateMark(index, updated)"
+        @remove="() => removeMark(index)"
+      />
     </div>
 
     <!-- Preview Section -->
-    <div class="preview-section compact">
-      <div class="section-header">
+    <div v-if="localMarks.length > 0" class="preview-section">
+      <div class="preview-header">
         <h4>Preview</h4>
-        <button @click="resetPreview" class="btn-cancel small">Reset</button>
+        <p>Please pick all compulsory mark controls below to test the mark</p>
       </div>
-      <div class="preview-content">
-        <p>Test your mark controls below:</p>
-        
+      
+      <div class="preview-controls">
         <!-- Toggle Button Preview -->
-        <div class="preview-control" v-if="toggleButton.saved">
-          <label class="toggle-preview">
-            <input type="checkbox" v-model="previewToggle">
+        <div v-for="mark in localMarks.filter(m => m.type === 'toggle' && m._saved)" :key="'toggle-' + mark.id" class="preview-item">
+          <label class="toggle-label">
+            <input type="checkbox" v-model="previewValues[mark.id]" />
             <span class="toggle-slider"></span>
-            <span class="toggle-label">{{ toggleButton.title || 'Toggle' }}</span>
+            <span>{{ mark.title }}</span>
           </label>
-          <span class="preview-value">{{ previewToggle ? toggleButton.value : 0 }}</span>
+          <span class="preview-value">{{ previewValues[mark.id] ? mark.value : 0 }}</span>
         </div>
 
-        <!-- Radio Group Preview -->
-        <div class="preview-control" v-for="(radio, index) in savedRadioGroups" :key="index">
-          <label class="radio-preview">
-            <input type="radio" :name="'radio-group'" v-model="previewRadio" :value="radio.value">
-            <span class="radio-label">{{ radio.title || 'Radio ' + (index + 1) }}</span>
+        <!-- Radio Group/Button Preview -->
+        <div v-for="mark in localMarks.filter(m => (m.type === 'radio' || m.type === 'radio_button') && m._saved)" :key="'radio-' + mark.id" class="preview-item">
+          <label class="radio-label">
+            <input type="radio" name="mark-radio" :value="mark.id" v-model="selectedRadio" />
+            <span>{{ mark.title }}</span>
           </label>
-          <span class="preview-value">{{ previewRadio === radio.value ? radio.value : '' }}</span>
+          <span class="preview-value">{{ selectedRadio === mark.id ? mark.value : 0 }}</span>
         </div>
 
         <!-- Numeric Input Preview -->
-        <div class="preview-control" v-if="numericInput.saved">
-          <label class="numeric-preview">
-            <span class="numeric-label">{{ numericInput.title || 'Number' }}:</span>
-            <input 
-              type="number" 
-              v-model="previewNumeric" 
-              :min="numericInput.min" 
-              :max="numericInput.max"
-              class="numeric-input"
-            >
+        <div v-for="mark in localMarks.filter(m => m.type === 'numeric' && m._saved)" :key="'numeric-' + mark.id" class="preview-item">
+          <label class="numeric-label">
+            <span>{{ mark.title }}:</span>
+            <div class="numeric-input-wrapper">
+              <button class="btn-spin" @click="previewValues[mark.id] = Math.max(mark.min || 0, previewValues[mark.id] - 1)">−</button>
+              <input 
+                type="number" 
+                v-model.number="previewValues[mark.id]" 
+                :min="mark.min" 
+                :max="mark.max"
+                class="preview-numeric-input"
+              />
+              <button class="btn-spin" @click="previewValues[mark.id] = Math.min(mark.max || 100, previewValues[mark.id] + 1)">+</button>
+            </div>
           </label>
-          <span class="preview-value">{{ previewNumeric }}</span>
+          <span class="preview-value">{{ previewValues[mark.id] }}</span>
         </div>
+      </div>
 
-        <div v-if="!hasSavedControls" class="no-controls">
-          No controls added yet. Save some controls to see them here.
+      <!-- Accept/Reject Section -->
+      <div class="preview-footer">
+        <div class="preview-status">
+          <span class="status-counter" v-if="articleAccepted === true">{{ acceptedCount }} (+1 accepted)</span>
+          <span class="status-counter" v-else-if="articleAccepted === false">{{ rejectedCount }} (not accepted)</span>
+          <span class="status-counter" v-else style="color: #999;">Select an option</span>
         </div>
+        <div class="preview-question">Accept the article?:</div>
+        <div class="preview-buttons">
+          <button class="btn-yes" :class="{ active: articleAccepted === true }" @click="articleAccepted = true">Yes</button>
+          <button class="btn-no" :class="{ active: articleAccepted === false && articleAccepted !== null }" @click="articleAccepted = false">No</button>
+        </div>
+        <button class="btn-reset" @click="resetPreview">Reset preview</button>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-import { ref, reactive, computed } from 'vue'
+<script setup>
+import { ref, watch } from 'vue'
+import MarkCard from './MarkCard.vue'
 import MarkSelector from './MarkSelector.vue'
 
-export default {
-  name: 'MarksTab',
-  components: { MarkSelector },
-  props: {
-    editathon: {
-      type: Object,
-      default: () => ({ id: 1, name: 'Editathon' })
-    }
-  },
-  emits: ['update'],
-  
-  setup(props, { emit }) {
-    // Mark controls data - start with null/empty to hide until selected
-    const toggleButton = reactive({
-      title: '',
-      value: 0,
-      description: '',
-      saved: false,
-      visible: false
-    })
-
-    const radioGroups = ref([])
-
-    const numericInput = reactive({
-      title: '',
-      min: 1,
-      max: 5,
-      saved: false,
-      visible: false
-    })
-
-    // Add via selector
-    const addMark = (type) => {
-      switch(type){
-        case 'toggle':
-          if (toggleButton.visible && !toggleButton.saved) {
-            alert('Please save or cancel the current toggle button first')
-            return
-          }
-          Object.assign(toggleButton, { title: '', value: 0, description: '', saved: false, visible: true })
-          break
-        case 'radio':
-          radioGroups.value.push({ title: '', value: 0, description: '', saved: false })
-          break
-        case 'numeric':
-          if (numericInput.visible && !numericInput.saved) {
-            alert('Please save or cancel the current numeric input first')
-            return
-          }
-          Object.assign(numericInput, { title: '', min: 1, max: 5, saved: false, visible: true })
-          break
-      }
-      // Scroll to bottom where newly added control appears
-      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50)
-    }
-
-    // Preview data
-    const previewToggle = ref(false)
-    const previewRadio = ref(0)
-    const previewNumeric = ref(1)
-
-    // Computed properties
-    const hasSavedControls = computed(() => {
-      return toggleButton.saved || numericInput.saved || radioGroups.value.some(r => r.saved)
-    })
-
-    const savedRadioGroups = computed(() => {
-      return radioGroups.value.filter(r => r.saved)
-    })
-
-    const unsavedRadioGroups = computed(() => {
-      return radioGroups.value.filter(r => !r.saved)
-    })
-
-    // Save functions
-    const saveToggleButton = () => {
-      if (!toggleButton.title.trim()) {
-        alert('Please enter a title for the toggle button')
-        return
-      }
-      toggleButton.saved = true
-      emit('update', { type: 'toggleButton', data: { ...toggleButton } })
-    }
-
-    const removeToggleButton = () => {
-      if (confirm('Remove this toggle button?')) {
-        Object.assign(toggleButton, { title: '', value: 0, description: '', saved: false, visible: false })
-        previewToggle.value = false
-        emit('update', { type: 'toggleButton', data: null })
-      }
-    }
-
-    const cancelToggleButton = () => {
-      Object.assign(toggleButton, { title: '', value: 0, description: '', saved: false, visible: false })
-    }
-
-    const saveRadioGroup = (index) => {
-      if (!radioGroups.value[index].title.trim()) {
-        alert('Please enter a title for the radio group')
-        return
-      }
-      radioGroups.value[index].saved = true
-      emit('update', { type: 'radioGroup', index, data: { ...radioGroups.value[index] } })
-    }
-
-    const removeRadioGroup = (index) => {
-      if (confirm('Remove this radio group?')) {
-        radioGroups.value.splice(index, 1)
-        if (previewRadio.value === radioGroups.value[index]?.value) {
-          previewRadio.value = 0
-        }
-        emit('update', { type: 'radioGroup', index, data: null })
-      }
-    }
-
-    const cancelRadioGroup = (index) => {
-      Object.assign(radioGroups.value[index], { title: '', value: 0, description: '', saved: false })
-    }
-
-    const saveNumericInput = () => {
-      if (!numericInput.title.trim()) {
-        alert('Please enter a title for the numeric input')
-        return
-      }
-      numericInput.saved = true
-      emit('update', { type: 'numericInput', data: { ...numericInput } })
-    }
-
-    const removeNumericInput = () => {
-      if (confirm('Remove this numeric input?')) {
-        Object.assign(numericInput, { title: '', min: 1, max: 5, saved: false, visible: false })
-        previewNumeric.value = 1
-        emit('update', { type: 'numericInput', data: null })
-      }
-    }
-
-    const cancelNumericInput = () => {
-      Object.assign(numericInput, { title: '', min: 1, max: 5, saved: false, visible: false })
-    }
-
-    const addRadioGroup = () => {
-      radioGroups.value.push({
-        title: '',
-        value: 0,
-        description: '',
-        saved: false
-      })
-    }
-
-    const resetPreview = () => {
-      previewToggle.value = false
-      previewRadio.value = 0
-      previewNumeric.value = 1
-    }
-
-    return {
-      toggleButton,
-      radioGroups,
-      numericInput,
-      addMark,
-      previewToggle,
-      previewRadio,
-      previewNumeric,
-      hasSavedControls,
-      savedRadioGroups,
-      unsavedRadioGroups,
-      saveToggleButton,
-      removeToggleButton,
-      cancelToggleButton,
-      saveRadioGroup,
-      removeRadioGroup,
-      cancelRadioGroup,
-      saveNumericInput,
-      removeNumericInput,
-      cancelNumericInput,
-      addRadioGroup,
-      resetPreview
-    }
+const props = defineProps({
+  editathon: {
+    type: Object,
+    default: () => ({})
   }
+})
+
+const emit = defineEmits(['update'])
+
+const localMarks = ref(
+  Array.isArray(props.editathon?.marks) 
+    ? props.editathon.marks.filter(m => m && m.type && ['toggle', 'radio', 'numeric'].includes(m.type))
+    : []
+)
+const previewValues = ref({})
+const selectedRadio = ref(null)
+const articleAccepted = ref(null)
+const acceptedCount = ref(1)
+const rejectedCount = ref(0)
+
+function resetPreview() {
+  previewValues.value = {}
+  selectedRadio.value = null
+  articleAccepted.value = null
+  acceptedCount.value = 1
+  rejectedCount.value = 0
 }
+
+function addMark(type) {
+  const validTypes = ['toggle', 'radio', 'numeric']
+  const cleanType = String(type).trim()
+  
+  if (!cleanType || !validTypes.includes(cleanType)) {
+    console.warn('Invalid mark type:', type)
+    return
+  }
+  
+  const newMark = {
+    id: Date.now(),
+    type: cleanType,
+    title: '',
+    value: 0,
+    description: '',
+    min: 1,
+    max: 5,
+    _saved: false
+  }
+  
+  localMarks.value.push(newMark)
+  emit('update', { marks: localMarks.value })
+  
+  // Scroll to newly added mark
+  setTimeout(() => {
+    const items = document.querySelectorAll('.mark-card')
+    if (items && items.length) {
+      items[items.length - 1].scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, 50)
+}
+
+function updateMark(index, updatedMark) {
+  localMarks.value[index] = { ...updatedMark, _saved: true }
+  emit('update', { marks: localMarks.value })
+}
+
+function removeMark(index) {
+  localMarks.value.splice(index, 1)
+  emit('update', { marks: localMarks.value })
+}
+
+watch(() => props.editathon?.marks, (newMarks) => {
+  if (Array.isArray(newMarks)) {
+    localMarks.value = newMarks.filter(m => m && m.type && ['toggle', 'radio', 'numeric'].includes(m.type))
+  } else {
+    localMarks.value = []
+  }
+})
 </script>
 
 <style scoped>
-.marks-content {
-  padding: 1rem;
-  max-width: 600px;
-  margin: 0 auto;
+.marks-tab {
+  max-width: 800px;
 }
 
-h3 {
-  color: #333;
-  margin-bottom: 1.5rem;
-  text-align: center;
-  font-weight: normal;
-  font-size: 1.1rem;
-}
-
-/* Summary Section */
-.summary-section {
-  background: #f8f9fa;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-  border-left: 4px solid #2196F3;
-}
-
-.summary-section h4 {
-  margin: 0 0 0.5rem 0;
-  color: #333;
-  font-size: 1rem;
-}
-
-.controls-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.control-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.toggle-badge {
-  background: #e8f5e8;
-  color: #2e7d32;
-  border: 1px solid #c8e6c9;
-}
-
-.radio-badge {
-  background: #e3f2fd;
-  color: #1565c0;
-  border: 1px solid #bbdefb;
-}
-
-.numeric-badge {
-  background: #fff3e0;
-  color: #ef6c00;
-  border: 1px solid #ffe0b2;
-}
-
-.badge-remove {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: 1.2rem;
-  line-height: 1;
-  padding: 0;
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.badge-remove:hover {
-  opacity: 0.7;
-}
-
-/* Compact Control Sections */
-.control-section.compact {
-  margin-bottom: 1rem;
-  padding: 1rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: white;
-  transition: all 0.3s ease;
-}
-
-.control-section.compact.saved {
-  background: #f8f9fa;
-  border-color: #4CAF50;
-  border-left: 4px solid #4CAF50;
-}
-
-.section-header {
+.marks-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  margin-bottom: 20px;
 }
 
-.section-header h4 {
+.marks-header h3 {
   margin: 0;
-  color: #333;
-  font-size: 1rem;
-  font-weight: 600;
 }
 
-.section-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.btn-save {
-  background: #4CAF50;
-  color: white;
-  border: none;
-  padding: 0.4rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.btn-cancel {
-  background: #757575;
-  color: white;
-  border: none;
-  padding: 0.4rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-.btn-cancel.small {
-  padding: 0.3rem 0.6rem;
-  font-size: 0.8rem;
-}
-
-.btn-remove {
-  background: #f44336;
-  color: white;
-  border: none;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.compact-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.compact-input {
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.value-control.compact {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  justify-content: center;
-}
-
-.value-control.compact button {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #ccc;
-  background: white;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: bold;
-}
-
-.numeric-controls.compact {
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.min-max {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.min-max label {
-  font-size: 0.85rem;
+.empty-state {
+  text-align: center;
+  padding: 40px;
   color: #666;
-  min-width: auto;
-}
-
-.saved-indicator {
-  color: #4CAF50;
-  font-weight: 500;
-  font-size: 0.9rem;
-  text-align: center;
-  padding: 0.5rem;
-}
-
-/* Add Section */
-.add-section {
-  text-align: center;
-  margin: 1rem 0;
-}
-
-.add-btn {
-  background: #2196F3;
-  color: white;
-  border: none;
-  padding: 0.6rem 1.2rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-/* Preview Section */
-.preview-section.compact {
-  margin-top: 1.5rem;
-  padding: 1rem;
-  border: 2px dashed #ccc;
-  border-radius: 8px;
   background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
 }
 
-.preview-content {
-  margin-top: 0.5rem;
+.marks-list {
+  margin-bottom: 30px;
 }
 
-.preview-content p {
-  margin: 0 0 0.75rem 0;
+.preview-section {
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 30px;
+}
+
+.preview-header {
+  margin-bottom: 20px;
+}
+
+.preview-header h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: #212529;
+}
+
+.preview-header p {
+  margin: 0;
   color: #666;
-  font-size: 0.9rem;
+  font-size: 14px;
 }
 
-.preview-control {
+.preview-controls {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.preview-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem;
-  margin: 0.5rem 0;
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 12px;
 }
 
-.toggle-preview, .radio-preview {
+.preview-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.toggle-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
   cursor: pointer;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.toggle-label input[type="checkbox"] {
+  display: none;
 }
 
 .toggle-slider {
-  width: 36px;
-  height: 18px;
+  width: 40px;
+  height: 20px;
   background: #ccc;
-  border-radius: 18px;
+  border-radius: 20px;
   position: relative;
+  display: inline-block;
   transition: background 0.3s;
 }
 
 .toggle-slider::after {
   content: '';
   position: absolute;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   background: white;
   border-radius: 50%;
   top: 2px;
@@ -668,46 +281,183 @@ h3 {
 }
 
 input[type="checkbox"]:checked + .toggle-slider {
-  background: #4CAF50;
+  background: #0066cc;
 }
 
 input[type="checkbox"]:checked + .toggle-slider::after {
-  transform: translateX(18px);
+  transform: translateX(20px);
 }
 
-.radio-label, .toggle-label, .numeric-label {
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex: 1;
+  font-size: 14px;
   font-weight: 500;
-  font-size: 0.9rem;
 }
 
-.numeric-input {
-  width: 70px;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid #ccc;
+.radio-label input[type="radio"] {
+  cursor: pointer;
+}
+
+.numeric-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.numeric-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-spin {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: #f1f3f5;
+  border: 1px solid #dee2e6;
   border-radius: 4px;
-  font-size: 0.9rem;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-spin:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.preview-numeric-input {
+  width: 70px;
+  padding: 6px 8px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 14px;
+  text-align: center;
 }
 
 .preview-value {
-  color: #2196F3;
-  font-weight: 500;
-  font-size: 0.9rem;
-  min-width: 30px;
+  color: #0066cc;
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 50px;
   text-align: right;
 }
 
-.no-controls {
-  text-align: center;
-  color: #999;
-  font-style: italic;
-  padding: 1rem;
+.preview-footer {
   background: white;
+  border: 1px solid #dee2e6;
   border-radius: 6px;
-  border: 1px dashed #ddd;
+  padding: 16px;
+  text-align: center;
+}
+
+.preview-status {
+  font-size: 14px;
+  color: #0066cc;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.status-counter {
+  display: inline-block;
+}
+
+.preview-question {
+  font-size: 15px;
+  font-weight: 500;
+  color: #212529;
+  margin-bottom: 12px;
+}
+
+.preview-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.btn-yes {
+  padding: 8px 24px;
+  background: white;
+  color: #495057;
+  border: 2px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-yes:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
+}
+
+.btn-yes.active {
+  background: #0066cc;
+  color: white;
+  border-color: #0052a3;
+}
+
+.btn-yes.active:hover {
+  background: #0052a3;
+  border-color: #003d7a;
+}
+
+.btn-no {
+  padding: 8px 24px;
+  background: white;
+  color: #495057;
+  border: 2px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-no:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
+}
+
+.btn-no.active {
+  background: #f8f9fa;
+  color: #212529;
+  border-color: #adb5bd;
+}
+
+.btn-no.active:hover {
+  background: #e9ecef;
+  border-color: #868e96;
+}
+
+.btn-reset {
+  display: block;
+  margin: 0 auto;
+  padding: 8px 16px;
+  background: white;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-reset:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
 }
 </style>
-'@
-
-# Save the compact MarksTab
-$marksTabContent | Set-Content -Path frontend\src\components\MarksTab.vue
-Write-Host "✅ Created compact MarksTab with better visual feedback and X buttons"

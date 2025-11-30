@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="vote-panel d-flex flex-column">
     <div class="d-flex align-items-center justify-content-between">
       <div>
@@ -47,7 +47,6 @@ function submitComment(){
 </script>
 
 <style scoped>
-.vote-panel { }
 .vote-btn-yes { border: none; padding:0.35rem 0.7rem; }
 .vote-btn-no { border: none; padding:0.35rem 0.7rem; }
 .vote-btn-skip { border: none; padding:0.35rem 0.7rem; }

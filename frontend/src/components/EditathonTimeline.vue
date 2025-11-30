@@ -27,9 +27,13 @@
           <div class="select-wrapper">
             <select v-model="selectedLang" class="lang-select">
               <option value="all">All Wikis</option>
-              <option v-for="lang in availableLanguages" :key="lang" :value="lang">
-                {{ lang }}
-              </option>
+              <option value="Wikipedia">Wikipedia</option>
+              <option value="Wikiquote">Wikiquote</option>
+              <option value="Wikisource">Wikisource</option>
+              <option value="Wikibooks">Wikibooks</option>
+              <option value="Wikinews">Wikinews</option>
+              <option value="Wikiversity">Wikiversity</option>
+              <option value="Wikivoyage">Wikivoyage</option>
             </select>
           </div>
 
@@ -45,10 +49,10 @@
     <!-- Timeline Content -->
     <div class="timeline-content">
       <div class="timeline-stats">
-        Showing <strong>{{ filteredEventsCount }}</strong> events
+        Showing <strong>{{ displayedEventsCount }}</strong> of <strong>{{ filteredEventsCount }}</strong> events
       </div>
 
-      <div class="timeline-wrapper">
+      <div class="timeline-wrapper" ref="timelineWrapper" @scroll="handleScroll">
         <!-- Timeline Spine -->
         <div class="timeline-spine"></div>
 
@@ -63,7 +67,7 @@
 
         <!-- Timeline Groups -->
         <transition-group name="fade">
-          <div v-for="group in groupedEvents" :key="group.period" class="timeline-group">
+          <div v-for="(group, index) in displayedGroups" :key="group.period" class="timeline-group">
             <!-- Month Header -->
             <div class="month-header">
               <div class="month-date">
@@ -119,6 +123,8 @@
 import { ref, computed, onMounted } from 'vue'
 
 const rawEvents = ref([])
+const itemsToShow = ref(999)
+const timelineWrapper = ref(null)
 
 const selectedLang = ref('all')
 const sortOrder = ref('desc')
@@ -196,6 +202,39 @@ const groupedEvents = computed(() => {
 
   return groupArray
 })
+
+const displayedGroups = computed(() => {
+  let eventCount = 0
+  const result = []
+  
+  for (let group of groupedEvents.value) {
+    if (eventCount >= itemsToShow.value) break
+    
+    const eventsToShow = group.events.slice(0, itemsToShow.value - eventCount)
+    result.push({
+      ...group,
+      events: eventsToShow
+    })
+    eventCount += eventsToShow.length
+  }
+  
+  return result
+})
+
+const displayedEventsCount = computed(() => {
+  return displayedGroups.value.reduce((sum, group) => sum + group.events.length, 0)
+})
+
+const handleScroll = () => {
+  if (!timelineWrapper.value) return
+  
+  const { scrollTop, scrollHeight, clientHeight } = timelineWrapper.value
+  
+  // If user scrolls near the bottom, load more items
+  if (scrollHeight - scrollTop - clientHeight < 100) {
+    itemsToShow.value += 3
+  }
+}
 
 const toggleSort = () => {
   sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
@@ -445,6 +484,34 @@ onMounted(() => {
 
 .timeline-wrapper {
   position: relative;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 8px;
+}
+
+.timeline-wrapper::-webkit-scrollbar {
+  width: 10px;
+}
+
+.timeline-wrapper::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.timeline-wrapper::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 4px;
+}
+
+.timeline-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #5568d3;
+}
+
+/* Firefox Scrollbar */
+.timeline-wrapper {
+  scrollbar-color: #667eea #f1f5f9;
+  scrollbar-width: thin;
 }
 
 .timeline-spine {

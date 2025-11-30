@@ -184,7 +184,23 @@ def get_personal_cabinet(username):
 @app.route('/api/editathon/<editathon_id>', methods=['GET'])
 def get_editathon_dashboard(editathon_id):
     try:
-        # Map frontend IDs to actual table names
+        # First, try to fetch editathon metadata (for user-created editathons)
+        editathon_meta = None
+        wiki_language = 'en'  # Default fallback
+        
+        try:
+            meta_result = db.session.execute(
+                db.text("SELECT * FROM editathon_metadata WHERE id = :id"),
+                {'id': editathon_id}
+            )
+            meta_row = meta_result.fetchone()
+            if meta_row:
+                editathon_meta = meta_row
+                wiki_language = meta_row.wiki_language or 'en'
+        except:
+            pass  # Continue with demo data if metadata table not available
+        
+        # Map frontend IDs to actual table names (for demo editathons)
         table_mapping = {
             '1': 'wikipedia_asian_month_2025',
             '2': 'wiki_loves_ramadan_2025',
@@ -193,11 +209,15 @@ def get_editathon_dashboard(editathon_id):
         }
         
         table_name = table_mapping.get(editathon_id)
-        if not table_name:
+        if not table_name and not editathon_meta:
             return jsonify({"error": "Editathon not found"}), 404
         
         # Get all articles for this editathon
-        result = db.session.execute(db.text(f'SELECT * FROM {table_name}'))
+        if table_name:
+            result = db.session.execute(db.text(f'SELECT * FROM {table_name}'))
+        else:
+            # For user-created editathons without demo data, return empty articles
+            result = []
         
         articles = []
         users = set()
@@ -238,6 +258,19 @@ def get_editathon_dashboard(editathon_id):
             if article['points'] is not None:
                 user_stats[username]['total_points'] += article['points']
 
+            # Parse jury_notes to build reviews array
+            reviews = []
+            if article['jury_notes']:
+                # Format: "Reviewer_Name|decision|points|comment"
+                parts = article['jury_notes'].split('|', 3)
+                if len(parts) >= 3:
+                    reviews.append({
+                        'juror': parts[0],
+                        'decision': parts[1],
+                        'points': int(parts[2]) if parts[2].isdigit() else 0,
+                        'comment': parts[3] if len(parts) > 3 else ''
+                    })
+
             # Map database fields to frontend expected fields
             article_for_frontend = {
                 'id': article['id'],
@@ -245,7 +278,7 @@ def get_editathon_dashboard(editathon_id):
                 'author': article['user_name'],     # Map user_name to author
                 'addedOn': article['article_added'],
                 'points': article['points'],
-                'reviews': [],  # Initialize empty reviews array
+                'reviews': reviews,  # Populate from jury_notes
                 'words': 150,   # Default values
                 'bytes': 2500,  # Default values
                 'preview': f'Preview for {article["article_title"]}'
@@ -311,9 +344,10 @@ def get_editathon_dashboard(editathon_id):
         return jsonify({
             'editathon': {
                 'id': editathon_id,
-                'name': info.get('name', table_name.replace('_', ' ').title()),
+                'name': info.get('name', table_name.replace('_', ' ').title() if table_name else 'Editathon'),
                 'status': 'finished',
-                'description': info.get('description', f'Dashboard for {table_name}')
+                'description': info.get('description', f'Dashboard for {table_name}' if table_name else 'Editathon'),
+                'wiki_language': wiki_language  # Include wiki_language in response
             },
             'stats': {
                 'users': len(users),
@@ -398,6 +432,63 @@ def get_all_editathons():
                 'juries': [{'id': j+1, 'username': jury} for j, jury in enumerate(info.get('juries', []))]
             })
 
+        # Also fetch approved editathons from metadata table
+        try:
+            create_table_query = """
+            CREATE TABLE IF NOT EXISTS editathon_metadata (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                title VARCHAR(255) NOT NULL,
+                code VARCHAR(100) UNIQUE,
+                project VARCHAR(255),
+                wiki_language VARCHAR(10),
+                description TEXT,
+                namespace VARCHAR(50),
+                minSize INT,
+                maxSize INT,
+                startDate DATETIME,
+                endDate DATETIME,
+                createdBy VARCHAR(255),
+                submissionDate DATE,
+                consensualVote BOOLEAN,
+                hiddenMarks BOOLEAN,
+                creatorSubmit BOOLEAN,
+                showInJury BOOLEAN,
+                status VARCHAR(50),
+                rules LONGTEXT,
+                marks LONGTEXT,
+                jury LONGTEXT,
+                template LONGTEXT,
+                createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            db.session.execute(db.text(create_table_query))
+            db.session.commit()
+            
+            # Get approved editathons
+            result = db.session.execute(
+                db.text("SELECT * FROM editathon_metadata WHERE status = 'active' ORDER BY startDate DESC")
+            )
+            
+            for row in result:
+                editathons_data.append({
+                    'id': row.id,
+                    'name': row.title,
+                    'description': row.description,
+                    'startDate': row.startDate.isoformat() if row.startDate else None,
+                    'endDate': row.endDate.isoformat() if row.endDate else None,
+                    'status': 'ongoing',
+                    'article_count': 0,
+                    'user_count': 0,
+                    'juries': []
+                })
+        except Exception as e:
+            print(f"Warning: Could not fetch metadata editathons: {e}")
+
+        return jsonify(editathons_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
         return jsonify(editathons_data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -453,20 +544,28 @@ def judge_article(editathon_id):
         if not table_name:
             return jsonify({"error": "Editathon not found"}), 404
         
+        # Store reviewer name and decision in jury_notes
+        reviewer_name = data.get('reviewer', 'Unknown')
+        decision = data.get('decision', 'accepted')
+        points = data.get('points', 0)
+        
+        # Format jury notes: "Reviewer_Name|decision|points|comment"
+        jury_note = f"{reviewer_name}|{decision}|{points}|{data.get('comment', '')}"
+        
         query = f"UPDATE {table_name} SET points = :points, jury_notes = :jury_notes WHERE article_title = :article_title"
         
         db.session.execute(
             db.text(query),
             {
-                'points': data['points'],
-                'jury_notes': data['comment'],
+                'points': points,
+                'jury_notes': jury_note,
                 'article_title': data['article_title']
             }
         )
         db.session.commit()
         
         return jsonify({
-            "message": f"Article '{data['article_title']}' judged with {data['points']} points",
+            "message": f"Article '{data['article_title']}' judged with {points} points",
             "success": True 
         })
     except Exception as e:
@@ -549,6 +648,246 @@ def add_article():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+# 8. Create New Editathon
+@app.route('/api/editathons/create', methods=['POST'])
+def create_new_editathon():
+    try:
+        data = request.json
+        
+        # Extract editathon data
+        editathon_data = {
+            'title': data.get('title'),
+            'code': data.get('code'),
+            'project': data.get('project'),
+            'wiki_language': data.get('wiki_language'),
+            'description': data.get('description'),
+            'namespace': data.get('namespace'),
+            'minSize': data.get('minSize', 0),
+            'maxSize': data.get('maxSize', 10000),
+            'startDate': data.get('startDate'),
+            'endDate': data.get('endDate'),
+            'createdBy': data.get('createdBy'),
+            'submissionDate': data.get('submissionDate'),
+            'consensualVote': data.get('consensualVote', False),
+            'hiddenMarks': data.get('hiddenMarks', False),
+            'creatorSubmit': data.get('creatorSubmit', False),
+            'showInJury': data.get('showInJury', False),
+            'status': data.get('status', 'pending'),
+            'rules': str(data.get('rules', [])),  # Store as JSON string
+            'marks': str(data.get('marks', [])),  # Store as JSON string
+            'jury': str(data.get('jury', [])),    # Store as JSON string
+            'template': str(data.get('template', {}))  # Store as JSON string
+        }
+        
+        # Create editathon metadata table (if not exists)
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS editathon_metadata (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            title VARCHAR(255) NOT NULL,
+            code VARCHAR(100) UNIQUE,
+            project VARCHAR(255),
+            wiki_language VARCHAR(10),
+            description TEXT,
+            namespace VARCHAR(50),
+            minSize INT,
+            maxSize INT,
+            startDate DATETIME,
+            endDate DATETIME,
+            createdBy VARCHAR(255),
+            submissionDate DATE,
+            consensualVote BOOLEAN,
+            hiddenMarks BOOLEAN,
+            creatorSubmit BOOLEAN,
+            showInJury BOOLEAN,
+            status VARCHAR(50),
+            rules LONGTEXT,
+            marks LONGTEXT,
+            jury LONGTEXT,
+            template LONGTEXT,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        
+        db.session.execute(db.text(create_table_query))
+        db.session.commit()
+        
+        # Insert editathon data
+        insert_query = """
+        INSERT INTO editathon_metadata 
+        (title, code, project, wiki_language, description, namespace, minSize, maxSize, 
+         startDate, endDate, createdBy, submissionDate, consensualVote, hiddenMarks, 
+         creatorSubmit, showInJury, status, rules, marks, jury, template)
+        VALUES 
+        (:title, :code, :project, :wiki_language, :description, :namespace, :minSize, :maxSize,
+         :startDate, :endDate, :createdBy, :submissionDate, :consensualVote, :hiddenMarks,
+         :creatorSubmit, :showInJury, :status, :rules, :marks, :jury, :template)
+        """
+        
+        db.session.execute(db.text(insert_query), editathon_data)
+        db.session.commit()
+        
+        # Get the inserted ID
+        result = db.session.execute(db.text("SELECT LAST_INSERT_ID()"))
+        editathon_id = result.scalar()
+        
+        return jsonify({
+            "success": True,
+            "message": "Editathon created successfully and pending approval",
+            "id": editathon_id,
+            "status": "pending"
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# 9. Get Pending Editathons for Approval
+@app.route('/api/editathons/pending', methods=['GET'])
+def get_pending_editathons():
+    try:
+        # Create table if not exists
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS editathon_metadata (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            title VARCHAR(255) NOT NULL,
+            code VARCHAR(100) UNIQUE,
+            project VARCHAR(255),
+            wiki_language VARCHAR(10),
+            description TEXT,
+            namespace VARCHAR(50),
+            minSize INT,
+            maxSize INT,
+            startDate DATETIME,
+            endDate DATETIME,
+            createdBy VARCHAR(255),
+            submissionDate DATE,
+            consensualVote BOOLEAN,
+            hiddenMarks BOOLEAN,
+            creatorSubmit BOOLEAN,
+            showInJury BOOLEAN,
+            status VARCHAR(50),
+            rules LONGTEXT,
+            marks LONGTEXT,
+            jury LONGTEXT,
+            template LONGTEXT,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        db.session.execute(db.text(create_table_query))
+        db.session.commit()
+        
+        # Get pending editathons
+        result = db.session.execute(
+            db.text("SELECT * FROM editathon_metadata WHERE status = 'pending' ORDER BY createdAt DESC")
+        )
+        
+        pending_editathons = []
+        for row in result:
+            pending_editathons.append({
+                'id': row.id,
+                'title': row.title,
+                'code': row.code,
+                'project': row.project,
+                'wiki_language': row.wiki_language,
+                'description': row.description,
+                'namespace': row.namespace,
+                'minSize': row.minSize,
+                'maxSize': row.maxSize,
+                'startDate': row.startDate.isoformat() if row.startDate else None,
+                'endDate': row.endDate.isoformat() if row.endDate else None,
+                'createdBy': row.createdBy,
+                'submissionDate': row.submissionDate.isoformat() if row.submissionDate else None,
+                'status': row.status
+            })
+        
+        return jsonify({
+            "success": True,
+            "editathons": pending_editathons,
+            "count": len(pending_editathons)
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 10. Approve Editathon
+@app.route('/api/editathon/<editathon_id>/approve', methods=['POST'])
+def approve_editathon(editathon_id):
+    try:
+        db.session.execute(
+            db.text("UPDATE editathon_metadata SET status = 'active' WHERE id = :id"),
+            {'id': editathon_id}
+        )
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Editathon approved successfully",
+            "status": "active"
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# 11. Reject Editathon
+@app.route('/api/editathon/<editathon_id>/reject', methods=['POST'])
+def reject_editathon(editathon_id):
+    try:
+        data = request.json
+        reason = data.get('reason', 'No reason provided') if data else 'No reason provided'
+        
+        db.session.execute(
+            db.text("UPDATE editathon_metadata SET status = 'rejected' WHERE id = :id"),
+            {'id': editathon_id}
+        )
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Editathon rejected. Reason: {reason}",
+            "status": "rejected"
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# 12. Get User's Pending Editathons
+@app.route('/api/user/<username>/pending-editathons', methods=['GET'])
+def get_user_pending_editathons(username):
+    try:
+        # Get pending editathons created by this user
+        result = db.session.execute(
+            db.text("SELECT * FROM editathon_metadata WHERE createdBy = :username AND status = 'pending' ORDER BY createdAt DESC"),
+            {'username': username}
+        )
+        
+        pending_editathons = []
+        for row in result:
+            pending_editathons.append({
+                'id': row.id,
+                'title': row.title,
+                'code': row.code,
+                'project': row.project,
+                'wiki_language': row.wiki_language,
+                'description': row.description,
+                'namespace': row.namespace,
+                'minSize': row.minSize,
+                'maxSize': row.maxSize,
+                'startDate': row.startDate.isoformat() if row.startDate else None,
+                'endDate': row.endDate.isoformat() if row.endDate else None,
+                'createdBy': row.createdBy,
+                'submissionDate': row.submissionDate.isoformat() if row.submissionDate else None,
+                'status': row.status,
+                'rules': row.rules,
+                'marks': row.marks,
+                'jury': row.jury,
+                'template': row.template
+            })
+        
+        return jsonify(pending_editathons)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # Test database connection
 def test_connection():
     try:
@@ -581,6 +920,11 @@ if __name__ == '__main__':
     print("   GET  /api/personal-cabinet/<username>")
     print("   GET  /api/editathons") 
     print("   GET  /api/editathon/<id>")
+    print("   GET  /api/editathons/pending")
+    print("   GET  /api/user/<username>/pending-editathons")
     print("   POST /api/editathon/<id>/submit")
     print("   POST /api/editathon/<id>/judge")
+    print("   POST /api/editathons/create")
+    print("   POST /api/editathon/<id>/approve")
+    print("   POST /api/editathon/<id>/reject")
     app.run(debug=True, port=5000)

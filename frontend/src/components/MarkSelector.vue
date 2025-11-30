@@ -14,9 +14,13 @@
 import { ref } from 'vue'
 const sel = ref('')
 const emit = defineEmits(['add'])
+
 function onAdd(){
-  if(!sel.value) return
-  emit('add', sel.value)
+  const value = sel.value.trim()
+  // Only emit if value is not empty and is a valid mark type
+  const validTypes = ['toggle', 'radio', 'numeric']
+  if(!value || !validTypes.includes(value)) return
+  emit('add', value)
   sel.value = ''
 }
 </script>

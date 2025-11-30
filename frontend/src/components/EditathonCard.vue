@@ -5,11 +5,6 @@
         <router-link :to="`/editathon/${editathon.id}`" class="card-title-link">
           <h5 class="card-title mb-0">{{ editathon.name || 'Unnamed Editathon' }}</h5>
         </router-link>
-        <div class="d-flex gap-2" v-if="!isFinished(editathon)">
-          <!-- This should link to the dashboard -->
-          <router-link :to="`/editathon/${editathon.id}`" class="btn btn-sm btn-outline-primary">📊 Dashboard</router-link>
-          <router-link :to="`/editathon/${editathon.id}/judge`" class="btn btn-sm btn-primary">Judge</router-link>
-        </div>
       </div>
       <p class="text-muted mb-1">{{ shortRange(editathon.startDate, editathon.endDate) }}</p>
       <p class="small text-muted">{{ editathon.description || '' }}</p>

@@ -29,13 +29,6 @@
           <h6>Metadata</h6>
           <ArticleMetaTable :meta="current || {}" />
         </div>
-        <div class="card p-3">
-          <h6>Jury Review Checkboxes</h6>
-          <div v-for="j in juries" :key="j.id" class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" :id="'jchk-'+j.id" :checked="isReviewed(j.username)" @change="handleToggleReview(j.username)" />
-            <label class="form-check-label" :for="'jchk-'+j.id">{{ j.username }}</label>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -92,6 +85,22 @@ async function handleVote(payload){
   console.log('Vote recorded (frontend):', payload)
   // TODO: call backend vote endpoint to persist
   alert('Vote saved: ' + payload.vote)
+}
+
+function skipArticle(){
+  // Go back to editathon dashboard
+  const dashboardUrl = `/editathon/${editId}`
+  window.location.href = dashboardUrl
+}
+
+function saveReview(){
+  // Save the current review
+  if(!current.value){
+    alert('Please select an article first')
+    return
+  }
+  alert('Review saved for: ' + current.value.title)
+  // TODO: call backend to persist the review
 }
 </script>
 

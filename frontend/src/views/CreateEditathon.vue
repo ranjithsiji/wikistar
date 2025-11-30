@@ -1,5 +1,19 @@
 <template>
   <div class="create-editathon-container">
+    <!-- Pending Editathon Modal -->
+    <div v-if="showPendingModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-body">
+          <p class="modal-message">You already have a draft '<strong>{{ pendingEditathon?.title || 'sswad' }}</strong>'. Please ask an administrator to approve it before creating another one.</p>
+          <p class="modal-question">Do you want to edit the draft now?</p>
+        </div>
+        <div class="modal-footer">
+          <button @click="editDraft" class="btn-modal btn-edit-draft">Edit draft</button>
+          <button @click="cancelCreate" class="btn-modal btn-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <div class="container">
       <div class="header-section">
         <h1 class="page-title">Create New Editathon</h1>
@@ -79,9 +93,9 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { createEditathon } from '../services/api'
+import { createEditathon, fetchUserPendingEditathons } from '../services/api'
 import GeneralTab from '../components/GeneralTab.vue'
 import RulesTab from '../components/RulesTab.vue'
 import MarksTab from '../components/MarksTab.vue'
@@ -94,6 +108,27 @@ const active = ref('General')
 const completedTabs = ref([])
 const validationErrors = ref([])
 const isSubmitting = ref(false)
+const showPendingModal = ref(false)
+const pendingEditathon = ref(null)
+const currentUsername = ref('Clinta') // Replace with actual auth later
+
+onMounted(async () => {
+  // Check for pending editathons
+  try {
+    console.log('Checking pending editathons for user:', currentUsername.value)
+    const pending = await fetchUserPendingEditathons(currentUsername.value)
+    console.log('Pending editathons response:', pending)
+    if (pending && pending.length > 0) {
+      pendingEditathon.value = pending[0]
+      showPendingModal.value = true
+      console.log('Modal shown with draft:', pendingEditathon.value.title)
+    } else {
+      console.log('No pending editathons found')
+    }
+  } catch (error) {
+    console.error('Error checking pending editathons:', error)
+  }
+})
 
 const form = reactive({
   title: '',
@@ -125,6 +160,82 @@ const form = reactive({
 
 const currentStep = computed(() => tabs.indexOf(active.value) + 1)
 const progressPercentage = computed(() => (currentStep.value / tabs.length) * 100)
+
+function editDraft() {
+  try {
+    // Load the pending draft data into the form for editing
+    if (pendingEditathon.value) {
+      const draft = pendingEditathon.value
+      console.log('Loading draft:', draft)
+      
+      form.title = draft.title || ''
+      form.code = draft.code || ''
+      form.project = draft.project || 'ml.wikipedia.org'
+      form.wiki_language = draft.wiki_language || 'ml'
+      form.description = draft.description || ''
+      form.namespace = draft.namespace || 'Main'
+      form.minSize = draft.minSize || 0
+      form.maxSize = draft.maxSize || 10000
+      form.startDate = draft.startDate ? (typeof draft.startDate === 'string' ? draft.startDate.split('T')[0] : draft.startDate) : ''
+      form.endDate = draft.endDate ? (typeof draft.endDate === 'string' ? draft.endDate.split('T')[0] : draft.endDate) : ''
+      form.createdBy = draft.createdBy || 'Clinta'
+      form.submissionDate = draft.submissionDate ? (typeof draft.submissionDate === 'string' ? draft.submissionDate.split('T')[0] : draft.submissionDate) : new Date().toISOString().split('T')[0]
+      
+      // Load rules, marks, jury, template from the draft
+      if (draft.rules) {
+        try {
+          form.rules = typeof draft.rules === 'string' ? JSON.parse(draft.rules) : draft.rules
+        } catch (e) {
+          console.error('Error parsing rules:', e)
+          form.rules = []
+        }
+      }
+      
+      if (draft.marks) {
+        try {
+          form.marks = typeof draft.marks === 'string' ? JSON.parse(draft.marks) : draft.marks
+        } catch (e) {
+          console.error('Error parsing marks:', e)
+          form.marks = [{ label: 'Accept', points: 1, hidden: false }]
+        }
+      }
+      
+      if (draft.jury) {
+        try {
+          form.jury = typeof draft.jury === 'string' ? JSON.parse(draft.jury) : draft.jury
+        } catch (e) {
+          console.error('Error parsing jury:', e)
+          form.jury = []
+        }
+      }
+      
+      if (draft.template) {
+        try {
+          form.template = typeof draft.template === 'string' ? JSON.parse(draft.template) : draft.template
+        } catch (e) {
+          console.error('Error parsing template:', e)
+          form.template = { name: '', onThePage: 'no', created: false }
+        }
+      }
+      
+      // Mark all tabs as completed since we're loading existing data
+      completedTabs.value = [...tabs]
+      console.log('Draft loaded successfully')
+    }
+    
+    showPendingModal.value = false
+    active.value = 'General'
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  } catch (error) {
+    console.error('Error in editDraft:', error)
+    alert('Error loading draft: ' + error.message)
+  }
+}
+
+function cancelCreate() {
+  showPendingModal.value = false
+  router.push('/')
+}
 
 function updateForm(updates) {
   Object.assign(form, updates)
@@ -207,7 +318,7 @@ function validateCurrentTab() {
       break
       
     case 'Rules':
-      const validRules = form.rules.filter(r => r.text && r.text.trim())
+      const validRules = form.rules.filter(r => r && r.type)
       if (validRules.length === 0) {
         errors.push('Please add at least one rule')
       }
@@ -266,7 +377,7 @@ async function saveAll() {
     creatorSubmit: form.creatorSubmit,
     showInJury: form.showInJury,
     status: 'pending', // Set as pending for approval
-    rules: form.rules.filter(r => r.text && r.text.trim()),
+    rules: form.rules.filter(r => r && r.type),
     marks: form.marks,
     jury: form.jury.filter(j => j.username && j.saved),
     template: form.template
@@ -603,6 +714,83 @@ async function saveAll() {
   .container {
     padding: 0 10px;
   }
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  max-width: 450px;
+  width: 90%;
+}
+
+.modal-body {
+  padding: 2rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-message {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.modal-question {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.modal-footer {
+  padding: 1.5rem 2rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.btn-modal {
+  padding: 0.7rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-edit-draft {
+  background: #667eea;
+  color: white;
+}
+
+.btn-edit-draft:hover {
+  background: #5568d3;
+}
+
+.btn-cancel {
+  background: white;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.btn-cancel:hover {
+  background: #f9fafb;
 }
 </style>
 '@

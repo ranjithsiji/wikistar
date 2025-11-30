@@ -42,22 +42,6 @@
               <div class="metric-label">Total Articles</div>
             </div>
           </div>
-
-          <div class="metric-card warning">
-            <div class="metric-icon">✓</div>
-            <div class="metric-content">
-              <div class="metric-value">{{ stats.marks }}</div>
-              <div class="metric-label">Reviewed</div>
-            </div>
-          </div>
-
-          <div class="metric-card danger">
-            <div class="metric-icon">⏳</div>
-            <div class="metric-content">
-              <div class="metric-value">{{ stats.withoutMarks }}</div>
-              <div class="metric-label">Pending Review</div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -71,7 +55,7 @@
     <div class="jury-members">
       Jury members: 
       <span v-for="(jury, index) in juries" :key="jury.id">
-        <a href="#">{{ jury.username }}</a>{{ index < juries.length - 1 ? ', ' : '' }}
+        <a :href="getUserWikipediaUrl(jury.username)" target="_blank" class="wiki-user-link">{{ jury.username }}</a>{{ index < juries.length - 1 ? ', ' : '' }}
       </span>
     </div>
 
@@ -89,7 +73,7 @@
           >
             <td class="user-cell">
               <span class="expand-icon">{{ expandedUser === user.id ? '▼' : '▶' }}</span>
-              <a href="#">{{ user.username }}</a>
+              <a :href="getUserWikipediaUrl(user.username)" target="_blank" class="wiki-user-link">{{ user.username }}</a>
             </td>
             <td>{{ user.articlesCount }}</td>
             <td>{{ user.totalPoints }}</td>
@@ -285,7 +269,7 @@
                 <div class="info-item">
                   <span class="info-icon">👤</span>
                   <span class="info-label">AUTHOR</span>
-                  <span class="info-value">{{ currentArticle.author }}</span>
+                  <a :href="getUserWikipediaUrl(currentArticle.author)" target="_blank" class="info-value wiki-user-link">{{ currentArticle.author }}</a>
                 </div>
                 <div class="info-item">
                   <span class="info-icon">📝</span>
@@ -334,24 +318,6 @@
             <div>
               <!-- Stats & Actions Combined -->
               <div class="stats-actions-row">
-                <div class="mini-stat">
-                  <span class="mini-stat-value">{{ totalAccepted }}</span>
-                  <span class="mini-stat-label">Reviewed</span>
-                </div>
-                <div class="mini-stat">
-                  <span class="mini-stat-value">{{ stats.withoutMarks }}</span>
-                  <span class="mini-stat-label">Pending</span>
-                </div>
-              </div>
-
-              <!-- Action Buttons -->
-              <div class="action-buttons-row">
-                <button class="btn-action secondary" @click="skipArticle">
-                  ⏭️ Skip
-                </button>
-                <button class="btn-action primary" @click="saveReview">
-                  💾 Save
-                </button>
               </div>
             </div>
           </div>
@@ -377,7 +343,7 @@
           <div v-for="(user, index) in topContributors" :key="user.id" class="contributor-item">
             <div class="contributor-rank">{{ index + 1 }}</div>
             <div class="contributor-info">
-              <div class="contributor-name">{{ user.username }}</div>
+              <a :href="getUserWikipediaUrl(user.username)" target="_blank" class="contributor-name wiki-user-link">{{ user.username }}</a>
               <div class="contributor-stats">{{ user.articlesCount }} articles · {{ user.totalPoints }} points</div>
             </div>
             <div class="contributor-badge" v-if="index === 0">👑</div>
@@ -393,7 +359,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { fetchEditathonDashboard } from '../services/api'
+import { fetchEditathonDashboard, judgeArticle as judgeArticleAPI } from '../services/api'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Chart, BarController } from 'chart.js'
 import WikiUserInspector from '../components/WikiUserInspector.vue'
 import WikipediaArticleViewer from '../components/WikipediaArticleViewer.vue'
@@ -405,6 +371,7 @@ const route = useRoute()
 
 // Data
 const editathon = ref({})
+const editathonId = ref(null)
 const wikiLanguage = ref('en') // Default to English, will be loaded from editathon data
 const stats = ref({
   users: 6,
@@ -556,9 +523,14 @@ function formatDate(dateString) {
 
 function formatArticleMeta(article) {
   if (!article.reviews || article.reviews.length === 0) return 'No reviews yet'
-  return article.reviews.map(review => 
-    `${review.juror}: ${review.points} ${review.comment ? `(${review.comment})` : ''}`
-  ).join(' | ')
+  return article.reviews.map(review => {
+    // Handle both old string format and new object format
+    if (typeof review === 'string') {
+      return review
+    }
+    // New object format: { juror, decision, points, comment }
+    return `${review.juror} ${review.decision} with ${review.points} point${review.points !== 1 ? 's' : ''}`
+  }).join(' | ')
 }
 
 function toggleUserExpansion(userId) {
@@ -568,6 +540,12 @@ function toggleUserExpansion(userId) {
 function getWikipediaUrl(title) {
   // Dynamically use the wiki language from editathon data
   return `https://${wikiLanguage.value}.wikipedia.org/wiki/${encodeURIComponent(title)}`
+}
+
+function getUserWikipediaUrl(username) {
+  // Generate Wikipedia user page URL with correct language
+  // User pages are at: https://en.wikipedia.org/wiki/User:Username
+  return `https://${wikiLanguage.value}.wikipedia.org/wiki/User:${encodeURIComponent(username)}`
 }
 
 async function searchWikipediaArticles() {
@@ -731,12 +709,47 @@ function isArticleReviewedBy(article, jury) {
   return article.reviews?.includes(jury.username) || false
 }
 
-function judgeArticle(accepted) {
-  const points = accepted ? 1 : 0
-  const status = accepted ? 'accepted' : 'rejected'
-  alert(`Article ${status} with ${points} points. Comment: "${judgeComment.value}"`)
-  showArticleJudge.value = false
-  judgeComment.value = ''
+async function judgeArticle(accepted) {
+  try {
+    const points = accepted ? 1 : 0
+    const status = accepted ? 'accepted' : 'rejected'
+    
+    // Build reviewer note with name and decision
+    const reviewerName = 'Clinta' // Current reviewer
+    const reviewerNote = `${reviewerName} ${status} with ${points} point${points !== 1 ? 's' : ''}`
+    
+    const judgeData = {
+      article_title: currentArticle.value.title,
+      points: points,
+      comment: reviewerNote,
+      reviewer: reviewerName,
+      decision: status
+    }
+    
+    // Save review to backend
+    const result = await judgeArticleAPI(editathonId.value, judgeData)
+    
+    if (result.success) {
+      // Update current article with review
+      currentArticle.value.points = points
+      if (!currentArticle.value.reviews) {
+        currentArticle.value.reviews = []
+      }
+      currentArticle.value.reviews.push(reviewerName)
+      
+      // Show success message
+      alert(`✓ Review saved! ${reviewerNote}`)
+      
+      // Close modal
+      showArticleJudge.value = false
+      judgeComment.value = ''
+    } else {
+      alert('Error saving review. Please try again.')
+    }
+  } catch (error) {
+    console.error('Error saving review:', error)
+    alert('Failed to save review. Please check your connection.')
+  }
 }
 
 function skipArticle() {
@@ -785,10 +798,10 @@ function handleUseArticle(articleTitle) {
 
 // Lifecycle
 onMounted(async () => {
-  const editathonId = route.params.id
+  editathonId.value = route.params.id
   try {
     // Load editathon data from backend
-    const data = await fetchEditathonDashboard(editathonId)
+    const data = await fetchEditathonDashboard(editathonId.value)
     editathon.value = data.editathon
     
     // Set wiki language from editathon data, default to 'ml' if not specified
@@ -959,6 +972,21 @@ onMounted(async () => {
 .jury-members a:hover {
   color: #764ba2;
   text-decoration: underline;
+}
+
+.wiki-user-link {
+  color: #667eea !important;
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.wiki-user-link:hover {
+  color: #764ba2 !important;
+  text-decoration: underline;
+  border-bottom-color: #764ba2;
 }
 
 .leaderboard { 
@@ -1545,13 +1573,14 @@ onMounted(async () => {
 /* Article Info Grid - Compact */
 .article-info-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.4rem;
-  background: #f9fafb;
-  padding: 0.5rem;
-  border-radius: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #f3f4f6 100%);
+  padding: 1rem;
+  border-radius: 8px;
   border: 1px solid #e5e7eb;
   flex-shrink: 0;
+  margin-bottom: 1rem;
 }
 
 .info-item {
@@ -1559,23 +1588,35 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.15rem;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.3s ease;
+}
+
+.info-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: #667eea;
+  transform: translateY(-2px);
 }
 
 .info-icon {
-  font-size: 0.95rem;
+  font-size: 1.2rem;
 }
 
 .info-label {
-  font-size: 0.55rem;
+  font-size: 0.65rem;
   font-weight: 700;
   color: #9ca3af;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
 }
 
 .info-value {
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: #111827;
   word-break: break-word;
 }
@@ -1584,46 +1625,53 @@ onMounted(async () => {
 .review-decision-box {
   background: white;
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 0.5rem;
+  border-radius: 8px;
+  padding: 1rem;
   flex-shrink: 0;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .box-title {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: #374151;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .decision-buttons-horizontal {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .decision-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.375rem;
-  padding: 0.5rem;
+  gap: 0.5rem;
+  padding: 0.7rem;
   border: 2px solid;
   border-radius: 6px;
   font-weight: 700;
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .decision-btn .btn-icon {
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .decision-btn.accept {
-  background: #f0fdf4;
+  background: #ecfdf5;
   border-color: #10b981;
-  color: #065f46;
+  color: #047857;
 }
 
 .decision-btn.accept:hover {
@@ -1636,7 +1684,7 @@ onMounted(async () => {
 .decision-btn.reject {
   background: #fef2f2;
   border-color: #ef4444;
-  color: #991b1b;
+  color: #dc2626;
 }
 
 .decision-btn.reject:hover {
@@ -1650,22 +1698,23 @@ onMounted(async () => {
 .comment-box {
   background: white;
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 0.5rem;
+  border-radius: 8px;
+  padding: 1rem;
   flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .comment-textarea-full {
   width: 100%;
-  padding: 0.5rem;
+  padding: 0.75rem;
   border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  font-size: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
   font-family: inherit;
-  resize: none;
-  min-height: 50px;
-  max-height: 50px;
-  transition: all 0.2s;
+  resize: vertical;
+  min-height: 80px;
+  max-height: 120px;
+  transition: all 0.3s;
   background: #f9fafb;
   box-sizing: border-box;
 }
@@ -1677,20 +1726,24 @@ onMounted(async () => {
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+.comment-textarea-full::placeholder {
+  color: #d1d5db;
+}
+
 /* Fixed Bottom Section */
 .review-sidebar > :nth-child(3) {
   flex-shrink: 0;
-  padding: 0.625rem;
-  background: white;
-  border-top: 1px solid #e5e7eb;
+  padding: 0;
+  background: transparent;
+  border-top: none;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0;
 }
 
 /* Stats & Actions Row */
 .stats-actions-row {
-  display: grid;
+  display: none;
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
 }

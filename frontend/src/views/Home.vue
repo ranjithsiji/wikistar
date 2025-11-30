@@ -26,7 +26,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { fetchEditathons } from '../services/api' // This will now use the updated API
+import { fetchEditathons } from '../services/api'
 import EditathonCard from '../components/EditathonCard.vue'
 import EditathonTimeline from '../components/EditathonTimeline.vue'
 
@@ -51,6 +51,6 @@ const finishedEditathons = computed(() => {
 })
 
 onMounted(async () => {
-  editathons.value = await fetchEditathons() // This will now fetch from your backend
+  editathons.value = await fetchEditathons()
 })
 </script>

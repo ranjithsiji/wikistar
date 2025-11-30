@@ -86,10 +86,28 @@ export async function fetchUserStats(username) {
   }
 }
 
-// Create new editathon - PLACEHOLDER (backend doesn't support yet)
+// Create new editathon - Save to backend
 export async function createEditathon(editathonData) {
-  // TODO: Implement when backend supports editathon creation
-  throw new Error('Editathon creation not yet implemented in backend')
+  try {
+    const response = await fetch(`${API_BASE}/editathons/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(editathonData)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to create editathon')
+    }
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error creating editathon:', error)
+    throw error
+  }
 }
 
 // Fetch editathon data for judge view - alias for fetchEditathonDashboard
@@ -103,4 +121,16 @@ export async function toggleReview(articleId, username) {
   console.log(`Toggling review for article ${articleId} by ${username}`)
   // For now, just return success
   return { success: true }
+}
+
+// Fetch user's pending editathons
+export async function fetchUserPendingEditathons(username) {
+  try {
+    const response = await fetch(`${API_BASE}/user/${username}/pending-editathons`)
+    if (!response.ok) throw new Error('Failed to fetch pending editathons')
+    return await response.json()
+  } catch (error) {
+    console.error('Error fetching pending editathons:', error)
+    return [] // Return empty array if endpoint doesn't exist yet
+  }
 }
