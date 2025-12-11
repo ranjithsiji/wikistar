@@ -3,6 +3,7 @@ import Home from './views/Home.vue'
 import CreateEditathon from './views/CreateEditathon.vue'
 import EditathonDashboard from './views/EditathonDashboard.vue'
 import PersonalCabinet from './views/PersonalCabinet.vue'
+import JudgeView from './views/JudgeView.vue'
 
 const routes = [
   {
@@ -19,6 +20,12 @@ const routes = [
     path: '/editathon/:id',
     name: 'EditathonDashboard',
     component: EditathonDashboard,
+    props: true
+  },
+  {
+    path: '/editathon/:id/judge',
+    name: 'JudgeView',
+    component: JudgeView,
     props: true
   },
   {

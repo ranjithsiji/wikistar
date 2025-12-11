@@ -42,6 +42,22 @@
               <div class="metric-label">Total Articles</div>
             </div>
           </div>
+
+          <div class="metric-card info">
+            <div class="metric-icon">✅</div>
+            <div class="metric-content">
+              <div class="metric-value">{{ stats.marks }}</div>
+              <div class="metric-label">Articles Reviewed</div>
+            </div>
+          </div>
+
+          <div class="metric-card warning">
+            <div class="metric-icon">⏳</div>
+            <div class="metric-content">
+              <div class="metric-value">{{ stats.withoutMarks }}</div>
+              <div class="metric-label">Pending Review</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -238,16 +254,22 @@
         <button class="modern-close-btn" @click="showArticleJudge = false">✕</button>
 
         <div class="judge-layout">
-          <!-- Main Article View -->
+          <!-- Main Article View - Using iframe to embed Wikipedia directly -->
           <div class="article-viewer">
             <div class="article-header">
               <h2 class="article-title-main">{{ currentArticle.title }}</h2>
               <a :href="getWikipediaUrl(currentArticle.title)" target="_blank" class="wiki-link">
-                View on Wikipedia →
+                Open in new tab →
               </a>
             </div>
             <div class="article-content-scroll">
-              <div v-html="articleHTML" class="wiki-article-content"></div>
+              <!-- Embed Wikipedia directly using iframe -->
+              <iframe 
+                :src="getWikipediaMobileUrl(currentArticle.title)"
+                class="wiki-iframe"
+                frameborder="0"
+                sandbox="allow-scripts allow-same-origin allow-popups"
+              ></iframe>
             </div>
           </div>
 
@@ -358,7 +380,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchEditathonDashboard, judgeArticle as judgeArticleAPI } from '../services/api'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Chart, BarController } from 'chart.js'
 import WikiUserInspector from '../components/WikiUserInspector.vue'
@@ -368,6 +390,7 @@ import WikipediaArticleViewer from '../components/WikipediaArticleViewer.vue'
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, BarController)
 
 const route = useRoute()
+const router = useRouter()
 
 // Data
 const editathon = ref({})
@@ -542,6 +565,13 @@ function getWikipediaUrl(title) {
   return `https://${wikiLanguage.value}.wikipedia.org/wiki/${encodeURIComponent(title)}`
 }
 
+function getWikipediaMobileUrl(title) {
+  // Use Wikipedia mobile site for cleaner iframe embedding
+  if (!title) return ''
+  const cleanTitle = title.trim()
+  return `https://${wikiLanguage.value}.m.wikipedia.org/wiki/${encodeURIComponent(cleanTitle)}`
+}
+
 function getUserWikipediaUrl(username) {
   // Generate Wikipedia user page URL with correct language
   // User pages are at: https://en.wikipedia.org/wiki/User:Username
@@ -614,39 +644,90 @@ function closeSubmitModal() {
   }
 }
 
+function goToJudgeView() {
+  console.log('Judge button clicked, editathonId:', editathonId.value)
+  if(!editathonId.value) {
+    alert('Error: Editathon ID not found. Please refresh the page.')
+    return
+  }
+  router.push(`/editathon/${editathonId.value}/judge`)
+}
+
 async function openArticleJudge(article) {
   currentArticle.value = article
   showArticleJudge.value = true
   showJudgeModal.value = false
 
-  // Fetch article content from Wikipedia
+  // Show loading state
+  articleHTML.value = '<div class="loading-article"><div class="loading-spinner"></div><p>Loading article from Wikipedia...</p></div>'
+
+  // Fetch FULL article content from Wikipedia using WikiLite approach
+  const cleanTitle = article.title.trim()
+  const wikiDomain = `${wikiLanguage.value}.wikipedia.org`
+  
+  console.log('=== Fetching Wikipedia Article ===')
+  console.log('Title:', cleanTitle)
+  console.log('Wiki Domain:', wikiDomain)
+
   try {
-    const encodedTitle = encodeURIComponent(article.title)
-    const wikiDomain = `${wikiLanguage.value}.wikipedia.org`
-    // Try to fetch article summary first (more reliable)
-    const summaryResponse = await fetch(`https://${wikiDomain}/api/rest_v1/page/summary/${encodedTitle}`)
+    // WikiLite uses action=query&prop=extracts for FULL article content
+    const extractUrl = `https://${wikiDomain}/w/api.php?` +
+      `action=query&prop=extracts&exsectionformat=wiki&titles=${encodeURIComponent(cleanTitle)}` +
+      `&redirects=true&format=json&origin=*`
     
-    if (summaryResponse.ok) {
-      const data = await summaryResponse.json()
-      articleHTML.value = `
-        <h2>${data.title}</h2>
-        ${data.extract_html || '<p>' + (data.extract || 'No content available') + '</p>'}
-        <p><em>Source: <a href="${data.content_urls?.desktop?.page || ''}" target="_blank">View full article on Wikipedia</a></em></p>
-      `
-    } else if (summaryResponse.status === 404) {
-      articleHTML.value = `
-        <h2>${article.title}</h2>
-        <p class="warning">This article does not exist on Wikipedia yet, or the title may be incorrect.</p>
-        <p>You can <a href="https://${wikiDomain}/wiki/${encodedTitle}" target="_blank">view or create it on Wikipedia</a>.</p>
-      `
+    console.log('API URL:', extractUrl)
+    
+    const response = await fetch(extractUrl)
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    console.log('API Response:', data)
+    
+    const pages = data.query?.pages
+    if (pages) {
+      const pageId = Object.keys(pages)[0]
+      const page = pages[pageId]
+      
+      console.log('Page ID:', pageId)
+      console.log('Page data:', page)
+      
+      if (pageId !== '-1' && page && page.extract) {
+        // Success! Show full article content
+        console.log('SUCCESS - Article found with content')
+        articleHTML.value = `
+          <div class="wiki-full-article">
+            <h2 class="wiki-article-title">${page.title || cleanTitle}</h2>
+            <div class="wiki-extract">${page.extract}</div>
+          </div>
+        `
+      } else if (pageId === '-1' || page?.missing !== undefined) {
+        // Article doesn't exist
+        console.log('Article not found on Wikipedia')
+        articleHTML.value = `
+          <div class="article-not-found">
+            <h2>${cleanTitle}</h2>
+            <p class="warning">⚠️ This article does not exist on Wikipedia yet, or the title may be incorrect.</p>
+            <p>You can <a href="https://${wikiDomain}/wiki/${encodeURIComponent(cleanTitle)}" target="_blank">view or create it on Wikipedia</a>.</p>
+          </div>
+        `
+      } else {
+        console.log('No extract in page data')
+        articleHTML.value = '<p>No content available for this article.</p>'
+      }
     } else {
-      articleHTML.value = '<p>Article content could not be loaded. Please try again later.</p>'
+      throw new Error('Invalid API response - no pages found')
     }
   } catch (error) {
     console.error('Error fetching article:', error)
     articleHTML.value = `
-      <h2>${article.title}</h2>
-      <p class="error">Error loading article content. Please check your internet connection.</p>
+      <div class="article-error">
+        <h2>${cleanTitle}</h2>
+        <p class="error">⚠️ Error loading article content: ${error.message}</p>
+        <p><a href="https://${wikiDomain}/wiki/${encodeURIComponent(cleanTitle)}" target="_blank">View on Wikipedia directly →</a></p>
+      </div>
     `
   }
 }
@@ -816,21 +897,21 @@ onMounted(async () => {
     // Keep the default mock data if API fails
   }
 
-  // Initialize Chart.js chart
-  if (statsChart.value) {
-    new Chart(statsChart.value, {
-      type: 'bar',
-      data: chartData.value,
-      options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            position: 'top',
-          }
-        }
-      }
-    })
-  }
+  // Initialize Chart.js chart (commented out - statsChart ref not found)
+  // if (statsChart.value) {
+  //   new Chart(statsChart.value, {
+  //     type: 'bar',
+  //     data: chartData.value,
+  //     options: {
+  //       responsive: true,
+  //       plugins: {
+  //         legend: {
+  //           position: 'top',
+  //         }
+  //       }
+  //     }
+  //   })
+  // }
 })
 </script>
 
@@ -1445,10 +1526,20 @@ onMounted(async () => {
 
 .article-content-scroll {
   flex: 1;
-  overflow-y: auto;
-  padding: 2rem;
+  overflow: hidden;
+  padding: 0;
   background: white;
+  min-height: 400px;
+  max-height: calc(100vh - 150px);
+}
+
+/* Wikipedia iframe embed */
+.wiki-iframe {
+  width: 100%;
   height: 100%;
+  min-height: calc(100vh - 200px);
+  border: none;
+  background: white;
 }
 
 .wiki-article-content {
@@ -1456,6 +1547,8 @@ onMounted(async () => {
   line-height: 1.7;
   font-size: 1rem;
   color: #374151;
+  min-height: 200px;
+  padding: 2rem;
 }
 
 .wiki-article-content h1,
@@ -2258,5 +2351,110 @@ onMounted(async () => {
 .total-value {
   font-weight: bold;
   font-size: 1.5em;
+}
+
+/* WikiLite-style Full Article Content */
+.wiki-full-article {
+  padding: 0 0.5rem;
+}
+
+.wiki-article-title {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #333;
+  border-bottom: 1px solid #a2a9b1;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.wiki-article-content h2 {
+  font-size: 1.8rem;
+  border-bottom: 1px solid #ccc;
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+.wiki-article-content h3 {
+  font-size: 1.4rem;
+  margin: 1.25rem 0 0.5rem;
+  font-weight: bold;
+}
+
+.wiki-article-content h4 {
+  font-size: 1.2rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.wiki-article-content p {
+  font-size: 1rem;
+  line-height: 1.75;
+  text-align: justify;
+  color: #333;
+  margin: 0.75rem 0;
+}
+
+.wiki-article-content ul, .wiki-article-content ol {
+  margin: 0.75rem 0 0.75rem 2rem;
+}
+
+.wiki-article-content li {
+  margin: 0.4rem 0;
+  line-height: 1.6;
+}
+
+.wiki-article-content a {
+  color: #0645ad;
+  text-decoration: none;
+}
+
+.wiki-article-content a:hover {
+  text-decoration: underline;
+}
+
+/* Loading State */
+.loading-article {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #2196f3;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Article Not Found / Error */
+.article-not-found, .article-error {
+  padding: 2rem;
+  text-align: center;
+}
+
+.article-not-found .warning, .article-error .error {
+  color: #856404;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 1rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+}
+
+.article-error .error {
+  color: #721c24;
+  background: #f8d7da;
+  border-color: #f5c6cb;
 }
 </style>
