@@ -9,7 +9,7 @@ A comprehensive web application for managing Wikipedia editathons, featuring a b
 
 ## 🌟 Features
 
-### 🏠 Personal Cabinet
+###  Personal Cabinet
 - **Participation Tab**: View editathons you've participated in with leaderboards
 - **Evaluation Tab**: Jury dashboard with pending article counts
 - **Created Tab**: Manage editathons you've created
@@ -32,7 +32,7 @@ A comprehensive web application for managing Wikipedia editathons, featuring a b
 - Comment and feedback system
 - Review status tracking
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - Python 3.8+

@@ -97,7 +97,7 @@
                 <!-- Right Column: Event Card -->
                 <div class="event-right">
                   <div class="event-card">
-                    <div class="card-accent" :class="getWikiColorClass(event.wiki)"></div>
+                    <div class="card-accent" :class="getEventStatusColor(event)"></div>
                     <div class="card-content">
                       <div class="card-header">
                         <h3 class="card-title">{{ event.title }}</h3>
@@ -172,6 +172,14 @@ const groupedEvents = computed(() => {
   })
 
   filtered.sort((a, b) => {
+    // First priority: active events come first
+    const statusA = getEventStatus(a)
+    const statusB = getEventStatus(b)
+    
+    if (statusA === 'active' && statusB !== 'active') return -1
+    if (statusA !== 'active' && statusB === 'active') return 1
+    
+    // Then sort by date
     const dateA = new Date(a.start)
     const dateB = new Date(b.start)
     return sortOrder.value === 'desc' ? dateB - dateA : dateA - dateB
@@ -253,6 +261,12 @@ const getDayRange = (event) => {
 
 const isEventActive = (event) => {
   return getEventStatus(event) === 'active'
+}
+
+const getEventStatusColor = (event) => {
+  const status = getEventStatus(event)
+  // Return green for active, grey for finished
+  return status === 'active' ? 'color-active' : 'color-finished'
 }
 
 const getWikiColorClass = (wiki) => {
@@ -772,6 +786,10 @@ onMounted(() => {
 .color-pink { background: #ec4899; }
 .color-cyan { background: #06b6d4; }
 .color-gray { background: #6b7280; }
+
+/* Status Color Classes */
+.color-active { background: #10b981; }
+.color-finished { background: #9ca3af; }
 
 /* Transitions */
 .fade-enter-active, .fade-leave-active {

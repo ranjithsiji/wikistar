@@ -5,10 +5,10 @@
     </div>
 
     <div class="title-and-buttons">
-      <h1 class="main-title">Wikipedia: Women's Edit-a-thon 2025</h1>
+      <h1 class="main-title">{{ editathon.name || 'Loading...' }}</h1>
       <div class="action-buttons">
         <button class="btn btn-submit" @click="openSubmitModal">Submit Article</button>
-        <button class="btn btn-judge" @click="showJudgeModal = true">Judge</button>
+        <router-link :to="`/editathon/${editathonId}/articles`" class="btn btn-judge">Judge</router-link>
       </div>
     </div>
 
@@ -17,7 +17,15 @@
       <div><p>The editathon has finished</p></div>
     </div>
 
-    <!-- Top Section: Overview and Inspector -->
+    <!-- Jury Members -->
+    <div class="jury-members">
+      Jury members: 
+      <span v-for="(jury, index) in juries" :key="jury.id">
+        <a :href="getUserWikipediaUrl(jury.username)" target="_blank" class="wiki-user-link">{{ jury.username }}</a>{{ index < juries.length - 1 ? ', ' : '' }}
+      </span>
+    </div>
+
+    <!-- Top Section: Overview and Top Contributors -->
     <div class="top-section-layout">
       <!-- Left: Editathon Overview -->
       <div class="overview-panel">
@@ -59,20 +67,15 @@
             </div>
           </div>
         </div>
+
+        <!-- User Statistics Minimal -->
+        <UserStatsMinimal />
       </div>
 
-      <!-- Right: Wiki User Inspector -->
+      <!-- Right: Top Contributors -->
       <div class="inspector-panel">
-        <WikiUserInspector />
+        <TopContributors :leaderboard="leaderboard" :wikiLanguage="wikiLanguage" />
       </div>
-    </div>
-
-    <!-- Jury Members -->
-    <div class="jury-members">
-      Jury members: 
-      <span v-for="(jury, index) in juries" :key="jury.id">
-        <a :href="getUserWikipediaUrl(jury.username)" target="_blank" class="wiki-user-link">{{ jury.username }}</a>{{ index < juries.length - 1 ? ', ' : '' }}
-      </span>
     </div>
 
     <!-- Leaderboard Table -->
@@ -355,26 +358,6 @@
       @close="showWikipediaViewer = false"
       @use-article="handleUseArticle"
     />
-
-    <!-- Bottom Section: Top Contributors -->
-    <div class="charts-section">
-      <!-- Top Contributors -->
-      <div class="chart-section">
-        <h3>🏆 Top Contributors</h3>
-        <div class="top-contributors">
-          <div v-for="(user, index) in topContributors" :key="user.id" class="contributor-item">
-            <div class="contributor-rank">{{ index + 1 }}</div>
-            <div class="contributor-info">
-              <a :href="getUserWikipediaUrl(user.username)" target="_blank" class="contributor-name wiki-user-link">{{ user.username }}</a>
-              <div class="contributor-stats">{{ user.articlesCount }} articles · {{ user.totalPoints }} points</div>
-            </div>
-            <div class="contributor-badge" v-if="index === 0">👑</div>
-            <div class="contributor-badge" v-else-if="index === 1">🥈</div>
-            <div class="contributor-badge" v-else-if="index === 2">🥉</div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -383,7 +366,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchEditathonDashboard, judgeArticle as judgeArticleAPI } from '../services/api'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Chart, BarController } from 'chart.js'
-import WikiUserInspector from '../components/WikiUserInspector.vue'
+import TopContributors from '../components/TopContributors.vue'
+import UserStatsMinimal from '../components/UserStatsMinimal.vue'
 import WikipediaArticleViewer from '../components/WikipediaArticleViewer.vue'
 
 // Register Chart.js components
@@ -397,99 +381,17 @@ const editathon = ref({})
 const editathonId = ref(null)
 const wikiLanguage = ref('en') // Default to English, will be loaded from editathon data
 const stats = ref({
-  users: 6,
-  articles: 15,
-  marks: 12,
-  withoutMarks: 3
+  users: 0,
+  articles: 0,
+  marks: 0,
+  withoutMarks: 0
 })
 
-const juries = ref([
-  { id: 1, username: 'Meenakshi nandhini' },
-  { id: 2, username: 'Ranjithjsiji' },
-  { id: 3, username: 'Vijayanrajapuram' }
-])
+const juries = ref([])
 
-const leaderboard = ref([
-  {
-    id: 1,
-    username: 'Meenakshi nandhini',
-    articlesCount: 15,
-    totalPoints: 7,
-    articles: [
-      {
-        id: 1,
-        title: 'ഷാർലെറ്റ് സോഫിയ ബേൺ',
-        addedOn: '2025-03-29T19:38:00',
-        points: 0,
-        author: 'Meenakshi nandhini',
-        words: 150,
-        bytes: 2500,
-        preview: 'ഈ ലേഖനത്തിന്റെ നിലവാരം പരിശോധിക്കുന്നത് നന്നായിരിക്കും.',
-        reviews: ['Vijayanrajapuram']
-      },
-      {
-        id: 2,
-        title: 'കാറ്റീന അനറ്റോലിയ്ന പാവ്‌ലെങ്കോ',
-        addedOn: '2025-03-29T13:18:00',
-        points: 1,
-        author: 'Meenakshi nandhini',
-        words: 200,
-        bytes: 3200,
-        preview: 'പ്രാദേശിക ചരിത്രത്തിലെ പ്രമുഖ വ്യക്തി.',
-        reviews: ['Vijayanrajapuram']
-      }
-    ]
-  },
-  {
-    id: 2,
-    username: 'Ranjithjsiji',
-    articlesCount: 4,
-    totalPoints: 1,
-    articles: [
-      {
-        id: 3,
-        title: 'ഓൾ ലത',
-        addedOn: '2025-03-25T03:09:00',
-        points: 0,
-        author: 'Ranjithjsiji',
-        words: 180,
-        bytes: 2800,
-        preview: 'സാമൂഹ്യ പ്രവർത്തകയും എഴുത്തുകാരിയും.',
-        reviews: []
-      }
-    ]
-  }
-])
+const leaderboard = ref([])
 
-const unreviewedArticles = ref([
-  {
-    id: 4,
-    title: 'നാൻസി ആദംസ്',
-    author: 'User123',
-    words: 150,
-    bytes: 2500,
-    preview: 'ഈ ലേഖനത്തിന്റെ നിലവാരം പരിശോധിക്കുന്നത് നന്നായിരിക്കും.',
-    reviews: ['Meenakshi nandhini']
-  },
-  {
-    id: 5,
-    title: 'ലൂസി മൗഡ്',
-    author: 'User456',
-    words: 200,
-    bytes: 3200,
-    preview: 'പ്രാദേശിക ചരിത്രത്തിലെ പ്രമുഖ വ്യക്തി.',
-    reviews: []
-  },
-  {
-    id: 6,
-    title: 'ലിന്റിയ വിൽസൺ',
-    author: 'User789',
-    words: 180,
-    bytes: 2800,
-    preview: 'സാമൂഹ്യ പ്രവർത്തകയും എഴുത്തുകാരിയും.',
-    reviews: ['Meenakshi nandhini', 'Ranjithjsiji']
-  }
-])
+const unreviewedArticles = ref([])
 
 // Modal states
 const showSubmitModal = ref(false)
@@ -519,12 +421,6 @@ const totalAccepted = computed(() => {
 // Computed for charts
 const maxArticles = computed(() => {
   return Math.max(...leaderboard.value.map(user => user.articlesCount))
-})
-
-const topContributors = computed(() => {
-  return [...leaderboard.value]
-    .sort((a, b) => b.articlesCount - a.articlesCount)
-    .slice(0, 5)
 })
 
 // Computed
@@ -987,7 +883,9 @@ onMounted(async () => {
 
 .btn-judge { 
   background-color: #007bff; 
-  color: white; 
+  color: white;
+  text-decoration: none;
+  display: inline-block;
 }
 
 .btn-secondary { 

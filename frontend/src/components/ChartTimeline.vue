@@ -20,9 +20,25 @@ onMounted(async ()=>{
     const end = new Date(e.endDate).getTime()
     return { x:[start,end], y: e.name }
   })
+  
+  // Determine color based on status (ongoing vs finished)
+  const backgroundColor = edits.map(e => {
+    const now = new Date().getTime()
+    const endDate = new Date(e.endDate).getTime()
+    // Green for ongoing, grey for finished
+    return endDate > now ? '#16a34a' : '#9ca3af'
+  })
+  
   new Chart(c.value.getContext('2d'), {
     type:'bar',
-    data:{ labels, datasets:[{ label:'Duration', data: dataPoints, backgroundColor:'#16a34a' }]},
+    data:{ 
+      labels, 
+      datasets:[{ 
+        label:'Duration', 
+        data: dataPoints, 
+        backgroundColor: backgroundColor
+      }]
+    },
     options:{
       indexAxis:'y',
       parsing:{ xAxisKey:'x', yAxisKey:'y' },
