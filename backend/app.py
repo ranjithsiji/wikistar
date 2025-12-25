@@ -8,174 +8,254 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend-backend communication
 
 # MariaDB database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:maria123@localhost/editathons'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:maria123@localhost/wikifountain'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# ========== EXISTING TABLE ROUTES ==========
-@app.route('/api/wikipedia_asian_month_2025', methods=['GET'])
-def get_wikipedia_asian_month():
-    try:
-        result = db.session.execute(db.text('SELECT * FROM wikipedia_asian_month_2025'))
-        articles = []
-        for row in result:
-            articles.append({
-                'id': row[0],
-                'user_name': row[1],
-                'article_title': row[2],
-                'article_added': row[3].isoformat() if row[3] else None,
-                'points': row[4],
-                'jury_notes': row[5]
-            })
-        return jsonify(articles)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# ========== SQLAlchemy Models for New Schema ==========
 
-@app.route('/api/wiki_loves_ramadan_2025', methods=['GET'])
-def get_wiki_loves_ramadan():
-    try:
-        result = db.session.execute(db.text('SELECT * FROM wiki_loves_ramadan_2025'))
-        articles = []
-        for row in result:
-            articles.append({
-                'id': row[0],
-                'user_name': row[1],
-                'article_title': row[2],
-                'article_added': row[3].isoformat() if row[3] else None,
-                'points': row[4],
-                'jury_notes': row[5]
-            })
-        return jsonify(articles)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# User Model
+class User(db.Model):
+    __tablename__ = 'users'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.Enum('admin', 'jury', 'participant'), default='participant')
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
 
-@app.route('/api/women_in_red_2024', methods=['GET'])
-def get_women_in_red():
-    try:
-        result = db.session.execute(db.text('SELECT * FROM women_in_red_translation_contest_2024'))
-        articles = []
-        for row in result:
-            articles.append({
-                'id': row[0],
-                'user_name': row[1],
-                'article_title': row[2],
-                'article_added': row[3].isoformat() if row[3] else None,
-                'points': row[4],
-                'jury_notes': row[5]
-            })
-        return jsonify(articles)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# Project Model
+class Project(db.Model):
+    __tablename__ = 'projects'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
 
-@app.route('/api/feminism_folklore_2024', methods=['GET'])
-def get_feminism_folklore():
-    try:
-        result = db.session.execute(db.text('SELECT * FROM feminism_and_folklore_2024'))
-        articles = []
-        for row in result:
-            articles.append({
-                'id': row[0],
-                'user_name': row[1],
-                'article_title': row[2],
-                'article_added': row[3].isoformat() if row[3] else None,
-                'points': row[4],
-                'jury_notes': row[5]
-            })
-        return jsonify(articles)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# Editathon Model
+class Editathon(db.Model):
+    __tablename__ = 'editathons'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'))
+    language = db.Column(db.String(10), default='en')
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    wiki_domain = db.Column(db.String(100), default='en.wikipedia.org')
+    status = db.Column(db.Enum('draft', 'active', 'completed', 'archived'), default='draft')
+    min_marks_needed = db.Column(db.Integer, default=1)
+    marks_config = db.Column(db.JSON)
+    is_published = db.Column(db.Boolean, default=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+# Article Model
+class Article(db.Model):
+    __tablename__ = 'articles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    editathon_id = db.Column(db.Integer, db.ForeignKey('editathons.id'), nullable=False)
+    title = db.Column(db.String(500), nullable=False)
+    wikipedia_url = db.Column(db.String(1000))
+    submitted_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    status = db.Column(db.Enum('pending', 'accepted', 'rejected', 'improved'), default='pending')
+    points = db.Column(db.Integer, default=0)
+    notes = db.Column(db.Text)
+    submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+    last_modified = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+# Jury Assignment Model
+class EditathonJury(db.Model):
+    __tablename__ = 'editathon_jury'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    editathon_id = db.Column(db.Integer, db.ForeignKey('editathons.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    role = db.Column(db.Enum('main', 'secondary'), default='main')
+    added_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+
+# Marks Model
+class Mark(db.Model):
+    __tablename__ = 'marks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    article_id = db.Column(db.Integer, db.ForeignKey('articles.id'), nullable=False)
+    jury_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    criteria_scores = db.Column(db.JSON, nullable=False)
+    total_score = db.Column(db.Integer, default=0)
+    comments = db.Column(db.Text)
+    decision = db.Column(db.Enum('accept', 'reject', 'needs_work'), default='needs_work')
+    marked_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+# Rules Model
+class Rule(db.Model):
+    __tablename__ = 'rules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    rule_type = db.Column(db.String(50), nullable=False)
+    condition_text = db.Column(db.Text)
+    description = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+
+# Editathon Rules Model
+class EditathonRule(db.Model):
+    __tablename__ = 'editathon_rules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    editathon_id = db.Column(db.Integer, db.ForeignKey('editathons.id'), nullable=False)
+    rule_id = db.Column(db.Integer, db.ForeignKey('rules.id'), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+
+# Audit Log Model
+class AuditLog(db.Model):
+    __tablename__ = 'audit_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    action = db.Column(db.String(100), nullable=False)
+    entity_type = db.Column(db.String(50))
+    entity_id = db.Column(db.Integer)
+    details = db.Column(db.JSON)
+    ip_address = db.Column(db.String(45))
+    created_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+
+# Statistics Model
+class EditathonStat(db.Model):
+    __tablename__ = 'editathon_stats'
+    
+    editathon_id = db.Column(db.Integer, db.ForeignKey('editathons.id'), primary_key=True)
+    total_articles = db.Column(db.Integer, default=0)
+    total_participants = db.Column(db.Integer, default=0)
+    total_points = db.Column(db.Integer, default=0)
+    avg_score = db.Column(db.Numeric(5, 2), default=0)
+    last_updated = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+# ========== NEW SCHEMA API ROUTES ==========
 
 # ========== HOME ROUTE ==========
 @app.route('/')
 def home():
     return jsonify({
-        "message": "✅ Editathon Backend Connected to MariaDB",
+        "message": "✅ Editathon Backend Connected to MariaDB (WikiFountain Schema)",
         "status": "success",
-        "database": "MariaDB",
+        "database": "wikifountain",
+        "schema_version": "2.0",
         "tables": [
-            "wikipedia_asian_month_2025",
-            "wiki_loves_ramadan_2025",
-            "women_in_red_translation_contest_2024",
-            "feminism_and_folklore_2024"
+            "users",
+            "projects",
+            "editathons",
+            "articles",
+            "editathon_jury",
+            "marks",
+            "rules",
+            "editathon_rules",
+            "audit_logs",
+            "editathon_stats"
         ]
     })
 
 # ========== FRONTEND API ROUTES ==========
 
-# 1. Personal Cabinet - Get User Statistics
+# 1. Personal Cabinet - Get User Statistics (Updated for New Schema)
 @app.route('/api/personal-cabinet/<username>', methods=['GET'])
 def get_personal_cabinet(username):
     try:
-        # Get user's articles across all tables
-        tables = [
-            'wikipedia_asian_month_2025',
-            'wiki_loves_ramadan_2025',
-            'women_in_red_translation_contest_2024',
-            'feminism_and_folklore_2024'
+        # Get user from new database
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Get user's articles
+        user_articles = Article.query.filter_by(submitted_by=user.id).all()
+        
+        # Get user's editathons
+        articles_by_editathon = {}
+        for article in user_articles:
+            editathon = Editathon.query.get(article.editathon_id)
+            if editathon not in articles_by_editathon:
+                articles_by_editathon[editathon] = []
+            articles_by_editathon[editathon].append(article)
+
+        # Build response
+        articles_data = []
+        total_points = 0
+        
+        for editathon, articles in articles_by_editathon.items():
+            for article in articles:
+                articles_data.append({
+                    'editathon': editathon.name,
+                    'editathon_code': editathon.code,
+                    'article_title': article.title,
+                    'points': article.points,
+                    'notes': article.notes,
+                    'submitted_date': article.submitted_at.isoformat() if article.submitted_at else None,
+                    'status': article.status
+                })
+                total_points += article.points or 0
+
+        # Get created editathons
+        created_editathons = Editathon.query.filter_by(created_by=user.id).all()
+        created_data = [
+            {
+                'id': editathon.id,
+                'name': editathon.name,
+                'description': editathon.description,
+                'status': editathon.status,
+                'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
+                'end_date': editathon.end_date.isoformat() if editathon.end_date else None
+            }
+            for editathon in created_editathons
         ]
 
-        user_articles = []
-        total_articles = 0
-        total_points = 0
-        participated_editathons = set()
-
-        for table in tables:
-            result = db.session.execute(
-                db.text(f'SELECT article_title, points, jury_notes, article_added FROM {table} WHERE user_name = :username'),
-                {'username': username}
-            )
-
-            for row in result:
-                user_articles.append({
-                    'editathon': table.replace('_', ' ').title(),
-                    'table_name': table,
-                    'article_title': row[0],
-                    'points': row[1],
-                    'jury_notes': row[2],
-                    'submitted_date': row[3].isoformat() if row[3] else None,
-                    'status': 'reviewed' if row[1] is not None else 'pending'
-                })
-                total_articles += 1
-                if row[1]:
-                    total_points += row[1]
-                participated_editathons.add(table)
-
-        # Mock created editathons
-        created_editathons = []
-        if username == 'Min968':
-            created_editathons = [
-                {
-                    'id': 1,
-                    'name': 'Wikipedia Asian Month 2025',
-                    'description': 'Annual Wikipedia Asian Month editathon',
-                    'status': 'finished',
-                    'start_date': '2025-11-01',
-                    'end_date': '2025-11-30'
-                }
-            ]
+        # Get jury assignments
+        jury_assignments = EditathonJury.query.filter_by(user_id=user.id).all()
+        participated_as_jury = [
+            {
+                'editathon_id': assignment.editathon_id,
+                'editathon_name': Editathon.query.get(assignment.editathon_id).name if Editathon.query.get(assignment.editathon_id) else 'Unknown',
+                'role': assignment.role
+            }
+            for assignment in jury_assignments
+        ]
 
         return jsonify({
-            'username': username,
+            'username': user.username,
+            'role': user.role,
             'stats': {
-                'participated': len(participated_editathons),
-                'created': len(created_editathons),
-                'articles': total_articles,
-                'points': total_points
+                'articles_submitted': len(user_articles),
+                'editathons_participated': len(articles_by_editathon),
+                'editathons_created': len(created_editathons),
+                'total_points': total_points,
+                'jury_assignments': len(jury_assignments)
             },
             'participated_editathons': [
                 {
-                    'id': i+1,
-                    'name': editathon.replace('_', ' ').title(),
-                    'description': f'Articles from {editathon}',
-                    'status': 'finished',
-                    'start_date': '2025-01-01',
-                    'end_date': '2025-12-31'
+                    'id': editathon.id,
+                    'name': editathon.name,
+                    'description': editathon.description,
+                    'status': editathon.status,
+                    'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
+                    'end_date': editathon.end_date.isoformat() if editathon.end_date else None
                 }
-                for i, editathon in enumerate(participated_editathons)
+                for editathon in articles_by_editathon.keys()
             ],
-            'created_editathons': created_editathons,
-            'articles': user_articles
+            'created_editathons': created_data,
+            'jury_assignments': participated_as_jury,
+            'articles': articles_data
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -184,107 +264,88 @@ def get_personal_cabinet(username):
 @app.route('/api/editathon/<editathon_id>', methods=['GET'])
 def get_editathon_dashboard(editathon_id):
     try:
-        # Map editathon IDs to names and info
-        editathon_info = {
-            '1': {
-                'name': 'Wikipedia Asian Month 2025',
-                'description': 'Annual Wikipedia Asian Month editathon focusing on Asian content',
-                'startDate': '2025-11-01T00:00:00',
-                'endDate': '2025-11-30T23:59:59',
-                'juries': ['Narutolovehinata5', 'ZI Jony'],
-                'table': 'wikipedia_asian_month_2025',
-                'wiki_language': 'en'
-            },
-            '2': {
-                'name': 'Wiki Loves Ramadan 2025',
-                'description': 'Ramadan-themed content creation contest',
-                'startDate': '2025-02-25T00:00:00',
-                'endDate': '2025-04-15T23:59:59',
-                'juries': ['ZI Jony'],
-                'table': 'wiki_loves_ramadan_2025',
-                'wiki_language': 'ml'
-            },
-            '3': {
-                'name': 'Women in Red Translation Contest 2024',
-                'description': 'Translation contest for women-related articles',
-                'startDate': '2024-07-01T00:00:00',
-                'endDate': '2024-10-01T23:59:59',
-                'juries': [],
-                'table': 'women_in_red_translation_contest_2024',
-                'wiki_language': 'en'
-            },
-            '4': {
-                'name': 'Feminism and Folklore 2024',
-                'description': 'Creating articles about feminism and folklore',
-                'startDate': '2024-02-01T00:00:00',
-                'endDate': '2024-03-31T23:59:59',
-                'juries': ['Haoreima'],
-                'table': 'feminism_and_folklore_2024',
-                'wiki_language': 'en'
-            }
-        }
-        
-        info = editathon_info.get(editathon_id)
-        if not info:
+        # Get editathon from new schema
+        editathon = Editathon.query.get(editathon_id)
+        if not editathon:
             return jsonify({"error": "Editathon not found"}), 404
         
-        # Try to get articles from database
-        articles = []
-        try:
-            result = db.session.execute(db.text(f'SELECT * FROM {info["table"]}'))
-            for row in result:
-                article_data = {
-                    'id': row[0],
-                    'user_name': row[1],
-                    'article_title': row[2],
-                    'article_added': row[3].isoformat() if row[3] else None,
-                    'points': row[4],
-                    'jury_notes': row[5],
-                    'status': 'reviewed' if row[4] is not None else 'pending'
-                }
-                articles.append(article_data)
-        except Exception as table_error:
-            print(f"Table {info['table']} not found or error: {table_error}")
-            # Return empty articles - editathon exists but has no data yet
-            articles = []
+        # Get all articles for this editathon
+        articles = Article.query.filter_by(editathon_id=editathon_id).all()
         
-        # Calculate leaderboard from articles
-        user_stats = {}
-        total_articles = 0
+        # Calculate statistics
+        users = set()
+        total_articles = len(articles)
         total_points = 0
         articles_without_marks = 0
         
+        # Build leaderboard
+        user_stats = {}
+        unreviewed_articles_mapped = []
+        
         for article in articles:
-            total_articles += 1
-            username = article['user_name']
+            # Get article author
+            author = User.query.get(article.submitted_by)
+            if not author:
+                continue
+                
+            username = author.username
+            users.add(username)
+            
+            # Get marks for this article
+            marks = Mark.query.filter_by(article_id=article.id).all()
+            reviews = []
+            article_total_score = 0
+            
+            for mark in marks:
+                jury = User.query.get(mark.jury_id)
+                if jury:
+                    reviews.append({
+                        'juror': jury.username,
+                        'decision': mark.decision,
+                        'points': mark.total_score,
+                        'comment': mark.comments or ''
+                    })
+                    article_total_score += mark.total_score
+            
+            # Calculate average score if there are marks
+            if marks:
+                article.points = article_total_score // len(marks)
+            else:
+                articles_without_marks += 1
+            
+            total_points += article.points or 0
+            
+            # Build user statistics
             if username not in user_stats:
                 user_stats[username] = {
                     'articles_count': 0,
                     'total_points': 0,
                     'articles': []
                 }
-
+            
             user_stats[username]['articles_count'] += 1
-            if article['points'] is not None:
-                user_stats[username]['total_points'] += article['points']
-                total_points += article['points']
-            else:
-                articles_without_marks += 1
-
-            # Map database fields to frontend expected fields
+            user_stats[username]['total_points'] += article.points or 0
+            
+            # Map article to frontend format
             article_for_frontend = {
-                'id': article['id'],
-                'title': article['article_title'],
-                'author': article['user_name'],
-                'addedOn': article['article_added'],
-                'points': article['points'],
-                'reviews': [],
-                'words': 150,
+                'id': article.id,
+                'title': article.title,
+                'author': username,
+                'addedOn': article.submitted_at.isoformat() if article.submitted_at else None,
+                'points': article.points,
+                'reviews': reviews,
+                'words': 150,   # Default values (could be fetched from Wikipedia API)
                 'bytes': 2500,
-                'preview': f'Preview for {article["article_title"]}'
+                'preview': f'Preview for {article.title}',
+                'status': article.status
             }
             user_stats[username]['articles'].append(article_for_frontend)
+            
+            # Add to unreviewed if no marks
+            if not marks:
+                unreviewed_articles_mapped.append(article_for_frontend)
         
+        # Build leaderboard
         leaderboard = [
             {
                 'id': i+1,
@@ -295,552 +356,980 @@ def get_editathon_dashboard(editathon_id):
             }
             for i, (username, stats) in enumerate(user_stats.items())
         ]
-        
-        # Sort by points descending
         leaderboard.sort(key=lambda x: x['totalPoints'], reverse=True)
         
         # Get jury members
-        juries = [
-            {'id': i+1, 'username': jury}
-            for i, jury in enumerate(info.get('juries', []))
-        ]
+        jury_assignments = EditathonJury.query.filter_by(editathon_id=editathon_id).all()
+        juries = []
+        for assignment in jury_assignments:
+            user = User.query.get(assignment.user_id)
+            if user:
+                juries.append({
+                    'id': user.id,
+                    'username': user.username
+                })
         
         return jsonify({
             'editathon': {
-                'id': editathon_id,
-                'name': info['name'],
-                'description': info['description'],
-                'startDate': info['startDate'],
-                'endDate': info['endDate'],
-                'wiki_language': info.get('wiki_language', 'en')
+                'id': editathon.id,
+                'name': editathon.name,
+                'status': editathon.status,
+                'description': editathon.description,
+                'wiki_language': editathon.language
             },
             'stats': {
-                'users': len(user_stats),
+                'users': len(users),
                 'articles': total_articles,
                 'marks': total_articles - articles_without_marks,
-                'withoutMarks': articles_without_marks
+                'withoutMarks': articles_without_marks,
+                'totalPoints': total_points
             },
             'juries': juries,
             'leaderboard': leaderboard,
-            'unreviewed_articles': [
-                a for user in leaderboard for a in user['articles']
-                if a['points'] is None
-            ]
+            'unreviewed_articles': unreviewed_articles_mapped
         })
     except Exception as e:
-        print(f"Error in get_editathon_dashboard: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 3. Get All Editathons for Homepage
 @app.route('/api/editathons', methods=['GET'])
 def get_all_editathons():
     try:
-        # Editathon metadata
-        editathons_config = [
-            {
-                'id': 1,
-                'table': 'wikipedia_asian_month_2025',
-                'name': 'Wikipedia Asian Month 2025',
-                'description': 'Annual Wikipedia Asian Month editathon focusing on Asian content',
-                'startDate': '2025-11-01T00:00:00',
-                'endDate': '2025-11-30T23:59:59',
-                'juries': ['Narutolovehinata5', 'ZI Jony']
-            },
-            {
-                'id': 2,
-                'table': 'wiki_loves_ramadan_2025',
-                'name': 'Wiki Loves Ramadan 2025',
-                'description': 'Ramadan-themed content creation contest',
-                'startDate': '2025-02-25T00:00:00',
-                'endDate': '2025-04-15T23:59:59',
-                'juries': ['ZI Jony']
-            },
-            {
-                'id': 3,
-                'table': 'women_in_red_translation_contest_2024',
-                'name': 'Women in Red Translation Contest 2024',
-                'description': 'Translation contest for women-related articles',
-                'startDate': '2024-07-01T00:00:00',
-                'endDate': '2024-10-01T23:59:59',
-                'juries': []
-            },
-            {
-                'id': 4,
-                'table': 'feminism_and_folklore_2024',
-                'name': 'Feminism and Folklore 2024',
-                'description': 'Creating articles about feminism and folklore',
-                'startDate': '2024-02-01T00:00:00',
-                'endDate': '2024-03-31T23:59:59',
-                'juries': ['Haoreima']
-            }
-        ]
-
-        editathons_data = []
-
-        for config in editathons_config:
-            try:
-                # Try to get article count for this editathon
-                result = db.session.execute(db.text(f"SELECT COUNT(*) FROM {config['table']}"))
-                article_count = result.scalar() or 0
-                
-                # Try to get unique user count
-                result = db.session.execute(db.text(f"SELECT COUNT(DISTINCT user_name) FROM {config['table']}"))
-                user_count = result.scalar() or 0
-            except Exception as table_error:
-                print(f"Table {config['table']} error: {table_error}")
-                article_count = 0
-                user_count = 0
-
-            editathons_data.append({
-                'id': config['id'],
-                'name': config['name'],
-                'description': config['description'],
-                'startDate': config['startDate'],
-                'endDate': config['endDate'],
-                'status': 'finished',
-                'article_count': article_count,
-                'user_count': user_count,
-                'juries': [{'id': j+1, 'username': jury} for j, jury in enumerate(config.get('juries', []))]
+        editathons = Editathon.query.all()
+        result = []
+        for editathon in editathons:
+            stats = EditathonStat.query.get(editathon.id)
+            
+            # Get jury members
+            jury_assignments = EditathonJury.query.filter_by(editathon_id=editathon.id).all()
+            juries = []
+            for assignment in jury_assignments:
+                user = User.query.get(assignment.user_id)
+                if user:
+                    juries.append({
+                        'id': user.id,
+                        'username': user.username,
+                        'role': assignment.role
+                    })
+            
+            result.append({
+                'id': editathon.id,
+                'code': editathon.code,
+                'name': editathon.name,
+                'description': editathon.description,
+                'startDate': editathon.start_date.isoformat() if editathon.start_date else None,
+                'endDate': editathon.end_date.isoformat() if editathon.end_date else None,
+                'status': editathon.status,
+                'language': editathon.language,
+                'article_count': stats.total_articles if stats else 0,
+                'user_count': stats.total_participants if stats else 0,
+                'juries': juries
             })
-
-        return jsonify(editathons_data)
+        return jsonify(result)
     except Exception as e:
-        print(f"Error in get_all_editathons: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-# 4. Submit Article to Editathon
+# 4. Submit Article to Editathon (New Schema)
 @app.route('/api/editathon/<editathon_id>/submit', methods=['POST'])
 def submit_article(editathon_id):
     try:
         data = request.json
-        table_mapping = {
-            '1': 'wikipedia_asian_month_2025',
-            '2': 'wiki_loves_ramadan_2025',
-            '3': 'women_in_red_translation_contest_2024',
-            '4': 'feminism_and_folklore_2024'
-        }
         
-        table_name = table_mapping.get(editathon_id)
-        if not table_name:
+        # Find user
+        user = User.query.filter_by(username=data['username']).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        # Find editathon
+        editathon = Editathon.query.get(editathon_id)
+        if not editathon:
             return jsonify({"error": "Editathon not found"}), 404
         
-        query = f"INSERT INTO {table_name} (user_name, article_title, article_added) VALUES (:user_name, :article_title, NOW())"
-        
-        db.session.execute(
-            db.text(query),
-            {
-                'user_name': data['username'],
-                'article_title': data['article_title']
-            }
+        # Create article
+        article = Article(
+            editathon_id=editathon.id,
+            title=data['article_title'],
+            wikipedia_url=data.get('wikipedia_url'),
+            submitted_by=user.id,
+            status='pending'
         )
+        
+        db.session.add(article)
         db.session.commit()
         
         return jsonify({
-            "message": f"Article '{data['article_title']}' submitted to {table_name}", 
+            "message": f"Article '{article.title}' submitted successfully",
+            "article_id": article.id,
             "success": True
         })
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-# 5. Judge Article - Update Points
+# 5. Judge Article - Add Marks (New Schema)
 @app.route('/api/editathon/<editathon_id>/judge', methods=['POST'])
 def judge_article(editathon_id):
     try:
         data = request.json
-        table_mapping = {
-            '1': 'wikipedia_asian_month_2025',
-            '2': 'wiki_loves_ramadan_2025', 
-            '3': 'women_in_red_translation_contest_2024',
-            '4': 'feminism_and_folklore_2024'
-        }
         
-        table_name = table_mapping.get(editathon_id)
-        if not table_name:
-            return jsonify({"error": "Editathon not found"}), 404
+        # Find jury user
+        jury_user = User.query.filter_by(username=data.get('reviewer', 'Unknown')).first()
+        if not jury_user:
+            return jsonify({"error": "Jury user not found"}), 404
         
-        # Store reviewer name and decision in jury_notes
-        reviewer_name = data.get('reviewer', 'Unknown')
-        decision = data.get('decision', 'accepted')
+        # Find article by title
+        article = Article.query.filter_by(
+            editathon_id=editathon_id,
+            title=data['article_title']
+        ).first()
+        
+        if not article:
+            return jsonify({"error": "Article not found"}), 404
+        
+        # Check if jury is assigned to this editathon
+        jury_assignment = EditathonJury.query.filter_by(
+            editathon_id=editathon_id,
+            user_id=jury_user.id
+        ).first()
+        
+        if not jury_assignment and jury_user.role != 'admin':
+            return jsonify({"error": "Jury not assigned to this editathon"}), 403
+        
+        # Create or update mark
+        mark = Mark.query.filter_by(
+            article_id=article.id,
+            jury_id=jury_user.id
+        ).first()
+        
         points = data.get('points', 0)
+        decision = data.get('decision', 'accepted')
+        comment = data.get('comment', '')
         
-        # Format jury notes: "Reviewer_Name|decision|points|comment"
-        jury_note = f"{reviewer_name}|{decision}|{points}|{data.get('comment', '')}"
-        
-        query = f"UPDATE {table_name} SET points = :points, jury_notes = :jury_notes WHERE article_title = :article_title"
-        
-        db.session.execute(
-            db.text(query),
-            {
-                'points': points,
-                'jury_notes': jury_note,
-                'article_title': data['article_title']
-            }
-        )
-        db.session.commit()
-        
-        return jsonify({
-            "message": f"Article '{data['article_title']}' judged with {points} points",
-            "success": True 
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
-
-# 6. Get user statistics (existing route)
-@app.route('/api/user/<username>', methods=['GET'])
-def get_user_stats(username):
-    try:
-        # Query across all tables for this user
-        tables = [
-            'wikipedia_asian_month_2025',
-            'wiki_loves_ramadan_2025', 
-            'women_in_red_translation_contest_2024',
-            'feminism_and_folklore_2024'
-        ]
-        
-        user_data = []
-        total_articles = 0
-        total_points = 0
-        
-        for table in tables:
-            result = db.session.execute(
-                db.text(f'SELECT article_title, points, jury_notes FROM {table} WHERE user_name = :username'),
-                {'username': username}
+        if mark:
+            mark.criteria_scores = {"total": points}
+            mark.total_score = points
+            mark.comments = comment
+            mark.decision = 'accept' if decision == 'accepted' else 'reject'
+        else:
+            mark = Mark(
+                article_id=article.id,
+                jury_id=jury_user.id,
+                criteria_scores={"total": points},
+                total_score=points,
+                comments=comment,
+                decision='accept' if decision == 'accepted' else 'reject'
             )
-            
-            for row in result:
-                user_data.append({
-                    'table': table,
-                    'article_title': row[0],
-                    'points': row[1],
-                    'jury_notes': row[2]
-                })
-                total_articles += 1
-                if row[1]:
-                    total_points += row[1]
+            db.session.add(mark)
         
-        return jsonify({
-            'username': username,
-            'total_articles': total_articles,
-            'total_points': total_points,
-            'articles': user_data
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# 7. Add new article to any table (existing route)
-@app.route('/api/add_article', methods=['POST'])
-def add_article():
-    try:
-        data = request.json
-        table_name = data['table_name']
-        user_name = data['user_name']
-        article_title = data['article_title']
-        article_added = data.get('article_added', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        points = data.get('points')
-        jury_notes = data.get('jury_notes')
+        # Update article points and status
+        article.points = points
+        article.status = 'accepted' if decision == 'accepted' else 'rejected'
         
-        query = f"""
-        INSERT INTO {table_name} (user_name, article_title, article_added, points, jury_notes) 
-        VALUES (:user_name, :article_title, :article_added, :points, :jury_notes)
-        """
-        
-        db.session.execute(
-            db.text(query),
-            {
-                'user_name': user_name,
-                'article_title': article_title,
-                'article_added': article_added,
-                'points': points,
-                'jury_notes': jury_notes
-            }
-        )
         db.session.commit()
         
-        return jsonify({"message": f"Article added to {table_name}", "success": True})
+        return jsonify({
+            "message": f"Article '{article.title}' judged with {points} points",
+            "success": True
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-# 8. Create New Editathon
+# 6. Create New Editathon (New Schema)
 @app.route('/api/editathons/create', methods=['POST'])
 def create_new_editathon():
     try:
         data = request.json
         
-        # Extract editathon data
-        editathon_data = {
-            'title': data.get('title'),
-            'code': data.get('code'),
-            'project': data.get('project'),
-            'wiki_language': data.get('wiki_language'),
-            'description': data.get('description'),
-            'namespace': data.get('namespace'),
-            'minSize': data.get('minSize', 0),
-            'maxSize': data.get('maxSize', 10000),
-            'startDate': data.get('startDate'),
-            'endDate': data.get('endDate'),
-            'createdBy': data.get('createdBy'),
-            'submissionDate': data.get('submissionDate'),
-            'consensualVote': data.get('consensualVote', False),
-            'hiddenMarks': data.get('hiddenMarks', False),
-            'creatorSubmit': data.get('creatorSubmit', False),
-            'showInJury': data.get('showInJury', False),
-            'status': data.get('status', 'pending'),
-            'rules': str(data.get('rules', [])),  # Store as JSON string
-            'marks': str(data.get('marks', [])),  # Store as JSON string
-            'jury': str(data.get('jury', [])),    # Store as JSON string
-            'template': str(data.get('template', {}))  # Store as JSON string
-        }
+        # Validate required fields
+        required_fields = ['code', 'title', 'createdBy', 'startDate', 'endDate']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"error": f"Missing required field: {field}"}), 400
         
-        # Create editathon metadata table (if not exists)
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS editathon_metadata (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            title VARCHAR(255) NOT NULL,
-            code VARCHAR(100) UNIQUE,
-            project VARCHAR(255),
-            wiki_language VARCHAR(10),
-            description TEXT,
-            namespace VARCHAR(50),
-            minSize INT,
-            maxSize INT,
-            startDate DATETIME,
-            endDate DATETIME,
-            createdBy VARCHAR(255),
-            submissionDate DATE,
-            consensualVote BOOLEAN,
-            hiddenMarks BOOLEAN,
-            creatorSubmit BOOLEAN,
-            showInJury BOOLEAN,
-            status VARCHAR(50),
-            rules LONGTEXT,
-            marks LONGTEXT,
-            jury LONGTEXT,
-            template LONGTEXT,
-            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        # Find creator user
+        creator = User.query.filter_by(username=data.get('createdBy')).first()
+        if not creator:
+            return jsonify({"error": "Creator user not found"}), 404
+        
+        # Parse dates
+        try:
+            from datetime import datetime
+            start_date = datetime.strptime(data.get('startDate'), '%Y-%m-%d').date()
+            end_date = datetime.strptime(data.get('endDate'), '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+        
+        # Find or create project
+        project = None
+        if data.get('project'):
+            project = Project.query.filter_by(name=data.get('project')).first()
+            if not project:
+                project = Project(
+                    name=data.get('project'),
+                    description=f"Project for {data.get('project')}",
+                    created_by=creator.id
+                )
+                db.session.add(project)
+                db.session.flush()  # Get project ID
+        
+        # Create editathon
+        editathon = Editathon(
+            code=data.get('code'),
+            name=data.get('title'),
+            description=data.get('description', ''),
+            project_id=project.id if project else None,
+            language=data.get('wiki_language', 'en'),
+            start_date=start_date,
+            end_date=end_date,
+            wiki_domain=f"{data.get('wiki_language', 'en')}.wikipedia.org",
+            status=data.get('status', 'draft'),
+            min_marks_needed=data.get('min_marks_needed', 1),
+            marks_config=data.get('marks', {}),
+            is_published=data.get('is_published', False),
+            created_by=creator.id
         )
-        """
         
-        db.session.execute(db.text(create_table_query))
+        db.session.add(editathon)
+        db.session.flush()  # Get editathon ID
+        
+        # Add jury members if provided
+        if data.get('jury'):
+            import json
+            jury_list = json.loads(data['jury']) if isinstance(data['jury'], str) else data['jury']
+            for jury_username in jury_list:
+                jury_user = User.query.filter_by(username=jury_username).first()
+                if jury_user:
+                    jury_assignment = EditathonJury(
+                        editathon_id=editathon.id,
+                        user_id=jury_user.id,
+                        role='main'
+                    )
+                    db.session.add(jury_assignment)
+        
+        # Initialize statistics
+        stats = EditathonStat(
+            editathon_id=editathon.id,
+            total_articles=0,
+            total_participants=0,
+            total_points=0,
+            avg_score=0
+        )
+        db.session.add(stats)
+        
         db.session.commit()
-        
-        # Insert editathon data
-        insert_query = """
-        INSERT INTO editathon_metadata 
-        (title, code, project, wiki_language, description, namespace, minSize, maxSize, 
-         startDate, endDate, createdBy, submissionDate, consensualVote, hiddenMarks, 
-         creatorSubmit, showInJury, status, rules, marks, jury, template)
-        VALUES 
-        (:title, :code, :project, :wiki_language, :description, :namespace, :minSize, :maxSize,
-         :startDate, :endDate, :createdBy, :submissionDate, :consensualVote, :hiddenMarks,
-         :creatorSubmit, :showInJury, :status, :rules, :marks, :jury, :template)
-        """
-        
-        db.session.execute(db.text(insert_query), editathon_data)
-        db.session.commit()
-        
-        # Get the inserted ID
-        result = db.session.execute(db.text("SELECT LAST_INSERT_ID()"))
-        editathon_id = result.scalar()
         
         return jsonify({
             "success": True,
-            "message": "Editathon created successfully and pending approval",
-            "id": editathon_id,
-            "status": "pending"
+            "message": "Editathon created successfully",
+            "id": editathon.id,
+            "code": editathon.code,
+            "name": editathon.name,
+            "status": editathon.status
         }), 201
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error creating editathon: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-# 9. Get Pending Editathons for Approval
-@app.route('/api/editathons/pending', methods=['GET'])
-def get_pending_editathons():
-    try:
-        # Create table if not exists
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS editathon_metadata (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            title VARCHAR(255) NOT NULL,
-            code VARCHAR(100) UNIQUE,
-            project VARCHAR(255),
-            wiki_language VARCHAR(10),
-            description TEXT,
-            namespace VARCHAR(50),
-            minSize INT,
-            maxSize INT,
-            startDate DATETIME,
-            endDate DATETIME,
-            createdBy VARCHAR(255),
-            submissionDate DATE,
-            consensualVote BOOLEAN,
-            hiddenMarks BOOLEAN,
-            creatorSubmit BOOLEAN,
-            showInJury BOOLEAN,
-            status VARCHAR(50),
-            rules LONGTEXT,
-            marks LONGTEXT,
-            jury LONGTEXT,
-            template LONGTEXT,
-            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-        db.session.execute(db.text(create_table_query))
-        db.session.commit()
-        
-        # Get pending editathons
-        result = db.session.execute(
-            db.text("SELECT * FROM editathon_metadata WHERE status = 'pending' ORDER BY createdAt DESC")
-        )
-        
-        pending_editathons = []
-        for row in result:
-            pending_editathons.append({
-                'id': row.id,
-                'title': row.title,
-                'code': row.code,
-                'project': row.project,
-                'wiki_language': row.wiki_language,
-                'description': row.description,
-                'namespace': row.namespace,
-                'minSize': row.minSize,
-                'maxSize': row.maxSize,
-                'startDate': row.startDate.isoformat() if row.startDate else None,
-                'endDate': row.endDate.isoformat() if row.endDate else None,
-                'createdBy': row.createdBy,
-                'submissionDate': row.submissionDate.isoformat() if row.submissionDate else None,
-                'status': row.status
-            })
-        
-        return jsonify({
-            "success": True,
-            "editathons": pending_editathons,
-            "count": len(pending_editathons)
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# 10. Approve Editathon
-@app.route('/api/editathon/<editathon_id>/approve', methods=['POST'])
-def approve_editathon(editathon_id):
-    try:
-        db.session.execute(
-            db.text("UPDATE editathon_metadata SET status = 'active' WHERE id = :id"),
-            {'id': editathon_id}
-        )
-        db.session.commit()
-        
-        return jsonify({
-            "success": True,
-            "message": "Editathon approved successfully",
-            "status": "active"
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
-
-# 11. Reject Editathon
-@app.route('/api/editathon/<editathon_id>/reject', methods=['POST'])
-def reject_editathon(editathon_id):
+# Submit article (new schema)
+@app.route('/api/articles', methods=['POST'])
+def submit_article_to_editathon():
     try:
         data = request.json
-        reason = data.get('reason', 'No reason provided') if data else 'No reason provided'
         
-        db.session.execute(
-            db.text("UPDATE editathon_metadata SET status = 'rejected' WHERE id = :id"),
-            {'id': editathon_id}
+        # Find user
+        user = User.query.filter_by(username=data['username']).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        # Find editathon
+        editathon = Editathon.query.filter_by(code=data['editathon_code']).first()
+        if not editathon:
+            return jsonify({"error": "Editathon not found"}), 404
+        
+        # Create article
+        article = Article(
+            editathon_id=editathon.id,
+            title=data['title'],
+            wikipedia_url=data.get('wikipedia_url'),
+            submitted_by=user.id,
+            status='pending'
         )
+        
+        db.session.add(article)
         db.session.commit()
         
         return jsonify({
-            "success": True,
-            "message": f"Editathon rejected. Reason: {reason}",
-            "status": "rejected"
+            "message": f"Article '{article.title}' submitted successfully",
+            "article_id": article.id,
+            "success": True
         })
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-# 12. Get User's Pending Editathons
-@app.route('/api/user/<username>/pending-editathons', methods=['GET'])
-def get_user_pending_editathons(username):
+# Add marks (new schema)
+@app.route('/api/marks', methods=['POST'])
+def add_marks():
     try:
-        # Get pending editathons created by this user
-        result = db.session.execute(
-            db.text("SELECT * FROM editathon_metadata WHERE createdBy = :username AND status = 'pending' ORDER BY createdAt DESC"),
-            {'username': username}
-        )
+        data = request.json
         
-        pending_editathons = []
-        for row in result:
-            pending_editathons.append({
-                'id': row.id,
-                'title': row.title,
-                'code': row.code,
-                'project': row.project,
-                'wiki_language': row.wiki_language,
-                'description': row.description,
-                'namespace': row.namespace,
-                'minSize': row.minSize,
-                'maxSize': row.maxSize,
-                'startDate': row.startDate.isoformat() if row.startDate else None,
-                'endDate': row.endDate.isoformat() if row.endDate else None,
-                'createdBy': row.createdBy,
-                'submissionDate': row.submissionDate.isoformat() if row.submissionDate else None,
-                'status': row.status,
-                'rules': row.rules,
-                'marks': row.marks,
-                'jury': row.jury,
-                'template': row.template
-            })
+        # Find jury user
+        jury_user = User.query.filter_by(username=data['jury_username']).first()
+        if not jury_user or jury_user.role != 'jury':
+            return jsonify({"error": "Jury user not found or not authorized"}), 403
         
-        return jsonify(pending_editathons)
+        # Find article
+        article = Article.query.get(data['article_id'])
+        if not article:
+            return jsonify({"error": "Article not found"}), 404
         
+        # Check if jury is assigned to this editathon
+        jury_assignment = EditathonJury.query.filter_by(
+            editathon_id=article.editathon_id,
+            user_id=jury_user.id
+        ).first()
+        if not jury_assignment:
+            return jsonify({"error": "Jury not assigned to this editathon"}), 403
+        
+        # Create or update mark
+        mark = Mark.query.filter_by(
+            article_id=article.id,
+            jury_id=jury_user.id
+        ).first()
+        
+        if mark:
+            mark.criteria_scores = data['criteria_scores']
+            mark.total_score = data['total_score']
+            mark.comments = data.get('comments')
+            mark.decision = data['decision']
+        else:
+            mark = Mark(
+                article_id=article.id,
+                jury_id=jury_user.id,
+                criteria_scores=data['criteria_scores'],
+                total_score=data['total_score'],
+                comments=data.get('comments'),
+                decision=data['decision']
+            )
+            db.session.add(mark)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Marks added successfully",
+            "mark_id": mark.id,
+            "success": True
+        })
     except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+# Create tables function
+def create_tables():
+    try:
+        with app.app_context():
+            db.create_all()
+            print("✅ Tables created/verified successfully!")
+    except Exception as e:
+        print(f"❌ Error creating tables: {e}")
+
+# Auto-import finished editathons on startup
+def auto_import_data():
+    """Auto-import all finished editathons from sample data on startup"""
+    from datetime import datetime, timedelta
+    
+    with app.app_context():
+        print("\n🔄 Auto-importing finished editathons...")
+        
+        # Check if data already exists - skip only if WAM2025 already exists
+        if Editathon.query.filter_by(code='WAM2025').first():
+            print("⚠️ Data already exists. Skipping import.")
+            return
+        
+        try:
+            # ========== 1. CREATE ALL USERS ==========
+            users_to_create = [
+                # Admin & Organizers
+                {"username": "WikiFountainAdmin", "role": "admin", "email": "admin@wikifountain.org"},
+                
+                # Jury
+                {"username": "Haoreima", "role": "jury", "email": "haoreima@wikifountain.org"},
+                {"username": "MSG17", "role": "jury", "email": "msg17@wikifountain.org"},
+                {"username": "Narutolovehinata5", "role": "jury", "email": "narutolovehinata5@wikifountain.org"},
+                {"username": "SuperHamster", "role": "jury", "email": "superhamster@wikifountain.org"},
+                {"username": "ZI Jony", "role": "jury", "email": "zijony@wikifountain.org"},
+                
+                # Participants
+                {"username": "Min968", "role": "participant", "email": "min968@wikifountain.org"},
+                {"username": "MisawaSakura", "role": "participant", "email": "misawasakura@wikifountain.org"},
+                {"username": "Nicholas0", "role": "participant", "email": "nicholas0@wikifountain.org"},
+                {"username": "SDGB1217", "role": "participant", "email": "sdgb1217@wikifountain.org"},
+                {"username": "Ainty Painty", "role": "participant", "email": "ainty@wikifountain.org"},
+                {"username": "Spiderpig662", "role": "participant", "email": "spiderpig@wikifountain.org"},
+                {"username": "MumphingSquirrel", "role": "participant", "email": "mumph@wikifountain.org"},
+                {"username": "Alperen", "role": "participant", "email": "alperen@wikifountain.org"},
+                {"username": "Abishe", "role": "participant", "email": "abishe@wikifountain.org"},
+                {"username": "Penny Richards", "role": "participant", "email": "penny@wikifountain.org"},
+            ]
+            
+            users_dict = {}
+            for user_data in users_to_create:
+                user = User(
+                    username=user_data["username"],
+                    email=user_data["email"],
+                    password_hash=f"imported_{user_data['username'].lower()}",
+                    role=user_data["role"],
+                    is_active=True
+                )
+                db.session.add(user)
+                users_dict[user_data["username"]] = user
+            
+            db.session.flush()
+            print(f"  ✅ Created {len(users_dict)} users")
+            
+            # ========== 2. CREATE PROJECT ==========
+            project = Project(
+                name="Wikipedia Editathons",
+                description="Collection of finished Wikipedia editathons",
+                created_by=users_dict["WikiFountainAdmin"].id
+            )
+            db.session.add(project)
+            db.session.flush()
+            print("  ✅ Created project")
+            
+            # ========== 3. IMPORT EDITATHON 1: WIKIPEDIA ASIAN MONTH 2025 ==========
+            wam2025 = Editathon(
+                code="WAM2025",
+                name="Wikipedia Asian Month 2025",
+                description="Wikipedia Asian Month 2025 - Completed editathon",
+                project_id=project.id,
+                language="en",
+                start_date=datetime(2025, 11, 1),
+                end_date=datetime(2025, 11, 30),
+                wiki_domain="en.wikipedia.org",
+                status="completed",
+                is_published=True,
+                created_by=users_dict["WikiFountainAdmin"].id
+            )
+            db.session.add(wam2025)
+            db.session.flush()
+            
+            # Jury for WAM2025
+            for jury_name in ["Narutolovehinata5", "ZI Jony", "MSG17"]:
+                db.session.add(EditathonJury(
+                    editathon_id=wam2025.id,
+                    user_id=users_dict[jury_name].id,
+                    role="main"
+                ))
+            
+            # Articles for WAM2025 (from setup_mariadb.py)
+            wam2025_articles = [
+                ('Min968', 'History of Korean cuisine', datetime(2025, 11, 1, 10, 0), 85, 'Excellent coverage'),
+                ('MisawaSakura', 'Japanese tea ceremony', datetime(2025, 11, 2, 14, 30), 92, 'Comprehensive article'),
+                ('Nicholas0', 'Traditional Mongolian clothing', datetime(2025, 11, 3, 9, 15), 78, 'Good research'),
+                ('SDGB1217', 'Filipino martial arts', datetime(2025, 11, 4, 16, 45), 88, 'Well-structured'),
+                ('Min968', 'Chinese calligraphy techniques', datetime(2025, 11, 5, 11, 20), 90, 'Outstanding'),
+                ('MisawaSakura', 'Vietnamese traditional music', datetime(2025, 11, 6, 13, 10), 85, 'Good coverage'),
+                ('Nicholas0', 'Thai Buddhist temples', datetime(2025, 11, 7, 15, 30), 82, 'Solid research'),
+                ('SDGB1217', 'Indonesian batik patterns', datetime(2025, 11, 8, 10, 45), 87, 'Beautiful article'),
+                ('Min968', 'Singaporean street food', datetime(2025, 11, 9, 12, 15), 89, 'Excellent documentation'),
+                ('MisawaSakura', 'Cambodian Angkor Wat history', datetime(2025, 11, 10, 14, 20), 91, 'Comprehensive'),
+                ('Nicholas0', 'Malaysian traditional games', datetime(2025, 11, 11, 16, 30), 80, 'Good introduction'),
+                ('SDGB1217', 'Burmese pagoda festivals', datetime(2025, 11, 12, 11, 45), 86, 'Well-researched'),
+            ]
+            
+            wam2025_points = 0
+            wam2025_participants = set()
+            for author_name, title, submitted_at, points, notes in wam2025_articles:
+                author = users_dict[author_name]
+                article = Article(
+                    editathon_id=wam2025.id,
+                    title=title,
+                    wikipedia_url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                    submitted_by=author.id,
+                    status='accepted' if points > 0 else 'rejected',
+                    points=points,
+                    notes=notes,
+                    submitted_at=submitted_at
+                )
+                db.session.add(article)
+                db.session.flush()
+                
+                wam2025_points += points
+                wam2025_participants.add(author_name)
+                
+                # Add mark from jury
+                jury_name = "Narutolovehinata5" if points > 0 else "ZI Jony"
+                mark = Mark(
+                    article_id=article.id,
+                    jury_id=users_dict[jury_name].id,
+                    criteria_scores={"quality": 8, "sources": 7, "coverage": 8},
+                    total_score=points,
+                    comments=notes,
+                    decision="accept" if points > 0 else "reject",
+                    marked_at=submitted_at + timedelta(hours=1)
+                )
+                db.session.add(mark)
+            
+            stats = EditathonStat(
+                editathon_id=wam2025.id,
+                total_articles=len(wam2025_articles),
+                total_participants=len(wam2025_participants),
+                total_points=wam2025_points,
+                avg_score=wam2025_points / len(wam2025_articles) if wam2025_articles else 0
+            )
+            db.session.add(stats)
+            print(f"  ✅ Imported {len(wam2025_articles)} articles for WAM2025")
+            
+            # ========== 4. IMPORT EDITATHON 2: WIKI LOVES RAMADAN 2025 ==========
+            wlr2025 = Editathon(
+                code="WLR2025",
+                name="Wiki Loves Ramadan 2025",
+                description="Wiki Loves Ramadan 2025 - Completed editathon",
+                project_id=project.id,
+                language="en",
+                start_date=datetime(2025, 2, 25),
+                end_date=datetime(2025, 4, 15),
+                wiki_domain="en.wikipedia.org",
+                status="completed",
+                is_published=True,
+                created_by=users_dict["WikiFountainAdmin"].id
+            )
+            db.session.add(wlr2025)
+            db.session.flush()
+            
+            # Jury for WLR2025
+            for jury_name in ["ZI Jony"]:
+                db.session.add(EditathonJury(
+                    editathon_id=wlr2025.id,
+                    user_id=users_dict[jury_name].id,
+                    role="main"
+                ))
+            
+            # Articles for WLR2025
+            wlr2025_articles = [
+                ('Min968', 'Ramadan traditions in Muslim countries', datetime(2025, 2, 25, 10, 0), 88, 'Comprehensive overview'),
+                ('ZI Jony', 'Islamic calligraphy during Ramadan', datetime(2025, 2, 26, 14, 30), 92, 'Beautiful examples'),
+                ('MisawaSakura', 'Ramadan food traditions', datetime(2025, 2, 27, 9, 15), 85, 'Excellent coverage'),
+                ('Nicholas0', 'Mosque architecture and Ramadan', datetime(2025, 2, 28, 16, 45), 87, 'Good analysis'),
+                ('SDGB1217', 'Ramadan charity and community service', datetime(2025, 3, 1, 11, 20), 90, 'Outstanding'),
+                ('Min968', 'Ramadan in modern times', datetime(2025, 3, 2, 13, 10), 86, 'Contemporary'),
+                ('ZI Jony', 'Ramadan moon sighting traditions', datetime(2025, 3, 3, 15, 30), 89, 'Detailed'),
+                ('MisawaSakura', 'Family gatherings during Ramadan', datetime(2025, 3, 4, 10, 45), 84, 'Heartwarming'),
+                ('Nicholas0', 'Ramadan shopping and markets', datetime(2025, 3, 5, 12, 15), 82, 'Economic aspects'),
+                ('SDGB1217', 'Ramadan literature and poetry', datetime(2025, 3, 6, 14, 20), 91, 'Literary analysis'),
+            ]
+            
+            wlr2025_points = 0
+            wlr2025_participants = set()
+            for author_name, title, submitted_at, points, notes in wlr2025_articles:
+                author = users_dict[author_name]
+                article = Article(
+                    editathon_id=wlr2025.id,
+                    title=title,
+                    wikipedia_url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                    submitted_by=author.id,
+                    status='accepted',
+                    points=points,
+                    notes=notes,
+                    submitted_at=submitted_at
+                )
+                db.session.add(article)
+                db.session.flush()
+                
+                wlr2025_points += points
+                wlr2025_participants.add(author_name)
+                
+                mark = Mark(
+                    article_id=article.id,
+                    jury_id=users_dict["ZI Jony"].id,
+                    criteria_scores={"quality": 8, "sources": 7, "coverage": 8},
+                    total_score=points,
+                    comments=notes,
+                    decision="accept",
+                    marked_at=submitted_at + timedelta(hours=1)
+                )
+                db.session.add(mark)
+            
+            stats = EditathonStat(
+                editathon_id=wlr2025.id,
+                total_articles=len(wlr2025_articles),
+                total_participants=len(wlr2025_participants),
+                total_points=wlr2025_points,
+                avg_score=wlr2025_points / len(wlr2025_articles)
+            )
+            db.session.add(stats)
+            print(f"  ✅ Imported {len(wlr2025_articles)} articles for WLR2025")
+            
+            # ========== 5. IMPORT EDITATHON 3: WOMEN IN RED 2024 ==========
+            wir2024 = Editathon(
+                code="WIR2024",
+                name="Women in Red Translation Contest 2024",
+                description="Women in Red 2024 - Completed editathon",
+                project_id=project.id,
+                language="en",
+                start_date=datetime(2024, 7, 1),
+                end_date=datetime(2024, 10, 1),
+                wiki_domain="en.wikipedia.org",
+                status="completed",
+                is_published=True,
+                created_by=users_dict["Spiderpig662"].id
+            )
+            db.session.add(wir2024)
+            db.session.flush()
+            
+            wir2024_articles = [
+                ('Min968', 'Marie Curie biography (translated)', datetime(2024, 7, 1, 10, 0), 90, 'Excellent translation'),
+                ('MisawaSakura', 'Malala Yousafzai story (translated)', datetime(2024, 7, 15, 14, 30), 88, 'Well-translated'),
+            ]
+            
+            wir2024_points = 0
+            for author_name, title, submitted_at, points, notes in wir2024_articles:
+                author = users_dict[author_name]
+                article = Article(
+                    editathon_id=wir2024.id,
+                    title=title,
+                    wikipedia_url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                    submitted_by=author.id,
+                    status='accepted',
+                    points=points,
+                    notes=notes,
+                    submitted_at=submitted_at
+                )
+                db.session.add(article)
+                db.session.flush()
+                
+                wir2024_points += points
+            
+            stats = EditathonStat(
+                editathon_id=wir2024.id,
+                total_articles=len(wir2024_articles),
+                total_participants=len(set([a[0] for a in wir2024_articles])),
+                total_points=wir2024_points,
+                avg_score=wir2024_points / len(wir2024_articles)
+            )
+            db.session.add(stats)
+            print(f"  ✅ Imported {len(wir2024_articles)} articles for WIR2024")
+            
+            # ========== 6. IMPORT EDITATHON 4: FEMINISM AND FOLKLORE 2024 ==========
+            faf2024 = Editathon(
+                code="FAF2024",
+                name="Feminism and Folklore 2024",
+                description="Feminism and Folklore 2024 - Completed editathon",
+                project_id=project.id,
+                language="en",
+                start_date=datetime(2024, 2, 1),
+                end_date=datetime(2024, 3, 31),
+                wiki_domain="en.wikipedia.org",
+                status="completed",
+                is_published=True,
+                created_by=users_dict["Alperen"].id
+            )
+            db.session.add(faf2024)
+            db.session.flush()
+            
+            # Jury for FAF2024
+            db.session.add(EditathonJury(
+                editathon_id=faf2024.id,
+                user_id=users_dict["Haoreima"].id,
+                role="main"
+            ))
+            
+            faf2024_articles = [
+                ('Alperen', 'Feminist themes in Japanese folklore', datetime(2024, 3, 29, 17, 22), 92, 'Outstanding analysis'),
+            ]
+            
+            for author_name, title, submitted_at, points, notes in faf2024_articles:
+                author = users_dict[author_name]
+                article = Article(
+                    editathon_id=faf2024.id,
+                    title=title,
+                    wikipedia_url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                    submitted_by=author.id,
+                    status='accepted',
+                    points=points,
+                    notes=notes,
+                    submitted_at=submitted_at
+                )
+                db.session.add(article)
+                db.session.flush()
+                
+                mark = Mark(
+                    article_id=article.id,
+                    jury_id=users_dict["Haoreima"].id,
+                    criteria_scores={"quality": 9, "sources": 8, "coverage": 9},
+                    total_score=points,
+                    comments=notes,
+                    decision="accept",
+                    marked_at=submitted_at + timedelta(hours=1)
+                )
+                db.session.add(mark)
+            
+            stats = EditathonStat(
+                editathon_id=faf2024.id,
+                total_articles=len(faf2024_articles),
+                total_participants=1,
+                total_points=92,
+                avg_score=92
+            )
+            db.session.add(stats)
+            print(f"  ✅ Imported {len(faf2024_articles)} articles for FAF2024")
+            
+            db.session.commit()
+            print("\n✅ All finished editathons imported automatically!")
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ Error during auto-import: {e}")
+            raise
+
+# Auto-import finished editathons on startup
+def auto_import_finished_editathons():
+    """Automatically import finished editathons if database is empty"""
+    from datetime import timedelta
+    
+    try:
+        with app.app_context():
+            # Check if data already exists
+            existing_editathons = Editathon.query.count()
+            if existing_editathons > 0:
+                print("ℹ️  Database already has editathons, skipping auto-import")
+                return
+            
+            print("📥 Auto-importing finished editathons...")
+            
+            # ========== 1. CREATE ALL USERS ==========
+            users_to_create = [
+                {"username": "WikiFountainAdmin", "role": "admin", "email": "admin@wikifountain.org"},
+                {"username": "Haoreima", "role": "jury", "email": "haoreima@wikifountain.org"},
+                {"username": "MSG17", "role": "jury", "email": "msg17@wikifountain.org"},
+                {"username": "Narutolovehinata5", "role": "jury", "email": "narutolovehinata5@wikifountain.org"},
+                {"username": "SuperHamster", "role": "jury", "email": "superhamster@wikifountain.org"},
+                {"username": "ZI Jony", "role": "jury", "email": "zijony@wikifountain.org"},
+                {"username": "Abishe", "role": "participant", "email": "abishe@wikifountain.org"},
+                {"username": "Penny Richards", "role": "participant", "email": "penny@wikifountain.org"},
+                {"username": "Min968", "role": "participant", "email": "min968@wikifountain.org"},
+                {"username": "MisawaSakura", "role": "participant", "email": "misawasakura@wikifountain.org"},
+            ]
+            
+            users_dict = {}
+            for user_data in users_to_create:
+                user = User(
+                    username=user_data["username"],
+                    email=user_data["email"],
+                    password_hash=f"imported_{user_data['username'].lower()}",
+                    role=user_data["role"],
+                    is_active=True
+                )
+                db.session.add(user)
+                users_dict[user_data["username"]] = user
+            
+            db.session.flush()
+            
+            # ========== 2. CREATE PROJECT ==========
+            organizer = users_dict["WikiFountainAdmin"]
+            project = Project(
+                name="Wikipedia Asian Month",
+                description="Annual Wikipedia Asian Month editathon focusing on Asian content",
+                created_by=organizer.id
+            )
+            db.session.add(project)
+            db.session.flush()
+            
+            # ========== 3. IMPORT WAM 2024 ==========
+            wam2024 = Editathon(
+                code="WAM2024",
+                name="Wikipedia Asian Month 2024",
+                description="Wikipedia Asian Month 2024 - Completed editathon",
+                project_id=project.id,
+                language="en",
+                start_date=datetime(2024, 11, 1),
+                end_date=datetime(2024, 11, 30),
+                wiki_domain="en.wikipedia.org",
+                status="completed",
+                min_marks_needed=1,
+                is_published=True,
+                created_by=organizer.id
+            )
+            db.session.add(wam2024)
+            db.session.flush()
+            
+            # Assign jury for WAM2024
+            for jury_name in ["Haoreima", "MSG17", "Narutolovehinata5", "SuperHamster", "ZI Jony"]:
+                db.session.add(EditathonJury(
+                    editathon_id=wam2024.id,
+                    user_id=users_dict[jury_name].id,
+                    role="main"
+                ))
+            
+            # Add articles for WAM2024
+            wam2024_articles = [
+                {"title": "Mala Honnatti", "author": "Abishe", "points": 1, "jury": "ZI Jony"},
+                {"title": "Geetha Kailasam", "author": "Abishe", "points": 1, "jury": "MSG17"},
+                {"title": "Sean Wijesinghe", "author": "Abishe", "points": 1, "jury": "MSG17"},
+                {"title": "Emma Sarepta Yule", "author": "Penny Richards", "points": 1, "jury": "MSG17"},
+                {"title": "Mary Sallom", "author": "Penny Richards", "points": 1, "jury": "MSG17"},
+                {"title": "Elise Grilli", "author": "Penny Richards", "points": 1, "jury": "MSG17"},
+            ]
+            
+            for art_data in wam2024_articles:
+                article = Article(
+                    editathon_id=wam2024.id,
+                    title=art_data["title"],
+                    wikipedia_url=f"https://en.wikipedia.org/wiki/{art_data['title'].replace(' ', '_')}",
+                    submitted_by=users_dict[art_data["author"]].id,
+                    status="accepted",
+                    points=art_data["points"],
+                    submitted_at=datetime(2024, 11, 30, 12, 0)
+                )
+                db.session.add(article)
+                db.session.flush()
+                
+                mark = Mark(
+                    article_id=article.id,
+                    jury_id=users_dict[art_data["jury"]].id,
+                    criteria_scores={"quality": 8, "sources": 7, "coverage": 8},
+                    total_score=art_data["points"],
+                    comments="Accepted",
+                    decision="accept",
+                    marked_at=datetime(2024, 11, 30, 13, 0)
+                )
+                db.session.add(mark)
+            
+            stats_2024 = EditathonStat(
+                editathon_id=wam2024.id,
+                total_articles=len(wam2024_articles),
+                total_participants=2,
+                total_points=sum(a["points"] for a in wam2024_articles),
+                avg_score=sum(a["points"] for a in wam2024_articles) / len(wam2024_articles)
+            )
+            db.session.add(stats_2024)
+            
+            # ========== 4. IMPORT WAM 2025 ==========
+            wam2025 = Editathon(
+                code="WAM2025",
+                name="Wikipedia Asian Month 2025",
+                description="Wikipedia Asian Month 2025 - Completed editathon",
+                project_id=project.id,
+                language="en",
+                start_date=datetime(2025, 11, 1),
+                end_date=datetime(2025, 11, 30),
+                wiki_domain="en.wikipedia.org",
+                status="completed",
+                min_marks_needed=1,
+                is_published=True,
+                created_by=organizer.id
+            )
+            db.session.add(wam2025)
+            db.session.flush()
+            
+            # Assign jury for WAM2025
+            for jury_name in ["MSG17", "Narutolovehinata5", "ZI Jony"]:
+                db.session.add(EditathonJury(
+                    editathon_id=wam2025.id,
+                    user_id=users_dict[jury_name].id,
+                    role="main"
+                ))
+            
+            # Add articles for WAM2025
+            wam2025_articles = [
+                {"title": "Mao Kun", "author": "Min968", "points": 1, "jury": "Narutolovehinata5"},
+                {"title": "Zhang Bi (calligrapher)", "author": "Min968", "points": 1, "jury": "Narutolovehinata5"},
+                {"title": "Wang Shenzhong", "author": "Min968", "points": 1, "jury": "Narutolovehinata5"},
+                {"title": "Hou (title 侯)", "author": "Min968", "points": 0, "jury": "ZI Jony"},
+                {"title": "Minggadari", "author": "Min968", "points": 1, "jury": "Narutolovehinata5"},
+                {"title": "Fish-Scale Registers", "author": "Min968", "points": 1, "jury": "Narutolovehinata5"},
+                {"title": "Three-pillar accounting system", "author": "Min968", "points": 1, "jury": "Narutolovehinata5"},
+                {"title": "Ira Sukrungruang", "author": "MisawaSakura", "points": 1, "jury": "Narutolovehinata5"},
+                {"title": "Frances Cha", "author": "MisawaSakura", "points": 1, "jury": "Narutolovehinata5"},
+                {"title": "Farida Sulaiman", "author": "MisawaSakura", "points": 1, "jury": "Narutolovehinata5"},
+            ]
+            
+            for art_data in wam2025_articles:
+                article = Article(
+                    editathon_id=wam2025.id,
+                    title=art_data["title"],
+                    wikipedia_url=f"https://en.wikipedia.org/wiki/{art_data['title'].replace(' ', '_')}",
+                    submitted_by=users_dict[art_data["author"]].id,
+                    status="accepted" if art_data["points"] > 0 else "rejected",
+                    points=art_data["points"],
+                    submitted_at=datetime(2025, 11, 30, 12, 0)
+                )
+                db.session.add(article)
+                db.session.flush()
+                
+                mark = Mark(
+                    article_id=article.id,
+                    jury_id=users_dict[art_data["jury"]].id,
+                    criteria_scores={"quality": 8, "sources": 7, "coverage": 8},
+                    total_score=art_data["points"],
+                    comments="Accepted" if art_data["points"] > 0 else "Rejected",
+                    decision="accept" if art_data["points"] > 0 else "reject",
+                    marked_at=datetime(2025, 11, 30, 13, 0)
+                )
+                db.session.add(mark)
+            
+            stats_2025 = EditathonStat(
+                editathon_id=wam2025.id,
+                total_articles=len(wam2025_articles),
+                total_participants=2,
+                total_points=sum(a["points"] for a in wam2025_articles),
+                avg_score=sum(a["points"] for a in wam2025_articles) / len(wam2025_articles)
+            )
+            db.session.add(stats_2025)
+            
+            db.session.commit()
+            
+            print("✅ Auto-import completed successfully!")
+            print(f"   • WAM 2024: {len(wam2024_articles)} articles")
+            print(f"   • WAM 2025: {len(wam2025_articles)} articles")
+            
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️  Auto-import skipped or failed: {e}")
 
 # Test database connection
 def test_connection():
     try:
         with app.app_context():
-            tables = [
-                'wikipedia_asian_month_2025',
-                'wiki_loves_ramadan_2025',
-                'women_in_red_translation_contest_2024',
-                'feminism_and_folklore_2024'
-            ]
-
+            # Test connection by fetching user count
+            user_count = User.query.count()
             print("✅ Connected to MariaDB successfully!")
-            for table in tables:
-                result = db.session.execute(db.text(f'SELECT COUNT(*) FROM {table}'))
-                count = result.scalar()
-                print(f"   📊 {table}: {count} articles")
+            print(f"   📊 Users in database: {user_count}")
+            
+            # Show all tables
+            result = db.session.execute(db.text("SHOW TABLES"))
+            tables = [row[0] for row in result]
+            print(f"   📋 Available tables: {', '.join(tables)}")
 
     except Exception as e:
         print(f"❌ Database connection failed: {e}")
 
 test_connection()
 
+# Initialize tables
+create_tables()
+
+# Auto-import finished editathons
+auto_import_data()
+
 if __name__ == '__main__':
-    print("🚀 Backend running with Personal Cabinet & Dashboard support!")
+    print("🚀 Backend running with WikiFountain Schema!")
     print("📊 Home: http://localhost:5000")
     print("👤 Personal Cabinet: http://localhost:5000/api/personal-cabinet/Min968") 
     print("📈 Editathon Dashboard: http://localhost:5000/api/editathon/1")
     print("🏠 All Editathons: http://localhost:5000/api/editathons")
     print("\n📋 Available endpoints:")
-    print("   GET  /api/personal-cabinet/<username>")
-    print("   GET  /api/editathons") 
-    print("   GET  /api/editathon/<id>")
-    print("   GET  /api/editathons/pending")
-    print("   GET  /api/user/<username>/pending-editathons")
-    print("   POST /api/editathon/<id>/submit")
-    print("   POST /api/editathon/<id>/judge")
-    print("   POST /api/editathons/create")
-    print("   POST /api/editathon/<id>/approve")
-    print("   POST /api/editathon/<id>/reject")
+    print("   GET  /api/personal-cabinet/<username> - Get user statistics")
+    print("   GET  /api/editathons - List all editathons")
+    print("   GET  /api/editathon/<id> - Get editathon dashboard")
+    print("   POST /api/editathons/create - Create new editathon")
+    print("   POST /api/editathon/<id>/submit - Submit article to editathon")
+    print("   POST /api/editathon/<id>/judge - Judge article")
+    print("   POST /api/articles - Submit article (alternative)")
+    print("   POST /api/marks - Add jury marks")
+    
     app.run(debug=True, port=5000)

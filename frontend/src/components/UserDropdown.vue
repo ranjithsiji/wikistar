@@ -22,7 +22,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const props = defineProps({
   username: {
     type: String,
-    default: 'Clinta'
+    default: 'Clintacc'
   }
 })
 

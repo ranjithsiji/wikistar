@@ -110,7 +110,7 @@ const validationErrors = ref([])
 const isSubmitting = ref(false)
 const showPendingModal = ref(false)
 const pendingEditathon = ref(null)
-const currentUsername = ref('Clinta') // Replace with actual auth later
+const currentUsername = ref('Clintacc') // Replace with actual auth later
 
 onMounted(async () => {
   // Check for pending editathons
@@ -141,7 +141,7 @@ const form = reactive({
   maxSize: 10000,
   startDate: '',
   endDate: '',
-  createdBy: 'Clinta',
+  createdBy: 'Clintacc',
   submissionDate: new Date().toISOString().split('T')[0],
   consensualVote: false,
   hiddenMarks: false,
@@ -178,7 +178,7 @@ function editDraft() {
       form.maxSize = draft.maxSize || 10000
       form.startDate = draft.startDate ? (typeof draft.startDate === 'string' ? draft.startDate.split('T')[0] : draft.startDate) : ''
       form.endDate = draft.endDate ? (typeof draft.endDate === 'string' ? draft.endDate.split('T')[0] : draft.endDate) : ''
-      form.createdBy = draft.createdBy || 'Clinta'
+      form.createdBy = draft.createdBy || 'Clintacc'
       form.submissionDate = draft.submissionDate ? (typeof draft.submissionDate === 'string' ? draft.submissionDate.split('T')[0] : draft.submissionDate) : new Date().toISOString().split('T')[0]
       
       // Load rules, marks, jury, template from the draft

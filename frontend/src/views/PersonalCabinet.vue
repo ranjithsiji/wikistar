@@ -7,13 +7,13 @@ import ApprovalQueue from '../components/PersonalCabinet/ApprovalQueue.vue'
 import MyArticles from '../components/PersonalCabinet/MyArticles.vue'
 
 const activeTab = ref('dashboard')
-const currentUser = ref('Clinta') // Replace with actual user from auth
+const currentUser = ref('Clintacc') // Replace with actual user from auth
 const userData = ref(null)
 const loading = ref(true)
 
 // Mock admin check - replace with actual auth
 const isAdmin = computed(() => {
-  const adminUsers = ['Clinta', 'admin', 'Ranjithjsiji']
+  const adminUsers = ['Clintacc', 'admin', 'Ranjithjsiji']
   return adminUsers.includes(currentUser.value)
 })
 

@@ -282,7 +282,7 @@
             <div class="user-info-header">
               <div class="user-avatar">👤</div>
               <div class="user-details">
-                <div class="user-name">Clinta</div>
+                <div class="user-name">Clintacc</div>
                 <div class="user-role">Reviewing Article</div>
               </div>
             </div>
@@ -654,13 +654,13 @@ async function addArticle() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        username: 'Clinta',
+        username: 'Clintacc',
         article_title: articleTitle.value
       })
     })
 
     if (response.ok) {
-      alert(`Article "${articleTitle.value}" successfully added by Clinta!`)
+      alert(`Article "${articleTitle.value}" successfully added by Clintacc!`)
       showSubmitStep2.value = false
       articleTitle.value = ''
       // Refresh the dashboard data
@@ -692,7 +692,7 @@ async function judgeArticle(accepted) {
     const status = accepted ? 'accepted' : 'rejected'
     
     // Build reviewer note with name and decision
-    const reviewerName = 'Clinta' // Current reviewer
+    const reviewerName = 'Clintacc' // Current reviewer
     const reviewerNote = `${reviewerName} ${status} with ${points} point${points !== 1 ? 's' : ''}`
     
     const judgeData = {
