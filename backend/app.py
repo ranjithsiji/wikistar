@@ -10,6 +10,7 @@ import os
 
 # Add Oauth to sys.path
 from flask_mwoauth import MWOAuth
+from oauth_utils import patch_requests_for_oauth, test_mediawiki_connectivity
 
 app = Flask(__name__)
 # Enable CORS for frontend-backend communication (cookies needed for OAuth session)
