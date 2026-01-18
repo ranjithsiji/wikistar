@@ -15,32 +15,36 @@
         />
       </div>
 
-      <div class="form-row">
-        <label for="code">Code</label>
+      <div class="form-row relative">
+        <label for="project">Project</label>
         <input
-          id="code"
-          v-model="localData.code"
+          id="project"
+          v-model="searchQuery"
           type="text"
           class="form-input"
-          placeholder="Enter editathon code (optional)"
-          @input="markUnsaved"
+          placeholder=""
+          @input="onSearchInput"
+          @blur="handleBlur"
+          @focus="onSearchInput"
+          autocomplete="off"
         />
-      </div>
-
-      <div class="form-row">
-        <label for="project">Project</label>
-        <select
-          id="project"
-          v-model="localData.project"
-          class="form-select"
-          @change="markUnsaved"
-        >
-          <option value="en.wikipedia.org">English Wikipedia</option>
-          <option value="ml.wikipedia.org">Malayalam Wikipedia</option>
-          <option value="es.wikipedia.org">Spanish Wikipedia</option>
-          <option value="fr.wikipedia.org">French Wikipedia</option>
-          <option value="de.wikipedia.org">German Wikipedia</option>
-        </select>
+        <div v-if="showDropdown && filteredSites.length > 0" class="dropdown-list">
+          <div class="dropdown-header">
+            <span class="col-code">Code</span>
+            <span class="col-name">Name</span>
+            <span class="col-lang">Language</span>
+          </div>
+          <div
+            v-for="site in filteredSites"
+            :key="site.domain"
+            class="dropdown-item"
+            @mousedown.prevent="selectProject(site)"
+          >
+            <span class="col-code">{{ site.languageCode }}</span>
+            <span class="col-name">{{ site.projectName }}</span>
+            <span class="col-lang">{{ site.languageName }}</span>
+          </div>
+        </div>
       </div>
 
       <div class="form-row">
@@ -127,7 +131,8 @@
 </template>
 
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { reactive, ref, watch, onMounted, computed } from 'vue'
+import { fetchWikimediaLanguages, fetchWikimediaSites } from '../services/api'
 
 const props = defineProps({
   editathon: {
@@ -143,12 +148,59 @@ const isSaved = ref(false)
 const localData = reactive({
   title: '',
   code: '',
-  project: 'en.wikipedia.org',
+  project: '',
   description: '',
   startDate: '',
   endDate: '',
   consensualVote: false,
   hiddenMarks: false
+})
+
+const languages = ref([])
+const sites = ref([])
+const searchQuery = ref('')
+const showDropdown = ref(false)
+
+const filteredSites = computed(() => {
+  if (!searchQuery.value) return []
+  const query = searchQuery.value.toLowerCase()
+  return sites.value.filter(site => 
+    site.languageCode.toLowerCase().includes(query) ||
+    site.projectName.toLowerCase().includes(query) ||
+    site.languageName.toLowerCase().includes(query) ||
+    site.domain.toLowerCase().includes(query)
+  )
+})
+
+function onSearchInput() {
+  showDropdown.value = true
+  if (!searchQuery.value) {
+    localData.project = ''
+    markUnsaved()
+  }
+}
+
+function selectProject(site) {
+  localData.project = site.domain
+  searchQuery.value = `${site.languageCode} - ${site.projectName} - ${site.languageName}`
+  showDropdown.value = false
+  markUnsaved()
+}
+
+function handleBlur() {
+  setTimeout(() => {
+    showDropdown.value = false
+  }, 200)
+}
+
+onMounted(async () => {
+  try {
+    // Load languages (may be used elsewhere) and sites for project select
+    languages.value = await fetchWikimediaLanguages()
+    sites.value = await fetchWikimediaSites()
+  } catch (e) {
+    console.error('Failed to load languages for project select:', e)
+  }
 })
 
 // Watch for changes in props.editathon and update local data
@@ -157,7 +209,7 @@ watch(() => props.editathon, (newEditathon) => {
     Object.assign(localData, {
       title: newEditathon.title || '',
       code: newEditathon.code || '',
-      project: newEditathon.project || 'en.wikipedia.org',
+      project: newEditathon.project || '',
       description: newEditathon.description || '',
       startDate: newEditathon.startDate || '',
       endDate: newEditathon.endDate || '',
@@ -165,8 +217,28 @@ watch(() => props.editathon, (newEditathon) => {
       hiddenMarks: newEditathon.hiddenMarks || false
     })
     isSaved.value = newEditathon._generalSaved || false
+
+    if (localData.project && sites.value.length > 0) {
+       const site = sites.value.find(s => s.domain === localData.project)
+       if (site) {
+         searchQuery.value = `${site.languageCode} - ${site.projectName} - ${site.languageName}`
+       } else {
+         searchQuery.value = localData.project
+       }
+    } else if (!localData.project) {
+        searchQuery.value = ''
+    }
   }
 }, { immediate: true })
+
+watch(sites, () => {
+  if (localData.project) {
+     const site = sites.value.find(s => s.domain === localData.project)
+     if (site) {
+       searchQuery.value = `${site.languageCode} - ${site.projectName} - ${site.languageName}`
+     }
+  }
+})
 
 function markUnsaved() {
   isSaved.value = false
@@ -180,6 +252,10 @@ function updateParent() {
 function saveChanges() {
   isSaved.value = true
   updateParent()
+}
+
+function onProjectChange() {
+  markUnsaved()
 }
 </script>
 
@@ -309,5 +385,65 @@ function saveChanges() {
 .btn-save:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.relative {
+  position: relative;
+}
+
+.dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.dropdown-header {
+  display: flex;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  font-weight: bold;
+  font-size: 12px;
+  border-bottom: 1px solid #ddd;
+  position: sticky;
+  top: 0;
+}
+
+.dropdown-item {
+  display: flex;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item:hover {
+  background: #e3f2fd;
+}
+
+.col-code {
+  flex: 0 0 60px;
+  font-weight: 600;
+}
+
+.col-name {
+  flex: 1;
+}
+
+.col-lang {
+  flex: 1;
+  text-align: right;
+  color: #666;
 }
 </style>

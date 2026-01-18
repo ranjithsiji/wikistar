@@ -7,7 +7,7 @@
     <div class="title-and-buttons">
       <h1 class="main-title">{{ editathon.name || 'Loading...' }}</h1>
       <div class="action-buttons">
-        <button class="btn btn-submit" @click="openSubmitModal">Submit Article</button>
+        <router-link :to="`/editathon/${editathonId}/submit`" class="btn btn-submit">Submit Article</router-link>
         <router-link :to="`/editathon/${editathonId}/articles`" class="btn btn-judge">Judge</router-link>
       </div>
     </div>
@@ -125,83 +125,6 @@
         </template>
       </tbody>
     </table>
-
-    <!-- Submit Article Modal Step 1 -->
-    <div v-if="showSubmitModal" class="modal-overlay" @click="closeSubmitModal">
-      <div class="modal-content submit-modal" @click.stop>
-        <div class="modal-header">
-          <h3>Submit Article</h3>
-          <button class="close-btn" @click="closeSubmitModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <label for="articleTitle">Search for article on Wikipedia:</label>
-          <div class="search-container">
-            <input 
-              type="text" 
-              id="articleTitle" 
-              v-model="articleTitle"
-              @input="searchWikipediaArticles"
-              placeholder="Start typing to search Wikipedia..."
-              autocomplete="off"
-            >
-            <div v-if="searchingArticles" class="loading-indicator">
-              Searching...
-            </div>
-            <div v-if="articleSuggestions.length > 0" class="suggestions-dropdown">
-              <div
-                v-for="(suggestion, index) in articleSuggestions"
-                :key="index"
-                class="suggestion-item"
-                @click="selectArticleSuggestion(suggestion)"
-              >
-                <div class="suggestion-title">{{ suggestion.title }}</div>
-                <div v-if="suggestion.description" class="suggestion-description">
-                  {{ suggestion.description }}
-                </div>
-              </div>
-            </div>
-            <div v-if="articleTitle.length > 2 && !searchingArticles && articleSuggestions.length === 0" class="no-results">
-              No articles found. Try different keywords.
-            </div>
-          </div>
-          <div v-if="selectedArticle" class="selected-article-info">
-            <strong>Selected:</strong> {{ selectedArticle.title }}
-            <a :href="getWikipediaUrl(selectedArticle.title)" target="_blank" class="view-link">
-              View on Wikipedia →
-            </a>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeSubmitModal">Cancel</button>
-          <button 
-            class="btn btn-submit" 
-            @click="goToSubmitStep2"
-            :disabled="!selectedArticle"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Submit Article Modal Step 2 -->
-    <div v-if="showSubmitStep2" class="modal-overlay" @click="showSubmitStep2 = false">
-      <div class="modal-content" @click.stop>
-        <div class="metadata-box">
-          <h4>{{ articleTitle }}</h4>
-          <div class="metadata-title-right">{{ getArticlePreview(articleTitle) }}</div>
-          <p>The article was created at <strong>{{ getCurrentDateTime() }}</strong></p>
-          <p>3,235 bytes, <strong>84 words</strong></p>
-          <p>Created by: <strong>Conversion script</strong></p>
-          <p>Is in the <strong>main namespace</strong></p>
-        </div>
-        
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="goBackToStep1">Back</button>
-          <button class="btn btn-submit" @click="addArticle">Add</button>
-        </div>
-      </div>
-    </div>
 
     <!-- Jury Article List Modal -->
     <div v-if="showJudgeModal" class="modal-overlay" @click="showJudgeModal = false">
@@ -364,7 +287,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchEditathonDashboard, judgeArticle as judgeArticleAPI } from '../services/api'
+import { fetchEditathonDashboard, judgeArticle as judgeArticleAPI, findArticleWithFallback } from '../services/api'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Chart, BarController } from 'chart.js'
 import TopContributors from '../components/TopContributors.vue'
 import UserStatsMinimal from '../components/UserStatsMinimal.vue'
@@ -394,23 +317,16 @@ const leaderboard = ref([])
 const unreviewedArticles = ref([])
 
 // Modal states
-const showSubmitModal = ref(false)
-const showSubmitStep2 = ref(false)
 const showJudgeModal = ref(false)
 const showArticleJudge = ref(false)
 const showWikipediaViewer = ref(false)
 const expandedUser = ref(1) // Default expanded user
 
 // Form data
-const articleTitle = ref('')
 const judgeComment = ref('')
 const currentArticle = ref({})
 const articleHTML = ref('')
 const selectedArticleTitle = ref('')
-const articleSuggestions = ref([])
-const searchingArticles = ref(false)
-const selectedArticle = ref(null)
-let searchTimeout = null
 
 const totalAccepted = computed(() => {
   return leaderboard.value.reduce((total, user) => {
@@ -474,72 +390,6 @@ function getUserWikipediaUrl(username) {
   return `https://${wikiLanguage.value}.wikipedia.org/wiki/User:${encodeURIComponent(username)}`
 }
 
-async function searchWikipediaArticles() {
-  const query = articleTitle.value.trim()
-  
-  // Clear previous selection when user types
-  selectedArticle.value = null
-  
-  if (query.length < 2) {
-    articleSuggestions.value = []
-    return
-  }
-
-  // Debounce search
-  if (searchTimeout) {
-    clearTimeout(searchTimeout)
-  }
-
-  searchTimeout = setTimeout(async () => {
-    searchingArticles.value = true
-    try {
-      const wikiDomain = `${wikiLanguage.value}.wikipedia.org`
-      // Use Wikipedia's opensearch API for suggestions
-      const response = await fetch(
-        `https://${wikiDomain}/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=10&namespace=0&format=json&origin=*`
-      )
-      const data = await response.json()
-      
-      // Format the results: data[1] = titles, data[2] = descriptions, data[3] = URLs
-      articleSuggestions.value = data[1].map((title, index) => ({
-        title: title,
-        description: data[2][index],
-        url: data[3][index]
-      }))
-    } catch (error) {
-      console.error('Error searching Wikipedia:', error)
-      articleSuggestions.value = []
-    } finally {
-      searchingArticles.value = false
-    }
-  }, 300) // Wait 300ms after user stops typing
-}
-
-function selectArticleSuggestion(suggestion) {
-  selectedArticle.value = suggestion
-  articleTitle.value = suggestion.title
-  articleSuggestions.value = []
-}
-
-function openSubmitModal() {
-  // Clear previous selections
-  articleTitle.value = ''
-  selectedArticle.value = null
-  articleSuggestions.value = []
-  showSubmitModal.value = true
-}
-
-function closeSubmitModal() {
-  showSubmitModal.value = false
-  // Clear search state
-  articleTitle.value = ''
-  selectedArticle.value = null
-  articleSuggestions.value = []
-  if (searchTimeout) {
-    clearTimeout(searchTimeout)
-  }
-}
-
 function goToJudgeView() {
   console.log('Judge button clicked, editathonId:', editathonId.value)
   if(!editathonId.value) {
@@ -557,67 +407,95 @@ async function openArticleJudge(article) {
   // Show loading state
   articleHTML.value = '<div class="loading-article"><div class="loading-spinner"></div><p>Loading article from Wikipedia...</p></div>'
 
-  // Fetch FULL article content from Wikipedia using WikiLite approach
+  // Fetch FULL article content from Wikipedia using multilingual API
   const cleanTitle = article.title.trim()
-  const wikiDomain = `${wikiLanguage.value}.wikipedia.org`
   
   console.log('=== Fetching Wikipedia Article ===')
   console.log('Title:', cleanTitle)
-  console.log('Wiki Domain:', wikiDomain)
+  console.log('Primary Language:', wikiLanguage.value)
 
   try {
-    // WikiLite uses action=query&prop=extracts for FULL article content
-    const extractUrl = `https://${wikiDomain}/w/api.php?` +
-      `action=query&prop=extracts&exsectionformat=wiki&titles=${encodeURIComponent(cleanTitle)}` +
-      `&redirects=true&format=json&origin=*`
+    // Use multilingual API to find article in any available language
+    const languagePriority = [
+      wikiLanguage.value,
+      'en', 'ml', 'es', 'fr', 'de'
+    ].filter((v, i, a) => a.indexOf(v) === i) // Remove duplicates
     
-    console.log('API URL:', extractUrl)
+    console.log('Language priority:', languagePriority)
     
-    const response = await fetch(extractUrl)
+    const result = await findArticleWithFallback(cleanTitle, languagePriority, 'wikipedia')
     
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-    
-    const data = await response.json()
-    console.log('API Response:', data)
-    
-    const pages = data.query?.pages
-    if (pages) {
-      const pageId = Object.keys(pages)[0]
-      const page = pages[pageId]
+    if (result.found) {
+      const foundLanguage = result.language
+      const foundTitle = result.title
       
-      console.log('Page ID:', pageId)
-      console.log('Page data:', page)
+      console.log(`✓ Article found in ${foundLanguage}: "${foundTitle}"`)
       
-      if (pageId !== '-1' && page && page.extract) {
-        // Success! Show full article content
-        console.log('SUCCESS - Article found with content')
-        articleHTML.value = `
-          <div class="wiki-full-article">
-            <h2 class="wiki-article-title">${page.title || cleanTitle}</h2>
-            <div class="wiki-extract">${page.extract}</div>
-          </div>
-        `
-      } else if (pageId === '-1' || page?.missing !== undefined) {
-        // Article doesn't exist
-        console.log('Article not found on Wikipedia')
-        articleHTML.value = `
-          <div class="article-not-found">
-            <h2>${cleanTitle}</h2>
-            <p class="warning">⚠️ This article does not exist on Wikipedia yet, or the title may be incorrect.</p>
-            <p>You can <a href="https://${wikiDomain}/wiki/${encodeURIComponent(cleanTitle)}" target="_blank">view or create it on Wikipedia</a>.</p>
-          </div>
-        `
+      // Fetch full article content
+      const extractUrl = `https://${foundLanguage}.wikipedia.org/w/api.php?` +
+        `action=query&prop=extracts&exsectionformat=wiki&titles=${encodeURIComponent(foundTitle)}` +
+        `&redirects=true&format=json&origin=*`
+      
+      const response = await fetch(extractUrl)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      const pages = data.query?.pages
+      
+      if (pages) {
+        const pageId = Object.keys(pages)[0]
+        const page = pages[pageId]
+        
+        if (pageId !== '-1' && page && page.extract) {
+          // Show language indicator if found in different language
+          const langIndicator = foundLanguage !== wikiLanguage.value 
+            ? `<div class="language-notice">
+                 ⚠️ Article not found in ${wikiLanguage.value.toUpperCase()}, showing ${foundLanguage.toUpperCase()} version
+                 ${result.totalLanguages > 1 ? ` • Available in ${result.totalLanguages} languages` : ''}
+               </div>`
+            : result.totalLanguages > 1 
+              ? `<div class="language-info">ℹ️ Available in ${result.totalLanguages} languages</div>`
+              : ''
+          
+          articleHTML.value = `
+            <div class="wiki-full-article">
+              ${langIndicator}
+              <h2 class="wiki-article-title">${page.title || foundTitle}</h2>
+              <div class="wiki-source">
+                Source: <a href="${result.url}" target="_blank">${foundLanguage.toUpperCase()} Wikipedia</a>
+              </div>
+              <div class="wiki-extract">${page.extract}</div>
+            </div>
+          `
+          console.log('SUCCESS - Article content loaded')
+        } else {
+          throw new Error('No content available for this article')
+        }
       } else {
-        console.log('No extract in page data')
-        articleHTML.value = '<p>No content available for this article.</p>'
+        throw new Error('Invalid API response - no pages found')
       }
     } else {
-      throw new Error('Invalid API response - no pages found')
+      // Article not found in any language
+      console.log('Article not found in any language')
+      const searchLinks = languagePriority.slice(0, 3).map(lang => 
+        `<a href="https://${lang}.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(cleanTitle)}" target="_blank">${lang.toUpperCase()} Search</a>`
+      ).join(' • ')
+      
+      articleHTML.value = `
+        <div class="article-not-found">
+          <h2>${cleanTitle}</h2>
+          <p class="warning">⚠️ This article does not exist on Wikipedia, or the title may be incorrect.</p>
+          <p>Searched in: ${languagePriority.slice(0, 5).map(l => l.toUpperCase()).join(', ')} Wikipedia</p>
+          <p style="margin-top: 1rem;">${searchLinks}</p>
+        </div>
+      `
     }
   } catch (error) {
     console.error('Error fetching article:', error)
+    const wikiDomain = `${wikiLanguage.value}.wikipedia.org`
     articleHTML.value = `
       <div class="article-error">
         <h2>${cleanTitle}</h2>
@@ -626,60 +504,6 @@ async function openArticleJudge(article) {
       </div>
     `
   }
-}
-
-function goToSubmitStep2() {
-  if (!selectedArticle.value) {
-    alert("Please select an article from the Wikipedia suggestions.")
-    return
-  }
-  
-  // Use the selected article's title
-  articleTitle.value = selectedArticle.value.title
-  showSubmitModal.value = false
-  showSubmitStep2.value = true
-}
-
-function goBackToStep1() {
-  showSubmitStep2.value = false
-  showSubmitModal.value = true
-  // Keep the selected article when going back
-}
-
-async function addArticle() {
-  try {
-    const response = await fetch(`http://localhost:5000/api/editathon/${route.params.id}/submit`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        username: 'Clintacc',
-        article_title: articleTitle.value
-      })
-    })
-
-    if (response.ok) {
-      alert(`Article "${articleTitle.value}" successfully added by Clintacc!`)
-      showSubmitStep2.value = false
-      articleTitle.value = ''
-      // Refresh the dashboard data
-      location.reload()
-    } else {
-      const error = await response.json()
-      alert(`Error: ${error.error}`)
-    }
-  } catch (error) {
-    alert(`Error submitting article: ${error.message}`)
-  }
-}
-
-function getArticlePreview(title) {
-  return `${title} may refer to:`
-}
-
-function getCurrentDateTime() {
-  return new Date().toLocaleString()
 }
 
 function isArticleReviewedBy(article, jury) {
@@ -769,8 +593,11 @@ function saveReview() {
 function handleUseArticle(articleTitle) {
   selectedArticleTitle.value = articleTitle
   showWikipediaViewer.value = false
-  // Optionally go to submit step 2
-  goToSubmitStep2()
+  // Navigate to submit page with pre-filled title
+  router.push({
+    path: `/editathon/${editathonId.value}/submit`,
+    query: { title: articleTitle }
+  })
 }
 
 // Lifecycle
@@ -2354,5 +2181,63 @@ onMounted(async () => {
   color: #721c24;
   background: #f8d7da;
   border-color: #f5c6cb;
+}
+
+/* Language Notice/Info */
+.language-notice {
+  background: #fff3cd;
+  color: #856404;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  border: 1px solid #ffc107;
+}
+
+.language-info {
+  background: #d1ecf1;
+  color: #0c5460;
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  border: 1px solid #bee5eb;
+}
+
+.wiki-source {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.wiki-source a {
+  color: #2196f3;
+  text-decoration: none;
+}
+
+.wiki-source a:hover {
+  text-decoration: underline;
+}
+
+.submit-layout {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  height: 100%;
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .submit-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  
+  .review-sidebar {
+    height: auto;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid #eee;
+  }
 }
 </style>

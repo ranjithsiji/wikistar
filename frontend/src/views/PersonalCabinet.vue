@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import axios from 'axios'
 import PersonalDashboard from '../components/PersonalCabinet/PersonalDashboard.vue'
 import ParticipatedEditathons from '../components/PersonalCabinet/ParticipatedEditathons.vue'
 import CreatedEditathons from '../components/PersonalCabinet/CreatedEditathons.vue'
@@ -7,20 +8,31 @@ import ApprovalQueue from '../components/PersonalCabinet/ApprovalQueue.vue'
 import MyArticles from '../components/PersonalCabinet/MyArticles.vue'
 
 const activeTab = ref('dashboard')
-const currentUser = ref('Clintacc') // Replace with actual user from auth
+const currentUser = ref(null)
 const userData = ref(null)
 const loading = ref(true)
 
 // Mock admin check - replace with actual auth
 const isAdmin = computed(() => {
   const adminUsers = ['Clintacc', 'admin', 'Ranjithjsiji']
-  return adminUsers.includes(currentUser.value)
+  return currentUser.value && adminUsers.includes(currentUser.value)
 })
 
 // NEW: Fetch personal cabinet data from backend
 async function fetchPersonalCabinetData() {
   try {
     loading.value = true
+    
+    // Fetch current user first
+    const userResponse = await axios.get('/api/me')
+    if (userResponse.data.user) {
+      currentUser.value = userResponse.data.user.username
+    } else {
+      // Not logged in
+      loading.value = false
+      return
+    }
+
     const response = await fetch(`http://localhost:5000/api/personal-cabinet/${currentUser.value}`)
     if (!response.ok) throw new Error('Failed to fetch data')
     userData.value = await response.json()
@@ -28,7 +40,7 @@ async function fetchPersonalCabinetData() {
     console.error('Error fetching personal cabinet data:', error)
     // Fallback to mock data if API fails
     userData.value = {
-      username: currentUser.value,
+      username: currentUser.value || 'Guest',
       stats: { participated: 3, created: 2, articles: 15, points: 25 },
       participated_editathons: [],
       created_editathons: [],

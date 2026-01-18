@@ -23,122 +23,27 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { fetchWikimediaLanguages } from '../services/api'
+import { store } from '../store'
+
+const emit = defineEmits(['selected'])
 
 const searchQuery = ref('')
 const showDropdown = ref(false)
 const selectedLanguage = ref(null)
-
-const languages = [
-  { code: 'af', name: 'Afrikaans' },
-  { code: 'ar', name: 'العربية' },
-  { code: 'az', name: 'Azərbaycanca' },
-  { code: 'be', name: 'Беларуская' },
-  { code: 'bg', name: 'Български' },
-  { code: 'bn', name: 'বাংলা' },
-  { code: 'br', name: 'Brezhoneg' },
-  { code: 'bs', name: 'Bosanski' },
-  { code: 'ca', name: 'Català' },
-  { code: 'cs', name: 'Čeština' },
-  { code: 'cy', name: 'Cymraeg' },
-  { code: 'da', name: 'Dansk' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'el', name: 'Ελληνικά' },
-  { code: 'en', name: 'English' },
-  { code: 'eo', name: 'Esperanto' },
-  { code: 'es', name: 'Español' },
-  { code: 'et', name: 'Eesti' },
-  { code: 'eu', name: 'Euskara' },
-  { code: 'fa', name: 'فارسی' },
-  { code: 'fi', name: 'Suomi' },
-  { code: 'fr', name: 'Français' },
-  { code: 'fy', name: 'Frysk' },
-  { code: 'ga', name: 'Gaeilge' },
-  { code: 'gd', name: 'Gàidhlig' },
-  { code: 'gl', name: 'Galego' },
-  { code: 'gu', name: 'ગુજરાતી' },
-  { code: 'he', name: 'עברית' },
-  { code: 'hi', name: 'हिन्दी' },
-  { code: 'hr', name: 'Hrvatski' },
-  { code: 'hu', name: 'Magyar' },
-  { code: 'hy', name: 'Հայերեն' },
-  { code: 'id', name: 'Bahasa Indonesia' },
-  { code: 'is', name: 'Íslenska' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'ja', name: '日本語' },
-  { code: 'jv', name: 'Basa Jawa' },
-  { code: 'ka', name: 'ქართული' },
-  { code: 'kk', name: 'Қазақша' },
-  { code: 'km', name: 'ភាសាខ្មែរ' },
-  { code: 'kn', name: 'ಕನ್ನಡ' },
-  { code: 'ko', name: '한국어' },
-  { code: 'ku', name: 'Kurdî' },
-  { code: 'ky', name: 'Кыргызча' },
-  { code: 'la', name: 'Latina' },
-  { code: 'lb', name: 'Lëtzebuergesch' },
-  { code: 'lo', name: 'ລາວ' },
-  { code: 'lt', name: 'Lietuvių' },
-  { code: 'lv', name: 'Latviešu' },
-  { code: 'mg', name: 'Malagasy' },
-  { code: 'mi', name: 'Māori' },
-  { code: 'mk', name: 'Македонски' },
-  { code: 'ml', name: 'മലയാളം' },
-  { code: 'mn', name: 'Монгол' },
-  { code: 'mr', name: 'मराठी' },
-  { code: 'ms', name: 'Bahasa Melayu' },
-  { code: 'mt', name: 'Malti' },
-  { code: 'my', name: 'မြန်မာဘာသာ' },
-  { code: 'nb', name: 'Norsk bokmål' },
-  { code: 'ne', name: 'नेपाली' },
-  { code: 'nl', name: 'Nederlands' },
-  { code: 'nn', name: 'Norsk nynorsk' },
-  { code: 'oc', name: 'Occitan' },
-  { code: 'or', name: 'ଓଡ଼ିଆ' },
-  { code: 'pa', name: 'ਪੰਜਾਬੀ' },
-  { code: 'pl', name: 'Polski' },
-  { code: 'ps', name: 'پښتو' },
-  { code: 'pt', name: 'Português' },
-  { code: 'ro', name: 'Română' },
-  { code: 'ru', name: 'Русский' },
-  { code: 'sd', name: 'سنڌي' },
-  { code: 'si', name: 'සිංහල' },
-  { code: 'sk', name: 'Slovenčina' },
-  { code: 'sl', name: 'Slovenščina' },
-  { code: 'sq', name: 'Shqip' },
-  { code: 'sr', name: 'Српски / Srpski' },
-  { code: 'sv', name: 'Svenska' },
-  { code: 'sw', name: 'Kiswahili' },
-  { code: 'ta', name: 'தமிழ்' },
-  { code: 'te', name: 'తెలుగు' },
-  { code: 'tg', name: 'Тоҷикӣ' },
-  { code: 'th', name: 'ไทย' },
-  { code: 'tk', name: 'Türkmençe' },
-  { code: 'tl', name: 'Tagalog' },
-  { code: 'tr', name: 'Türkçe' },
-  { code: 'tt', name: 'Татарча / Tatarça' },
-  { code: 'ug', name: 'ئۇيغۇرچە / Uyghurche' },
-  { code: 'uk', name: 'Українська' },
-  { code: 'ur', name: 'اردو' },
-  { code: 'uz', name: 'Oʻzbekcha / Ўзбекча' },
-  { code: 'vi', name: 'Tiếng Việt' },
-  { code: 'wo', name: 'Wolof' },
-  { code: 'xh', name: 'isiXhosa' },
-  { code: 'yi', name: 'ייִדיש' },
-  { code: 'yo', name: 'Yorùbá' },
-  { code: 'zh', name: '中文' },
-  { code: 'zu', name: 'isiZulu' }
-]
+const languages = ref([])
 
 const filteredLanguages = computed(() => {
   if (searchQuery.value.length < 1) return []
-  return languages.filter(language =>
+  return languages.value.filter(language =>
     language.code.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
     language.name.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
 })
 
 const displayedLanguages = computed(() => {
-  return filteredLanguages.value.slice(0, 4) // Limit to 4 suggestions
+  return filteredLanguages.value.slice(0, 6) // Show up to 6 suggestions
 })
 
 function filterLanguages() {
@@ -149,6 +54,13 @@ function selectLanguage(language) {
   selectedLanguage.value = language
   searchQuery.value = `${language.code}: ${language.name}`
   showDropdown.value = false
+  store.selectedLanguage = language.code
+  try {
+    localStorage.setItem('wikiLanguage', language.code)
+  } catch (e) {
+    console.warn('Failed to persist selected language:', e)
+  }
+  emit('selected', language.code)
 }
 
 function hideDropdown() {
@@ -156,6 +68,25 @@ function hideDropdown() {
     showDropdown.value = false
   }, 150) // Delay to allow click on dropdown item
 }
+
+onMounted(async () => {
+  try {
+    const langs = await fetchWikimediaLanguages()
+    languages.value = langs
+    // Pre-fill from stored selection if available
+    const stored = localStorage.getItem('wikiLanguage')
+    if (stored) {
+      const match = langs.find(l => l.code === stored)
+      if (match) {
+        selectedLanguage.value = match
+        searchQuery.value = `${match.code}: ${match.name}`
+        store.selectedLanguage = match.code
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load languages:', error)
+  }
+})
 </script>
 
 <style scoped>

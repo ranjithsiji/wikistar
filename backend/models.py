@@ -46,3 +46,11 @@ class MarkConfig(db.Model):
     config = db.Column(db.Text)  # json string
     optional = db.Column(db.Boolean, default=False)
     showInJuryTool = db.Column(db.Boolean, default=True)
+
+class EditathonJury(db.Model):
+    __tablename__ = 'editathon_jury'
+    id = db.Column(db.Integer, primary_key=True)
+    editathon_id = db.Column(db.Integer, db.ForeignKey('editathon.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    role = db.Column(db.String(20), default='main')  # 'main' or 'backup'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

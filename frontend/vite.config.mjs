@@ -8,6 +8,18 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true
+      },
+      '/login': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      },
+      '/logout': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      },
+      '/oauth-callback': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
       }
     }
   }

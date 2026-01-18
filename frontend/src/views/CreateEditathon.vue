@@ -133,8 +133,8 @@ onMounted(async () => {
 const form = reactive({
   title: '',
   code: '',
-  project: 'ml.wikipedia.org',
-  wiki_language: 'ml',
+  project: '',
+  wiki_language: '',
   description: '',
   namespace: 'Main',
   minSize: 0,

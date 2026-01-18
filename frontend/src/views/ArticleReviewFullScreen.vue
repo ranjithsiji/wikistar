@@ -136,6 +136,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { findArticleWithFallback } from '../services/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -277,102 +278,69 @@ function navigateToArticle(index) {
 async function fetchArticleContent(title) {
   loading.value = true
   
-  // List of supported Wikipedia languages - try primary first, then fallback to others
-  const supportedLanguages = ['en', 'ml']
-  const languagesToTry = [
-    wikiLanguage.value, // Try primary language first
-    ...supportedLanguages.filter(lang => lang !== wikiLanguage.value) // Then try others
-  ]
-  
   try {
-    let foundData = null
-    let foundLanguage = null
-    let foundTitle = title
+    // Use multilingual API to find article in any available language
+    const languagePriority = [
+      wikiLanguage.value, // Try primary language first
+      'en', 'ml', 'es', 'fr', 'de' // Common fallbacks
+    ].filter((v, i, a) => a.indexOf(v) === i) // Remove duplicates
     
-    // Try each language until we find the article
-    for (const lang of languagesToTry) {
-      console.log(`Fetching article: "${title}" from ${lang} Wikipedia`)
+    console.log(`Searching article "${title}" with language priority:`, languagePriority)
+    
+    const result = await findArticleWithFallback(title, languagePriority, 'wikipedia')
+    
+    if (result.found) {
+      const foundLanguage = result.language
+      const foundTitle = result.title
       
-      try {
-        // Try exact title first
-        let response = await fetch(
-          `https://${lang}.wikipedia.org/w/api.php?action=parse&format=json&page=${encodeURIComponent(title)}&prop=text&origin=*`
-        )
-        let data = await response.json()
+      console.log(`✓ Article found in ${foundLanguage}: "${foundTitle}"`)
+      console.log(`Available in ${result.totalLanguages} languages total`)
+      
+      // Fetch the actual article content
+      const response = await fetch(
+        `https://${foundLanguage}.wikipedia.org/w/api.php?action=parse&format=json&page=${encodeURIComponent(foundTitle)}&prop=text&origin=*`
+      )
+      const data = await response.json()
+      
+      if (data.parse && data.parse.text && data.parse.text['*']) {
+        const content = data.parse.text['*']
+        currentArticle.value.title = foundTitle
         
-        // If found, use this
-        if (data.parse && data.parse.text && data.parse.text['*']) {
-          foundData = data
-          foundLanguage = lang
-          foundTitle = data.parse.title
-          console.log(`✓ Found in ${lang} Wikipedia: "${foundTitle}"`)
-          break
-        }
+        // Show language indicator if found in different language
+        const langIndicator = foundLanguage !== wikiLanguage.value 
+          ? `<div style="background: #fff3cd; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; color: #856404;">
+               ⚠️ Article not found in ${wikiLanguage.value.toUpperCase()}, showing ${foundLanguage.toUpperCase()} version
+             </div>`
+          : ''
         
-        // If not found with exact title, try search
-        if (data.error && data.error.code === 'missingpage') {
-          console.log(`"${title}" not found in ${lang} Wikipedia, searching...`)
-          
-          try {
-            const searchResponse = await fetch(
-              `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(title)}&format=json&origin=*&srnamespace=0&srlimit=10`
-            )
-            const searchData = await searchResponse.json()
-            
-            if (searchData.query.search && searchData.query.search.length > 0) {
-              const firstResult = searchData.query.search[0]
-              console.log(`Found search match in ${lang} Wikipedia: "${firstResult.title}"`)
-              
-              // Fetch the found article
-              response = await fetch(
-                `https://${lang}.wikipedia.org/w/api.php?action=parse&format=json&page=${encodeURIComponent(firstResult.title)}&prop=text&origin=*`
-              )
-              data = await response.json()
-              
-              if (data.parse && data.parse.text && data.parse.text['*']) {
-                foundData = data
-                foundLanguage = lang
-                foundTitle = data.parse.title
-                console.log(`✓ Found in ${lang} Wikipedia (via search): "${foundTitle}"`)
-                break
-              }
-            }
-          } catch (searchErr) {
-            console.log(`Search failed for ${lang} Wikipedia:`, searchErr.message)
-            // Continue to next language
-          }
-        }
-      } catch (fetchErr) {
-        console.log(`Failed to fetch from ${lang} Wikipedia:`, fetchErr.message)
-        // Continue to next language
-      }
-    }
-    
-    // Display content or error
-    if (foundData && foundData.parse && foundData.parse.text && foundData.parse.text['*']) {
-      const content = foundData.parse.text['*']
-      currentArticle.value.title = foundTitle
-      articleContent.value = `
-        <div class="wikipedia-article">
-          <div style="font-size: 0.85rem; color: #666; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #ddd;">
-            Source: <a href="https://${foundLanguage}.wikipedia.org/wiki/${encodeURIComponent(foundTitle)}" target="_blank">${foundLanguage.toUpperCase()} Wikipedia</a>
+        articleContent.value = `
+          <div class="wikipedia-article">
+            ${langIndicator}
+            <div style="font-size: 0.85rem; color: #666; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #ddd;">
+              Source: <a href="${result.url}" target="_blank">${foundLanguage.toUpperCase()} Wikipedia</a>
+              ${result.totalLanguages > 1 ? ` • Available in ${result.totalLanguages} languages` : ''}
+            </div>
+            ${content}
           </div>
-          ${content}
-        </div>
-      `
-      console.log(`Article content loaded successfully from ${foundLanguage} Wikipedia`)
+        `
+        console.log(`Article content loaded successfully from ${foundLanguage} Wikipedia`)
+      } else {
+        throw new Error('Failed to load article content')
+      }
     } else {
+      // Article not found in any language
+      const searchLinks = languagePriority.slice(0, 3).map(lang => 
+        `<a href="https://${lang}.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(title)}" target="_blank">${lang.toUpperCase()} Search</a>`
+      ).join(' • ')
+      
       articleContent.value = `
         <div style="padding: 2rem; color: #d32f2f; font-family: Arial, sans-serif;">
           <h3>Article Not Found</h3>
           <p>Could not find Wikipedia article for "<strong>${title}</strong>"</p>
-          <p>Searched in: ${languagesToTry.map(l => l.toUpperCase()).join(', ')} Wikipedia</p>
+          <p>Searched in: ${languagePriority.slice(0, 5).map(l => l.toUpperCase()).join(', ')} Wikipedia</p>
+          ${result.errors && result.errors.length > 0 ? `<p style="font-size: 0.85rem; color: #666;">${result.errors[0]}</p>` : ''}
           <p>Please check the article title or try searching manually.</p>
-          <p style="margin-top: 1rem;">
-            ${languagesToTry.map(lang => 
-              `<a href="https://${lang}.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(title)}" target="_blank">${lang.toUpperCase()} Search</a>`
-            ).join(' • ')}
-          </p>
+          <p style="margin-top: 1rem;">${searchLinks}</p>
         </div>
       `
     }
@@ -1142,6 +1110,25 @@ function goBack() {
 
 .btn-submit:hover {
   background-color: #218838;
+}
+
+/* Language indicators for multilingual article display */
+.wikipedia-article :deep(.language-notice) {
+  background: #fff3cd;
+  color: #856404;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  border: 1px solid #ffc107;
+}
+
+.wikipedia-article :deep(a) {
+  color: #2196f3;
+  text-decoration: none;
+}
+
+.wikipedia-article :deep(a:hover) {
+  text-decoration: underline;
 }
 
 @media (max-width: 768px) {

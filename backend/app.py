@@ -1,17 +1,82 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import pymysql
 from flask_cors import CORS
+import json
+import ast
+import sys
+import os
+
+# Add Oauth to sys.path
+from flask_mwoauth import MWOAuth
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend-backend communication
+# Enable CORS for frontend-backend communication (cookies needed for OAuth session)
+CORS(app, supports_credentials=True)
 
 # MariaDB database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:maria123@localhost/wikifountain'
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///wikifountain.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Optional host/scheme override for OAuth callback generation
+server_name = os.environ.get('SERVER_NAME')
+if server_name:
+    app.config['SERVER_NAME'] = server_name
+    app.config['PREFERRED_URL_SCHEME'] = os.environ.get('PREFERRED_URL_SCHEME', 'http')
 
 db = SQLAlchemy(app)
+
+# ========== OAuth Configuration ==========
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
+app.config.update(
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=False,
+)
+
+# Load OAuth credentials
+creds_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', 'instance', 'Oauth', 'flask-mwoauth', 'credentials.do_not_commit.json')
+)
+consumer_key = os.environ.get('OAUTH_CONSUMER_KEY')
+consumer_secret = os.environ.get('OAUTH_CONSUMER_SECRET')
+OAUTH_ENABLED = os.environ.get('OAUTH_ENABLED', 'false').lower() == 'true'
+
+try:
+    if (not consumer_key or not consumer_secret) and os.path.exists(creds_path):
+        with open(creds_path, 'r') as f:
+            creds = json.load(f)
+            consumer_key = consumer_key or creds.get('consumer_key')
+            consumer_secret = consumer_secret or creds.get('consumer_secret')
+except Exception as e:
+    print(f"Error loading credentials: {e}")
+
+if OAUTH_ENABLED:
+    if not consumer_key or not consumer_secret:
+        print("WARNING: OAuth credentials not found. OAuth will not work.")
+        consumer_key = 'dummy_key'
+        consumer_secret = 'dummy_secret'
+
+    mwoauth = MWOAuth(
+        consumer_key=consumer_key,
+        consumer_secret=consumer_secret,
+        default_return_to='auth_success'
+    )
+    # Register without prefix so callback stays at /oauth-callback to match your consumer
+    app.register_blueprint(mwoauth.bp)
+    print("✅ OAuth enabled")
+else:
+    print("⚠️ OAuth disabled for development. Set OAUTH_ENABLED=true to enable.")
+    # Add simple test login endpoint for development
+    @app.route('/login')
+    def dev_login():
+        from flask import session
+        session['mwoauth_username'] = 'TestUser'
+        return redirect('http://localhost:5173/')
+    
+    @app.route('/oauth-callback')
+    def dev_callback():
+        return redirect('http://localhost:5173/')
 
 # ========== SQLAlchemy Models for New Schema ==========
 
@@ -143,6 +208,53 @@ class EditathonStat(db.Model):
     total_points = db.Column(db.Integer, default=0)
     avg_score = db.Column(db.Numeric(5, 2), default=0)
     last_updated = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+# ========== OAuth Routes ==========
+@app.route('/auth_success')
+def auth_success():
+    username = mwoauth.get_current_user(True)
+    if username:
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            # Create new user
+            new_user = User(
+                username=username,
+                email=f"{username}@wikipedia.org", # Placeholder
+                password_hash="oauth_user", # Placeholder
+                role='participant'
+            )
+            db.session.add(new_user)
+            db.session.commit()
+    
+    # Redirect to frontend
+    # Assuming frontend is running on port 5173 (Vite default)
+    return redirect("http://localhost:5173/")
+
+@app.route('/api/me')
+def get_current_user_api():
+    username = mwoauth.get_current_user(True)
+    if not username:
+        return jsonify({"user": None})
+    
+    user = User.query.filter_by(username=username).first()
+    if user:
+        return jsonify({
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "role": user.role,
+                "email": user.email
+            }
+        })
+    return jsonify({"user": {"username": username}})
+
+@app.route('/api/login')
+def api_login():
+    return redirect(url_for('mwoauth.login'))
+
+@app.route('/api/logout')
+def api_logout():
+    return redirect(url_for('mwoauth.logout'))
 
 # ========== NEW SCHEMA API ROUTES ==========
 
@@ -369,13 +481,40 @@ def get_editathon_dashboard(editathon_id):
                     'username': user.username
                 })
         
+        # Fetch rules linked to this editathon
+        def parse_condition(condition_text):
+            if not condition_text:
+                return {}
+            try:
+                return json.loads(condition_text)
+            except Exception:
+                try:
+                    return ast.literal_eval(condition_text)
+                except Exception:
+                    return {}
+
+        rules = []
+        linked_rules = EditathonRule.query.filter_by(editathon_id=editathon_id, is_active=True).all()
+        for er in linked_rules:
+            rule = Rule.query.get(er.rule_id)
+            if rule:
+                rules.append({
+                    'id': rule.id,
+                    'type': rule.rule_type or rule.name,
+                    'config': parse_condition(rule.condition_text),
+                    'description': rule.description or '',
+                    'optional': False,
+                    'showInJuryTool': True
+                })
+
         return jsonify({
             'editathon': {
                 'id': editathon.id,
                 'name': editathon.name,
                 'status': editathon.status,
                 'description': editathon.description,
-                'wiki_language': editathon.language
+                'wiki_language': editathon.language,
+                'rules': rules
             },
             'stats': {
                 'users': len(users),
@@ -540,9 +679,10 @@ def judge_article(editathon_id):
 def create_new_editathon():
     try:
         data = request.json
+        print(f"Received data keys: {list(data.keys())}")  # Debug print
         
         # Validate required fields
-        required_fields = ['code', 'title', 'createdBy', 'startDate', 'endDate']
+        required_fields = ['title', 'startDate', 'endDate', 'createdBy']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({"error": f"Missing required field: {field}"}), 400
@@ -573,9 +713,26 @@ def create_new_editathon():
                 db.session.add(project)
                 db.session.flush()  # Get project ID
         
-        # Create editathon
+        # Process marks configuration (convert to JSON-safe format)
+        marks_data = data.get('marks', [])
+        if marks_data:
+            # Convert marks to simple dict for storage
+            marks_config = {
+                'marks': marks_data,
+                'hidden_marks': data.get('hiddenMarks', False),
+                'consensual_vote': data.get('consensualVote', False)
+            }
+        else:
+            marks_config = None
+        
+        # Generate code if not provided
+        code = data.get('code')
+        if not code:
+            code = f"editathon-{int(datetime.now().timestamp())}"
+        
+        # Create editathon with all frontend data
         editathon = Editathon(
-            code=data.get('code'),
+            code=code,
             name=data.get('title'),
             description=data.get('description', ''),
             project_id=project.id if project else None,
@@ -583,10 +740,10 @@ def create_new_editathon():
             start_date=start_date,
             end_date=end_date,
             wiki_domain=f"{data.get('wiki_language', 'en')}.wikipedia.org",
-            status=data.get('status', 'draft'),
-            min_marks_needed=data.get('min_marks_needed', 1),
-            marks_config=data.get('marks', {}),
-            is_published=data.get('is_published', False),
+            status='draft',  # Always start as draft
+            min_marks_needed=data.get('minSize', 1),
+            marks_config=marks_config,
+            is_published=False,
             created_by=creator.id
         )
         
@@ -594,18 +751,56 @@ def create_new_editathon():
         db.session.flush()  # Get editathon ID
         
         # Add jury members if provided
-        if data.get('jury'):
-            import json
-            jury_list = json.loads(data['jury']) if isinstance(data['jury'], str) else data['jury']
-            for jury_username in jury_list:
-                jury_user = User.query.filter_by(username=jury_username).first()
-                if jury_user:
+        jury_data = data.get('jury', [])
+        print(f"Processing jury data: {jury_data}")  # Debug print
+        if jury_data and isinstance(jury_data, list):
+            for jury_member in jury_data:
+                if isinstance(jury_member, dict) and jury_member.get('username'):
+                    username = jury_member['username']
+                    jury_user = User.query.filter_by(username=username).first()
+                    
+                    # Create user if they don't exist
+                    if not jury_user:
+                        print(f"Creating new jury user: {username}")  # Debug print
+                        jury_user = User(
+                            username=username,
+                            email=f"{username}@wikipedia.org",  # Default email
+                            password_hash='oauth_user',  # Placeholder for OAuth users
+                            role='jury'
+                        )
+                        db.session.add(jury_user)
+                        db.session.flush()  # Get user ID
+                    
+                    print(f"Adding jury assignment for user {username} (ID: {jury_user.id})")  # Debug print
                     jury_assignment = EditathonJury(
                         editathon_id=editathon.id,
                         user_id=jury_user.id,
                         role='main'
                     )
                     db.session.add(jury_assignment)
+        
+        # Store rules in a separate table (create simple rules storage)
+        rules_data = data.get('rules', [])
+        if rules_data and isinstance(rules_data, list):
+            for rule_data in rules_data:
+                if isinstance(rule_data, dict) and rule_data.get('type'):
+                    rule = Rule(
+                        name=rule_data.get('type', 'Rule'),
+                        rule_type=rule_data.get('type', 'custom'),
+                        condition_text=str(rule_data.get('config', {})),
+                        description=rule_data.get('description', ''),
+                        created_by=creator.id
+                    )
+                    db.session.add(rule)
+                    db.session.flush()
+                    
+                    # Link rule to editathon
+                    editathon_rule = EditathonRule(
+                        editathon_id=editathon.id,
+                        rule_id=rule.id,
+                        is_active=True
+                    )
+                    db.session.add(editathon_rule)
         
         # Initialize statistics
         stats = EditathonStat(
@@ -631,6 +826,110 @@ def create_new_editathon():
     except Exception as e:
         db.session.rollback()
         print(f"Error creating editathon: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# Get Draft Editathons for Approval (Admin only)
+@app.route('/api/editathons/pending', methods=['GET'])
+def get_pending_editathons():
+    try:
+        # Get draft editathons (waiting for approval)
+        pending_editathons = Editathon.query.filter_by(status='draft').all()
+        result = []
+        for editathon in pending_editathons:
+            creator = User.query.get(editathon.created_by)
+            result.append({
+                'id': editathon.id,
+                'code': editathon.code,
+                'name': editathon.name,
+                'description': editathon.description,
+                'language': editathon.language,
+                'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
+                'end_date': editathon.end_date.isoformat() if editathon.end_date else None,
+                'created_by': creator.username if creator else 'Unknown',
+                'status': editathon.status
+            })
+        
+        return jsonify({
+            "success": True,
+            "editathons": result,
+            "count": len(result)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Approve Editathon (Admin only)
+@app.route('/api/editathon/<editathon_id>/approve', methods=['POST'])
+def approve_editathon(editathon_id):
+    try:
+        editathon = Editathon.query.get(editathon_id)
+        if not editathon:
+            return jsonify({"error": "Editathon not found"}), 404
+        
+        editathon.status = 'active'
+        editathon.is_published = True
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Editathon '{editathon.name}' approved successfully",
+            "status": "active"
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# Reject Editathon (Admin only)
+@app.route('/api/editathon/<editathon_id>/reject', methods=['POST'])
+def reject_editathon(editathon_id):
+    try:
+        data = request.json
+        reason = data.get('reason', 'No reason provided') if data else 'No reason provided'
+        
+        editathon = Editathon.query.get(editathon_id)
+        if not editathon:
+            return jsonify({"error": "Editathon not found"}), 404
+        
+        editathon.status = 'rejected'
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Editathon '{editathon.name}' rejected. Reason: {reason}",
+            "status": "rejected"
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# Get User's Pending Editathons
+@app.route('/api/user/<username>/pending-editathons', methods=['GET'])
+def get_user_pending_editathons(username):
+    try:
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        # Get draft editathons created by this user (waiting for approval)
+        pending_editathons = Editathon.query.filter_by(
+            created_by=user.id, 
+            status='draft'
+        ).all()
+        
+        result = []
+        for editathon in pending_editathons:
+            result.append({
+                'id': editathon.id,
+                'code': editathon.code,
+                'name': editathon.name,
+                'description': editathon.description,
+                'language': editathon.language,
+                'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
+                'end_date': editathon.end_date.isoformat() if editathon.end_date else None,
+                'status': editathon.status
+            })
+        
+        return jsonify(result)
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # Submit article (new schema)
@@ -1297,13 +1596,13 @@ def test_connection():
         with app.app_context():
             # Test connection by fetching user count
             user_count = User.query.count()
-            print("✅ Connected to MariaDB successfully!")
+            print("✅ Connected to Database successfully!")
             print(f"   📊 Users in database: {user_count}")
             
             # Show all tables
-            result = db.session.execute(db.text("SHOW TABLES"))
-            tables = [row[0] for row in result]
-            print(f"   📋 Available tables: {', '.join(tables)}")
+            # result = db.session.execute(db.text("SHOW TABLES"))
+            # tables = [row[0] for row in result]
+            # print(f"   📋 Available tables: {', '.join(tables)}")
 
     except Exception as e:
         print(f"❌ Database connection failed: {e}")

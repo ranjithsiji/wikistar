@@ -1,7 +1,7 @@
 <template>
-  <div class="dropdown">
+  <div v-if="user" class="dropdown">
     <button class="btn btn-outline-secondary dropdown-toggle" @click="toggleDropdown" type="button">
-      👤 {{ username || 'Guest' }}
+      👤 {{ user.username }}
     </button>
     <ul class="dropdown-menu dropdown-menu-end" v-show="isOpen" :class="{ show: isOpen }">
       <li>
@@ -11,21 +11,19 @@
       </li>
       <li><hr class="dropdown-divider"></li>
       <li><a class="dropdown-item" href="#" @click="closeDropdown">⚙️ Settings</a></li>
-      <li><a class="dropdown-item text-danger" href="#" @click="closeDropdown">🚪 Log out</a></li>
+      <li><a class="dropdown-item text-danger" href="/api/logout">🚪 Log out</a></li>
     </ul>
+  </div>
+  <div v-else>
+    <a href="/api/login" class="btn btn-primary btn-sm">Login with Wikipedia</a>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import axios from 'axios'
 
-const props = defineProps({
-  username: {
-    type: String,
-    default: 'Clintacc'
-  }
-})
-
+const user = ref(null)
 const isOpen = ref(false)
 
 function toggleDropdown(event) {
@@ -44,8 +42,16 @@ function handleClickOutside(event) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
+  try {
+    const response = await axios.get('/api/me')
+    if (response.data.user) {
+      user.value = response.data.user
+    }
+  } catch (e) {
+    console.error("Failed to fetch user", e)
+  }
 })
 
 onUnmounted(() => {
@@ -132,6 +138,24 @@ onUnmounted(() => {
   color: #fff;
   background-color: #6c757d;
   border-color: #6c757d;
+}
+
+.btn-primary {
+  color: #fff;
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+.btn-primary:hover {
+  color: #fff;
+  background-color: #0b5ed7;
+  border-color: #0a58ca;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border-radius: 0.2rem;
 }
 
 .dropdown-toggle::after {

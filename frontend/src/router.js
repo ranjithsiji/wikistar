@@ -7,6 +7,7 @@ import JudgeView from './views/JudgeView.vue'
 import JuryViewFullScreen from './views/JuryViewFullScreen.vue'
 import JuryArticlesFullScreen from './views/JuryArticlesFullScreen.vue'
 import ArticleReviewFullScreen from './views/ArticleReviewFullScreen.vue'
+import SubmitArticle from './views/SubmitArticle.vue'
 
 const routes = [
   {
@@ -47,6 +48,12 @@ const routes = [
     path: '/editathon/:id/review',
     name: 'ArticleReviewFullScreen',
     component: ArticleReviewFullScreen,
+    props: true
+  },
+  {
+    path: '/editathon/:id/submit',
+    name: 'SubmitArticle',
+    component: SubmitArticle,
     props: true
   },
   {

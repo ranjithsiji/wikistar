@@ -1,8 +1,15 @@
 <template>
-  <div class="top-contributors">
-    <div class="contributors-header">
-      <h2>Top Contributors</h2>
-    </div>
+    <div class="top-contributors">
+      <div class="contributors-header">
+        <div class="title-block">
+          <div class="title-icon">★</div>
+          <div>
+            <h2>Top Contributors</h2>
+            <p class="subtitle">Leaders by points and articles</p>
+          </div>
+        </div>
+        <div class="badge">Top 5</div>
+      </div>
 
     <div v-if="sortedLeaderboard.length === 0" class="no-data">
       No contributors yet
@@ -18,6 +25,7 @@
         <div class="rank-badge" :class="`rank-${index + 1}`">
           {{ index + 1 }}
         </div>
+          <div class="avatar" :class="`rank-${index + 1}`">{{ getInitials(contributor.username) }}</div>
         
         <div class="contributor-info">
           <a 
@@ -32,6 +40,9 @@
             <span class="stat-separator">•</span>
             <span class="stat">{{ contributor.totalPoints || 0 }} points</span>
           </div>
+            <div class="progress">
+              <div class="progress-fill" :style="{ width: progressWidth(contributor.totalPoints) }"></div>
+            </div>
         </div>
 
         <div class="points-display">
@@ -62,15 +73,34 @@ const sortedLeaderboard = computed(() => {
   }
   return [...props.leaderboard].sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0))
 })
+
+const maxPoints = computed(() => {
+  const first = sortedLeaderboard.value[0]
+  return first ? (first.totalPoints || 0) : 0
+})
+
+function progressWidth(points) {
+  const max = maxPoints.value || 1
+  const value = Math.max(points || 0, 0)
+  return `${Math.min((value / max) * 100, 100)}%`
+}
+
+function getInitials(name = '') {
+  if (!name) return '?'
+  const parts = name.split(/\s+|_/).filter(Boolean)
+  const first = parts[0]?.[0] || ''
+  const second = parts[1]?.[0] || ''
+  return (first + second || first).toUpperCase()
+}
 </script>
 
 <style scoped>
 .top-contributors {
-  background: #ffffff;
-  border: 1px solid #d0d0d0;
-  border-radius: 8px;
-  padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  background: linear-gradient(145deg, #ffffff 0%, #f7f9ff 100%);
+  border: 1px solid #e4e9f2;
+  border-radius: 14px;
+  padding: 1.4rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
 }
 
 .contributors-header {
@@ -79,16 +109,37 @@ const sortedLeaderboard = computed(() => {
   border-bottom: 2px solid #f0f0f0;
 }
 
+.title-block {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.title-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4f46e5, #22c55e);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 1.1rem;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.35);
+}
+
 .contributors-header h2 {
   margin: 0;
-  font-size: 1.05rem;
-  color: #1a1a1a;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  font-size: 1.1rem;
+  color: #0f172a;
+  font-weight: 700;
+  letter-spacing: 0.2px;
 }
 
 .no-data {
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   color: #999;
   padding: 1.5rem;
   font-size: 0.9rem;
@@ -104,17 +155,17 @@ const sortedLeaderboard = computed(() => {
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  padding: 0.85rem;
-  background: #fafafa;
-  border-radius: 6px;
+  padding: 0.9rem 1rem;
+  background: #fff;
+  border-radius: 10px;
   border: 1px solid #e8e8e8;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .contributor-card:hover {
-  background: #f5f7ff;
-  border-color: #d0d0d0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  background: #f8fafc;
+  border-color: #dce2f0;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
 .rank-badge {
@@ -141,8 +192,8 @@ const sortedLeaderboard = computed(() => {
 }
 
 .contributor-card.rank-1 {
-  background: #fffbf0;
-  border-color: #f0d080;
+  background: linear-gradient(135deg, #fff8e1, #fffaf0);
+  border-color: #fcd34d;
 }
 
 .contributor-card.rank-1 .rank-badge {
@@ -157,12 +208,30 @@ const sortedLeaderboard = computed(() => {
 }
 
 .contributor-card.rank-3 {
-  background: #f5ebe0;
+  background: #f7f1e9;
 }
 
 .contributor-info {
   flex: 1;
 }
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: #e5e7eb;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #111827;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+.avatar.rank-1 { background: #ffe08a; color: #6b4d00; }
+.avatar.rank-2 { background: #e5e7eb; color: #4b5563; }
+.avatar.rank-3 { background: #f4d7b5; color: #7c4a1d; }
 
 .contributor-name {
   display: block;
