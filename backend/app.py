@@ -1,16 +1,17 @@
 from flask import Flask, jsonify, request, redirect, session, url_for
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, date
 import pymysql
 from flask_cors import CORS
 import json
 import ast
 import sys
 import os
+from sqlalchemy import func
 
 # Add Oauth to sys.path
 from flask_mwoauth import MWOAuth
-from oauth_utils import patch_requests_for_oauth, test_mediawiki_connectivity
+# from oauth_utils import patch_requests_for_oauth, test_mediawiki_connectivity
 
 app = Flask(__name__)
 # Enable CORS for frontend-backend communication (cookies needed for OAuth session)
@@ -27,6 +28,56 @@ if server_name:
     app.config['PREFERRED_URL_SCHEME'] = os.environ.get('PREFERRED_URL_SCHEME', 'http')
 
 db = SQLAlchemy(app)
+
+def format_project_label(raw_value: str | None) -> str:
+    """Convert stored project identifier/domain into a human-friendly label."""
+    if not raw_value:
+        return "Wikipedia"
+
+    domain = str(raw_value).strip()
+    if not domain:
+        return "Wikipedia"
+
+    lowered = domain.lower()
+    parts = lowered.split('.')
+    first_part = parts[0] if parts else lowered
+    second_level = parts[-2] if len(parts) >= 2 else lowered
+
+    project_map = {
+        'wikipedia': 'Wikipedia',
+        'wiktionary': 'Wiktionary',
+        'wikibooks': 'Wikibooks',
+        'wikiquote': 'Wikiquote',
+        'wikinews': 'Wikinews',
+        'wikiversity': 'Wikiversity',
+        'wikivoyage': 'Wikivoyage',
+        'wikisource': 'Wikisource',
+        'wikidata': 'Wikidata',
+        'wikifunctions': 'Wikifunctions',
+        'wikimediafoundation': 'Wikimedia Foundation',
+        'metawiki': 'MetaWiki',
+        'meta': 'MetaWiki',
+        'wikicommons': 'Wikimedia Commons'
+    }
+
+    if second_level == 'wikimedia':
+        meta_map = {
+            'meta': 'MetaWiki',
+            'commons': 'Wikimedia Commons',
+            'incubator': 'Wikimedia Incubator'
+        }
+        if first_part in meta_map:
+            return meta_map[first_part]
+        return 'Wikimedia'
+
+    if second_level in project_map:
+        return project_map[second_level]
+
+    cleaned = second_level.replace('-', ' ').replace('_', ' ').strip()
+    if cleaned:
+        return cleaned.title()
+
+    return domain.title()
 
 # ========== OAuth Configuration ==========
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
@@ -294,20 +345,27 @@ def get_personal_cabinet(username):
 
         # Get user's articles
         user_articles = Article.query.filter_by(submitted_by=user.id).all()
-        
-        # Get user's editathons
+
+        # Group articles by editathon
         articles_by_editathon = {}
         for article in user_articles:
             editathon = Editathon.query.get(article.editathon_id)
-            if editathon not in articles_by_editathon:
-                articles_by_editathon[editathon] = []
-            articles_by_editathon[editathon].append(article)
+            if not editathon:
+                continue
+            if editathon.id not in articles_by_editathon:
+                articles_by_editathon[editathon.id] = {
+                    'editathon': editathon,
+                    'articles': []
+                }
+            articles_by_editathon[editathon.id]['articles'].append(article)
 
         # Build response
         articles_data = []
         total_points = 0
         
-        for editathon, articles in articles_by_editathon.items():
+        for entry in articles_by_editathon.values():
+            editathon = entry['editathon']
+            articles = entry['articles']
             for article in articles:
                 articles_data.append({
                     'editathon': editathon.name,
@@ -345,27 +403,67 @@ def get_personal_cabinet(username):
             for assignment in jury_assignments
         ]
 
+        participated_response = []
+        for entry in articles_by_editathon.values():
+            editathon = entry['editathon']
+
+            project_obj = Project.query.get(editathon.project_id) if getattr(editathon, 'project_id', None) else None
+            project_label = format_project_label(project_obj.name if project_obj else None)
+
+            scoreboard_rows = (
+                db.session.query(
+                    User.username,
+                    func.coalesce(func.sum(Article.points), 0).label('total_points')
+                )
+                .join(User, Article.submitted_by == User.id)
+                .filter(Article.editathon_id == editathon.id)
+                .group_by(User.username)
+                .order_by(func.coalesce(func.sum(Article.points), 0).desc())
+                .all()
+            )
+
+            scoreboard = []
+            user_rank = None
+            user_points = 0
+            for idx, row in enumerate(scoreboard_rows, start=1):
+                points_value = float(row.total_points or 0)
+                scoreboard.append({
+                    'rank': idx,
+                    'username': row.username,
+                    'points': points_value
+                })
+                if row.username == user.username:
+                    user_rank = idx
+                    user_points = points_value
+
+            participated_response.append({
+                'id': editathon.id,
+                'name': editathon.name,
+                'description': editathon.description,
+                'status': editathon.status,
+                'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
+                'end_date': editathon.end_date.isoformat() if editathon.end_date else None,
+                'language': editathon.language,
+                'project': project_label,
+                'project_domain': project_obj.name if project_obj else None,
+                'scoreboard': scoreboard[:5],
+                'user_summary': {
+                    'rank': user_rank,
+                    'points': user_points
+                }
+            })
+
         return jsonify({
             'username': user.username,
             'role': user.role,
             'stats': {
                 'articles_submitted': len(user_articles),
-                'editathons_participated': len(articles_by_editathon),
+                'editathons_participated': len(participated_response),
                 'editathons_created': len(created_editathons),
                 'total_points': total_points,
                 'jury_assignments': len(jury_assignments)
             },
-            'participated_editathons': [
-                {
-                    'id': editathon.id,
-                    'name': editathon.name,
-                    'description': editathon.description,
-                    'status': editathon.status,
-                    'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
-                    'end_date': editathon.end_date.isoformat() if editathon.end_date else None
-                }
-                for editathon in articles_by_editathon.keys()
-            ],
+            'participated_editathons': participated_response,
             'created_editathons': created_data,
             'jury_assignments': participated_as_jury,
             'articles': articles_data
@@ -381,6 +479,9 @@ def get_editathon_dashboard(editathon_id):
         editathon = Editathon.query.get(editathon_id)
         if not editathon:
             return jsonify({"error": "Editathon not found"}), 404
+
+        project_obj = Project.query.get(editathon.project_id) if editathon.project_id else None
+        project_label = format_project_label(project_obj.name if project_obj else None)
         
         # Get all articles for this editathon
         articles = Article.query.filter_by(editathon_id=editathon_id).all()
@@ -515,6 +616,8 @@ def get_editathon_dashboard(editathon_id):
                 'status': editathon.status,
                 'description': editathon.description,
                 'wiki_language': editathon.language,
+                'project': project_label,
+                'project_domain': project_obj.name if project_obj else None,
                 'rules': rules
             },
             'stats': {
@@ -539,6 +642,8 @@ def get_all_editathons():
         result = []
         for editathon in editathons:
             stats = EditathonStat.query.get(editathon.id)
+            project_obj = Project.query.get(editathon.project_id) if editathon.project_id else None
+            project_label = format_project_label(project_obj.name if project_obj else None)
             
             # Get jury members
             jury_assignments = EditathonJury.query.filter_by(editathon_id=editathon.id).all()
@@ -561,6 +666,8 @@ def get_all_editathons():
                 'endDate': editathon.end_date.isoformat() if editathon.end_date else None,
                 'status': editathon.status,
                 'language': editathon.language,
+                'project': project_label,
+                'project_domain': project_obj.name if project_obj else None,
                 'article_count': stats.total_articles if stats else 0,
                 'user_count': stats.total_participants if stats else 0,
                 'juries': juries

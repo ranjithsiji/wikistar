@@ -1,34 +1,47 @@
 <template>
   <div class="participated-section">
-    <h2 class="section-title">Participated Editathons</h2>
-    
+    <h2 class="section-title">Editathons You Participate In</h2>
+
     <div v-if="editathons.length === 0" class="empty-state">
       <p>You haven't participated in any editathons yet.</p>
     </div>
-    
+
     <div v-else class="editathons-list">
-      <div v-for="editathon in editathons" :key="editathon.id" class="editathon-box">
-        <div class="box-header">
-          <h3 class="box-title">{{ editathon.name }}</h3>
-          <span class="status-badge" :class="editathon.status === 'finished' ? 'finished' : 'active'">
-            {{ editathon.status }}
-          </span>
-        </div>
-        
-        <p class="box-description">{{ editathon.description }}</p>
-        
-        <div class="box-meta">
-          <div class="meta-item">
-            <span class="meta-label">Duration:</span>
-            <span class="meta-value">
-              {{ formatDate(editathon.start_date) }} - {{ formatDate(editathon.end_date) }}
-            </span>
+      <article v-for="editathon in editathons" :key="editathon.id" class="editathon-card">
+        <div class="card-header">
+          <div>
+            <router-link :to="`/editathon/${editathon.id}`" class="title-link">
+              {{ editathon.name }}
+            </router-link>
+            <p class="meta-text">
+              {{ statusText(editathon.end_date) }} ·
+              {{ (editathon.language || 'en').toUpperCase() }} ·
+              {{ editathon.project || 'Wikimedia Project' }}
+            </p>
           </div>
-          <router-link :to="`/editathon/${editathon.id}`" class="view-link">
-            View Editathon →
-          </router-link>
+          <div v-if="editathon.user_summary.rank" class="rank-chip">
+            <span class="rank-label">Your rank</span>
+            <strong>#{{ editathon.user_summary.rank }}</strong>
+            <span class="rank-points">{{ formatPoints(editathon.user_summary.points) }} pts</span>
+          </div>
         </div>
-      </div>
+
+        <div class="scoreboard" v-if="editathon.scoreboard?.length">
+          <div
+            v-for="row in editathon.scoreboard"
+            :key="row.username"
+            class="score-row"
+            :class="{ highlight: row.username === user }"
+          >
+            <span class="rank">{{ row.rank }}</span>
+            <span class="participant">{{ row.username }}</span>
+            <span class="points">Σ {{ formatPoints(row.points) }}</span>
+          </div>
+        </div>
+        <div v-else class="empty-scoreboard">
+          No scoreboard data yet for this editathon.
+        </div>
+      </article>
     </div>
   </div>
 </template>
@@ -36,37 +49,66 @@
 <script setup>
 import { defineProps } from 'vue'
 
-const props = defineProps({
+defineProps({
   user: String,
-  editathons: Array
+  editathons: {
+    type: Array,
+    default: () => []
+  }
 })
 
-function formatDate(dateString) {
-  if (!dateString) return 'Unknown'
-  return new Date(dateString).toLocaleDateString()
+function formatPoints(value) {
+  if (!value) return '0'
+  const num = Number(value)
+  return Number.isInteger(num) ? num : num.toFixed(2)
+}
+
+function statusText(endDate) {
+  if (!endDate) return 'Status unknown'
+  const end = new Date(endDate)
+  const now = new Date()
+  const diffMs = now - end
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) {
+    return `Ends in ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'}`
+  }
+
+  if (diffDays < 30) {
+    return `Ended ${diffDays} day${diffDays === 1 ? '' : 's'} ago`
+  }
+
+  const months = Math.floor(diffDays / 30)
+  if (months < 12) {
+    return `Ended ${months} month${months === 1 ? '' : 's'} ago`
+  }
+
+  const years = Math.floor(months / 12)
+  return `Ended ${years} year${years === 1 ? '' : 's'} ago`
 }
 </script>
 
 <style scoped>
 .participated-section {
-  padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .section-title {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #1f2937;
-  margin-bottom: 1.5rem;
+  color: #111827;
 }
 
-.empty-state {
-  padding: 2rem;
+.empty-state,
+.empty-scoreboard {
+  padding: 1.5rem;
   text-align: center;
   background: #f9fafb;
-  border: 2px dashed #e5e7eb;
+  border: 1px dashed #e5e7eb;
   border-radius: 8px;
   color: #6b7280;
-  font-weight: 500;
 }
 
 .editathons-list {
@@ -75,97 +117,114 @@ function formatDate(dateString) {
   gap: 1rem;
 }
 
-.editathon-box {
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 1.5rem;
-  transition: all 0.3s ease;
+.editathon-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
-.editathon-box:hover {
-  border-color: #667eea;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-}
-
-.box-header {
+.card-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
   margin-bottom: 1rem;
 }
 
-.box-title {
+.title-link {
   font-size: 1.1rem;
   font-weight: 700;
   color: #1f2937;
-  margin: 0;
-}
-
-.status-badge {
-  padding: 0.4rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.status-badge.active {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-badge.finished {
-  background: #e0e7ff;
-  color: #312e81;
-}
-
-.box-description {
-  color: #6b7280;
-  font-size: 0.95rem;
-  margin-bottom: 1rem;
-  line-height: 1.5;
-}
-
-.box-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 1rem;
-  border-top: 1px solid #f3f4f6;
-}
-
-.meta-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.meta-label {
-  font-size: 0.75rem;
-  color: #9ca3af;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.meta-value {
-  font-size: 0.9rem;
-  color: #1f2937;
-  font-weight: 600;
-}
-
-.view-link {
-  color: #667eea;
   text-decoration: none;
-  font-weight: 600;
-  font-size: 0.9rem;
-  transition: color 0.3s ease;
 }
 
-.view-link:hover {
-  color: #5568d3;
+.title-link:hover {
   text-decoration: underline;
+}
+
+.meta-text {
+  margin: 0.25rem 0 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.rank-chip {
+  background: #eef2ff;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  text-align: right;
+  min-width: 110px;
+}
+
+.rank-label {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.rank-chip strong {
+  font-size: 1.1rem;
+  color: #4338ca;
+}
+
+.rank-points {
+  display: block;
+  font-size: 0.8rem;
+  color: #4b5563;
+}
+
+.scoreboard {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: 50px 1fr 80px;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  font-weight: 500;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.score-row:last-child {
+  border-bottom: none;
+}
+
+.score-row.highlight {
+  background: #e0f2fe;
+}
+
+.rank {
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.participant {
+  color: #111827;
+}
+
+.points {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .score-row {
+    grid-template-columns: 30px 1fr 70px;
+    font-size: 0.9rem;
+  }
+
+  .card-header {
+    flex-direction: column;
+  }
+
+  .rank-chip {
+    align-self: flex-start;
+    text-align: left;
+  }
 }
 </style>

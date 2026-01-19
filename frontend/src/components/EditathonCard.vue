@@ -7,6 +7,9 @@
         </router-link>
       </div>
       <p class="text-muted mb-1">{{ shortRange(editathon.startDate, editathon.endDate) }}</p>
+      <p class="small text-muted meta-line">
+        {{ (editathon.language || 'en').toUpperCase() }} · {{ editathon.project || 'Wikimedia Project' }}
+      </p>
       <p class="small text-muted">{{ editathon.description || '' }}</p>
       <div>
         <span v-for="j in (editathon.juries || [])" :key="j.id" class="badge badge-jury me-1">{{ j.username }}</span>

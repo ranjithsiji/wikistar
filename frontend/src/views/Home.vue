@@ -1,7 +1,6 @@
 <template>
   <div class="container container-max py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h1 class="h3 mb-0">Editathons</h1>
+    <div class="d-flex justify-content-end align-items-center mb-3">
       <router-link to="/create" class="btn btn-primary">Create New Editathon</router-link>
     </div>
 

@@ -1,7 +1,7 @@
 <template>
   <div class="submit-article-page">
     <!-- Step 1: Search -->
-    <div v-if="step === 1" class="step-container">
+    <div v-if="step === 1" class="step-container compact">
       <div class="modal-header">
         <h2 class="page-title">{{ editathon.name || 'Loading...' }}</h2>
         <button class="close-btn" @click="goBackToDashboard">✕</button>
@@ -9,13 +9,15 @@
       
       <div class="search-content">
         <div class="search-card">
-          <h3 class="search-title">Article's title:</h3>
-          <div class="search-container">
+          <div class="search-title-row">
+            <h3 class="search-title">Article's title</h3>
+          </div>
+          <div class="search-container condensed">
             <input 
               type="text" 
               v-model="articleTitle"
               @input="searchWikipediaArticles"
-              placeholder="Start typing to search Wikipedia..."
+              placeholder="Search titles across Wikimedia projects"
               autocomplete="off"
               class="search-input"
             >
@@ -43,8 +45,8 @@
             </div>
           </div>
           
-          <div class="action-buttons">
-            <button class="btn btn-secondary" @click="goBackToDashboard">Cancel</button>
+          <div class="action-buttons compact">
+            <button class="btn btn-secondary ghost" @click="goBackToDashboard">Cancel</button>
             <button 
               class="btn btn-submit" 
               @click="goToStep2"
@@ -460,6 +462,14 @@ onMounted(async () => {
   flex-direction: column;
 }
 
+.step-container.compact .modal-header {
+  padding: 16px 28px;
+}
+
+.step-container.compact .page-title {
+  font-size: 20px;
+}
+
 .step-container.full-height {
   height: 100%;
   overflow: hidden;
@@ -494,34 +504,56 @@ onMounted(async () => {
 }
 
 /* Step 1 Styles */
+.step-container.compact {
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+}
+
 .search-content {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 20px;
+  padding: 40px 24px 64px;
 }
 
+
 .search-card {
-  width: 100%;
-  max-width: 800px;
+  width: min(1100px, 100%);
   background: white;
-  padding: 50px;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  padding: 40px 48px;
+  border-radius: 18px;
+  box-shadow: 0 18px 55px rgba(15, 23, 42, 0.12);
+  border: 1px solid #d7e0f5;
+}
+
+.search-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 16px;
 }
 
 .search-title {
-  margin-top: 0;
-  margin-bottom: 25px;
-  font-size: 24px;
-  color: #333;
-  font-weight: 500;
+  margin: 0;
+  font-size: 20px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.search-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
 }
 
 .search-container {
   position: relative;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
+}
+
+.search-container.condensed {
+  margin-bottom: 12px;
 }
 
 .search-input-wrapper {
@@ -540,17 +572,18 @@ onMounted(async () => {
 
 .search-input {
   width: 100%;
-  padding: 16px 20px;
-  font-size: 18px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: 16px;
+  border: 1px solid #cbd5f5;
+  border-radius: 10px;
   box-sizing: border-box;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #3366cc;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
 .loading-indicator {
@@ -608,14 +641,19 @@ onMounted(async () => {
 
 .no-results {
   padding: 12px;
-  text-align: center;
+  text-align: left;
   color: #999;
 }
 
 .action-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 15px;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.action-buttons.compact {
+  justify-content: space-between;
 }
 
 .btn {
@@ -631,6 +669,13 @@ onMounted(async () => {
   background-color: #f8f9fa;
   border: 1px solid #c8c8c8;
   color: #333;
+}
+
+.btn-secondary.ghost {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding-left: 0;
 }
 
 .btn-submit {

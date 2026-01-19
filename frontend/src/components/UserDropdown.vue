@@ -10,12 +10,11 @@
         </router-link>
       </li>
       <li><hr class="dropdown-divider"></li>
-      <li><a class="dropdown-item" href="#" @click="closeDropdown">⚙️ Settings</a></li>
       <li><a class="dropdown-item text-danger" href="/api/logout">🚪 Log out</a></li>
     </ul>
   </div>
   <div v-else>
-    <a href="/api/login" class="btn btn-primary btn-sm">Login with Wikipedia</a>
+    <a href="/api/login" class="btn btn-primary btn-sm">Login</a>
   </div>
 </template>
 

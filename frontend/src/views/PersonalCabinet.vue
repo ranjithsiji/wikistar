@@ -1,13 +1,12 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
-import PersonalDashboard from '../components/PersonalCabinet/PersonalDashboard.vue'
 import ParticipatedEditathons from '../components/PersonalCabinet/ParticipatedEditathons.vue'
 import CreatedEditathons from '../components/PersonalCabinet/CreatedEditathons.vue'
 import ApprovalQueue from '../components/PersonalCabinet/ApprovalQueue.vue'
 import MyArticles from '../components/PersonalCabinet/MyArticles.vue'
 
-const activeTab = ref('dashboard')
+const activeTab = ref('participated')
 const currentUser = ref(null)
 const userData = ref(null)
 const loading = ref(true)
@@ -67,10 +66,10 @@ onMounted(() => {
           </div>
           <div class="header-text">
             <h1>Personal Cabinet</h1>
-            <p>{{ currentUser }}'s Account Dashboard</p>
+            <p>{{ currentUser }}'s Account</p>
           </div>
         </div>
-        <button @click="$router.back()" class="btn-back">← Back to Home</button>
+        <button @click="$router.back()" class="btn-back">← Back</button>
       </div>
     </div>
 
@@ -81,61 +80,51 @@ onMounted(() => {
     </div>
 
     <!-- Show content when data is loaded -->
-    <div v-else class="cabinet-content">
-      <!-- Modern Tab Navigation -->
-      <div class="tab-navigation">
-        <button
-          class="tab-btn"
-          :class="{ active: activeTab === 'dashboard' }"
-          @click="activeTab = 'dashboard'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 3 20 7.5 20 16.5 12 21 4 16.5 4 7.5 12 3"></polyline><polyline points="12 12 20 7.5"></polyline><polyline points="12 12 12 21"></polyline><polyline points="12 12 4 7.5"></polyline></svg>
-          <span class="tab-label">Dashboard</span>
-        </button>
-        <button
-          class="tab-btn"
-          :class="{ active: activeTab === 'participated' }"
-          @click="activeTab = 'participated'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-          <span class="tab-label">Participated</span>
-        </button>
-        <button
-          class="tab-btn"
-          :class="{ active: activeTab === 'created' }"
-          @click="activeTab = 'created'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-          <span class="tab-label">Created</span>
-        </button>
-        <button
-          v-if="isAdmin"
-          class="tab-btn"
-          :class="{ active: activeTab === 'approval' }"
-          @click="activeTab = 'approval'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-          <span class="tab-label">Approval Queue</span>
-        </button>
-        <button
-          class="tab-btn"
-          :class="{ active: activeTab === 'articles' }"
-          @click="activeTab = 'articles'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="13" x2="12" y2="17"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-          <span class="tab-label">Articles</span>
-        </button>
-      </div>
+    <div v-else class="cabinet-layout">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <nav class="sidebar-nav">
+          <button
+            class="nav-item"
+            :class="{ active: activeTab === 'participated' }"
+            @click="activeTab = 'participated'"
+          >
+            Participation
+          </button>
+          <button
+            class="nav-item"
+            :class="{ active: activeTab === 'evaluation' }"
+            @click="activeTab = 'evaluation'"
+          >
+            Evaluation
+          </button>
+          <button
+            class="nav-item"
+            :class="{ active: activeTab === 'created' }"
+            @click="activeTab = 'created'"
+          >
+            Created
+          </button>
+          <button
+            v-if="isAdmin"
+            class="nav-item"
+            :class="{ active: activeTab === 'approval' }"
+            @click="activeTab = 'approval'"
+          >
+            Approval
+          </button>
+        </nav>
+      </aside>
 
-      <!-- Tab Content with smooth transitions -->
-      <div class="tab-content-wrapper">
+      <!-- Main Content Area -->
+      <main class="main-content">
         <transition name="fade" mode="out-in">
-          <div :key="activeTab" class="tab-pane">
-            <!-- Dashboard Tab -->
-            <PersonalDashboard v-if="activeTab === 'dashboard'" :user="currentUser" :stats="userData.stats" />
-
+          <div :key="activeTab" class="content-pane">
             <!-- Participated Editathons Tab -->
             <ParticipatedEditathons v-if="activeTab === 'participated'" :user="currentUser" :editathons="userData.participated_editathons" />
+
+            <!-- Evaluation (My Articles) Tab -->
+            <MyArticles v-if="activeTab === 'evaluation'" :user="currentUser" :articles="userData.articles" />
 
             <!-- Created Editathons Tab -->
             <CreatedEditathons v-if="activeTab === 'created'" :user="currentUser" :editathons="userData.created_editathons" />
@@ -148,12 +137,9 @@ onMounted(() => {
                 Admin access required to view approval queue
               </div>
             </div>
-
-            <!-- My Articles Tab -->
-            <MyArticles v-if="activeTab === 'articles'" :user="currentUser" :articles="userData.articles" />
           </div>
         </transition>
-      </div>
+      </main>
     </div>
   </div>
 </template>
@@ -168,18 +154,20 @@ onMounted(() => {
 .personal-cabinet {
   min-height: 100vh;
   background: #f8f9fa;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header Section */
 .cabinet-header {
   background: white;
   border-bottom: 2px solid #e5e7eb;
-  padding: 2rem 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 1.5rem 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .header-content {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 2rem;
   display: flex;
@@ -205,10 +193,9 @@ onMounted(() => {
 }
 
 .header-text h1 {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #111827;
-  margin-bottom: 0.25rem;
 }
 
 .header-text p {
@@ -217,18 +204,18 @@ onMounted(() => {
 }
 
 .btn-back {
-  padding: 0.75rem 1.5rem;
-  background: #f3f4f6;
+  padding: 0.5rem 1rem;
+  background: white;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: 6px;
+  font-weight: 500;
   cursor: pointer;
   color: #374151;
   transition: all 0.2s;
 }
 
 .btn-back:hover {
-  background: #e5e7eb;
+  background: #f3f4f6;
   border-color: #9ca3af;
 }
 
@@ -238,7 +225,7 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 400px;
+  flex: 1;
   gap: 1rem;
 }
 
@@ -255,94 +242,73 @@ onMounted(() => {
   to { transform: rotate(360deg); }
 }
 
-/* Cabinet Content */
-.cabinet-content {
-  max-width: 1200px;
-  margin: 2rem auto;
-  padding: 0 2rem;
+/* Layout Container */
+.cabinet-layout {
+  display: flex;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+  width: 100%;
+  gap: 2rem;
+  flex: 1;
 }
 
-/* Tab Navigation - Modern & Responsive */
-.tab-navigation {
+/* Sidebar */
+.sidebar {
+  width: 250px;
+  flex-shrink: 0;
+}
+
+.sidebar-nav {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
   background: white;
-  padding: 1rem;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   border: 1px solid #e5e7eb;
 }
 
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.7rem 1.2rem;
+.nav-item {
+  text-align: left;
+  padding: 1rem 1.5rem;
   background: transparent;
-  border: 2px solid transparent;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #6b7280;
+  border: none;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #4b5563;
   cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
+  transition: all 0.2s;
+  border-left: 4px solid transparent;
 }
 
-.tab-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
+.nav-item:hover {
+  background: #f9fafb;
+  color: #111827;
 }
 
-.tab-btn.active {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
-  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.2);
+.nav-item.active {
+  background: #eff6ff;
+  color: #2563eb;
+  border-left-color: #2563eb;
+  font-weight: 600;
 }
 
-@media (max-width: 768px) {
-  .tab-label {
-    display: none;
-  }
-  
-  .tab-btn {
-    padding: 0.75rem;
-  }
-  
-  .header-content {
-    flex-direction: column;
-    gap: 1rem;
-  }
-}
-
-/* Tab Content */
-.tab-content-wrapper {
+/* Main Content */
+.main-content {
+  flex: 1;
   background: white;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   padding: 2rem;
-  animation: slideIn 0.3s ease;
+  min-height: 500px;
 }
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.content-pane {
+  height: 100%;
 }
 
-.tab-pane {
-  animation: slideIn 0.3s ease;
-}
-
-/* Fade transition for tab content */
+/* Transitions */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
@@ -366,5 +332,33 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .cabinet-layout {
+    flex-direction: column;
+    padding: 1rem;
+  }
+  
+  .sidebar {
+    width: 100%;
+  }
+  
+  .sidebar-nav {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  
+  .nav-item {
+    padding: 0.75rem 1rem;
+    white-space: nowrap;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+  }
+  
+  .nav-item.active {
+    border-left: none;
+    border-bottom-color: #2563eb;
+  }
 }
 </style>

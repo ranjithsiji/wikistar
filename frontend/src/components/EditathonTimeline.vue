@@ -11,6 +11,16 @@
         </div>
 
         <div class="header-controls">
+          <div class="search-wrapper">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="search-input"
+              placeholder="Search editathons"
+            />
+          </div>
+
           <!-- Filter Buttons -->
           <div class="filter-buttons">
             <button 
@@ -26,14 +36,14 @@
           <!-- Language Filter -->
           <div class="select-wrapper">
             <select v-model="selectedLang" class="lang-select">
-              <option value="all">All Wikis</option>
-              <option value="Wikipedia">Wikipedia</option>
-              <option value="Wikiquote">Wikiquote</option>
-              <option value="Wikisource">Wikisource</option>
-              <option value="Wikibooks">Wikibooks</option>
-              <option value="Wikinews">Wikinews</option>
-              <option value="Wikiversity">Wikiversity</option>
-              <option value="Wikivoyage">Wikivoyage</option>
+              <option value="all">All Projects</option>
+              <option
+                v-for="wiki in availableLanguages"
+                :key="wiki"
+                :value="wiki"
+              >
+                {{ wiki }}
+              </option>
             </select>
           </div>
 
@@ -122,6 +132,19 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 
+const DEFAULT_PROJECTS = [
+  'Wikipedia',
+  'Wikivoyage',
+  'Wiktionary',
+  'Wikibooks',
+  'Wikinews',
+  'Wikisource',
+  'Wikiquote',
+  'Wikiversity',
+  'Wikidata',
+  'Wikimedia'
+]
+
 const rawEvents = ref([])
 const itemsToShow = ref(999)
 const timelineWrapper = ref(null)
@@ -129,11 +152,17 @@ const timelineWrapper = ref(null)
 const selectedLang = ref('all')
 const sortOrder = ref('desc')
 const filterStatus = ref('all')
+const searchQuery = ref('')
 
 const mockToday = new Date()
 
 const availableLanguages = computed(() => {
-  const langs = new Set(rawEvents.value.map(e => e.wiki))
+  const langs = new Set(DEFAULT_PROJECTS)
+  rawEvents.value.forEach(event => {
+    if (event.wiki) {
+      langs.add(event.wiki)
+    }
+  })
   return Array.from(langs).sort()
 })
 
@@ -150,11 +179,26 @@ const getEventStatus = (event) => {
   return 'past'
 }
 
+const matchesSearch = (event) => {
+  const term = searchQuery.value.trim().toLowerCase()
+  if (!term) return true
+
+  const haystacks = [
+    event.title || '',
+    event.description || '',
+    event.wiki || '',
+    (event.tags || []).join(' ')
+  ]
+
+  return haystacks.some(value => value.toLowerCase().includes(term))
+}
+
 const filteredEventsCount = computed(() => {
   let count = 0
   rawEvents.value.forEach(e => {
     if (selectedLang.value !== 'all' && e.wiki !== selectedLang.value) return
     if (filterStatus.value !== 'all' && getEventStatus(e) !== filterStatus.value) return
+    if (!matchesSearch(e)) return
     count++
   })
   return count
@@ -162,8 +206,8 @@ const filteredEventsCount = computed(() => {
 
 const groupedEvents = computed(() => {
   let filtered = rawEvents.value.filter(event => {
-    if (selectedLang.value === 'all') return true
-    return event.wiki === selectedLang.value
+    if (selectedLang.value !== 'all' && event.wiki !== selectedLang.value) return false
+    return matchesSearch(event)
   })
 
   filtered = filtered.filter(event => {
@@ -283,7 +327,15 @@ const getWikiColorClass = (wiki) => {
     'Source': 'color-cyan',
     'Meta': 'color-gray',
     'Wikipedia': 'color-blue',
-    'Wikimedia': 'color-indigo'
+    'Wikimedia': 'color-indigo',
+    'Wikivoyage': 'color-teal',
+    'Wiktionary': 'color-green',
+    'Wikibooks': 'color-orange',
+    'Wikinews': 'color-yellow',
+    'Wikisource': 'color-cyan',
+    'Wikiquote': 'color-purple',
+    'Wikiversity': 'color-pink',
+    'Wikidata': 'color-red'
   }
   return map[wiki] || 'color-gray'
 }
@@ -323,11 +375,13 @@ const fetchEditathons = async () => {
     rawEvents.value = data.map(editathon => {
       const start = editathon.startDate ? editathon.startDate.split('T')[0] : new Date().toISOString().split('T')[0]
       const end = editathon.endDate ? editathon.endDate.split('T')[0] : new Date().toISOString().split('T')[0]
+      const wikiLabel = editathon.project || 'Wikimedia Project'
       
       return {
         id: editathon.id,
         title: editathon.name,
-        wiki: 'Wikipedia', // Default wiki type
+        wiki: wikiLabel,
+        projectDomain: editathon.project_domain || null,
         start: start,
         end: end,
         durationLabel: calculateDuration(start, end),
@@ -402,6 +456,40 @@ onMounted(() => {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-wrapper svg {
+  position: absolute;
+  left: 0.5rem;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.search-input {
+  padding: 0.3rem 0.5rem 0.3rem 1.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #fff;
+  min-width: 180px;
+  transition: all 0.2s;
+}
+
+.search-input::placeholder {
+  color: #9ca3af;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.08);
 }
 
 .filter-buttons {
