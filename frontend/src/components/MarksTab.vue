@@ -178,48 +178,50 @@ watch(() => props.editathon?.marks, (newMarks) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .marks-header h3 {
   margin: 0;
+  font-size: 1rem;
 }
 
 .empty-state {
   text-align: center;
-  padding: 40px;
+  padding: 20px;
   color: #666;
   background: #f9f9f9;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #e0e0e0;
+  font-size: 0.85rem;
 }
 
 .marks-list {
-  margin-bottom: 30px;
+  margin-bottom: 15px;
 }
 
 .preview-section {
   background: #f8f9fa;
   border: 2px solid #e9ecef;
-  border-radius: 8px;
-  padding: 20px;
-  margin-top: 30px;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 15px;
 }
 
 .preview-header {
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .preview-header h4 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
+  margin: 0 0 4px 0;
+  font-size: 0.9rem;
   color: #212529;
 }
 
 .preview-header p {
   margin: 0;
-  color: #666;
-  font-size: 14px;
+  font-size: 0.75rem;
+  color: #6c757d;
 }
 
 .preview-controls {

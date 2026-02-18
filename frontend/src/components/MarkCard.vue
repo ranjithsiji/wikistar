@@ -113,44 +113,44 @@ watch(() => [mark.title, mark.value, mark.description, mark.min, mark.max], () =
 .mark-card {
   background: #f8f9fa;
   border: 2px solid #e9ecef;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
   transition: all 0.3s ease;
 }
 
 .mark-card.is-saved {
   background: #f0f8ff;
   border: 2px solid #b0d4ff;
-  padding: 12px 16px;
+  padding: 8px 10px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .title-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 16px;
+  gap: 8px;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #212529;
   flex: 1;
 }
 
 .btn-remove {
-  padding: 4px 8px;
+  padding: 3px 6px;
   background: #ffe0e0;
   color: #d32f2f;
   border: 1px solid #ffb3b3;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 0.75rem;
   transition: all 0.2s;
 }
 
@@ -160,11 +160,11 @@ watch(() => [mark.title, mark.value, mark.description, mark.min, mark.max], () =
 }
 
 .saved-preview {
-  padding: 12px;
+  padding: 8px;
   background: #e7f5ff;
-  border-left: 4px solid #0066cc;
+  border-left: 3px solid #0066cc;
   color: #0066cc;
-  font-size: 14px;
+  font-size: 0.8rem;
   border-radius: 4px;
   margin: 0;
   font-weight: 500;
@@ -176,16 +176,16 @@ watch(() => [mark.title, mark.value, mark.description, mark.min, mark.max], () =
 
 .body {
   background: white;
-  padding: 12px;
+  padding: 8px;
   border-radius: 6px;
   border: 1px solid #e9ecef;
 }
 
 .form-row {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
 }
 
@@ -194,8 +194,8 @@ watch(() => [mark.title, mark.value, mark.description, mark.min, mark.max], () =
 }
 
 .form-row label {
-  min-width: 80px;
-  font-size: 14px;
+  min-width: 70px;
+  font-size: 0.8rem;
   color: #495057;
   font-weight: 600;
 }

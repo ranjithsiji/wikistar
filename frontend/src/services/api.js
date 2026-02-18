@@ -110,6 +110,24 @@ export async function createEditathon(editathonData) {
   }
 }
 
+export async function updateEditathon(editathonId, editathonData) {
+  try {
+    const response = await fetch(`${API_BASE}/editathon/${editathonId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editathonData)
+    })
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to update editathon')
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('Error updating editathon:', error)
+    throw error
+  }
+}
+
 // Fetch editathon data for judge view - alias for fetchEditathonDashboard
 export async function fetchEditathon(editathonId) {
   return fetchEditathonDashboard(editathonId)

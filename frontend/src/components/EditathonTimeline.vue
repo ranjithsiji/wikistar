@@ -403,16 +403,16 @@ onMounted(() => {
 <style scoped>
 .timeline-container {
   background: #f8fafc;
-  border-radius: 12px;
+  border-radius: 6px;
   overflow: hidden;
-  margin-bottom: 2rem;
+  margin-bottom: 0.5rem;
 }
 
 /* Header */
 .timeline-header {
   background: white;
   border-bottom: 1px solid #e5e7eb;
-  padding: 0.75rem 1rem;
+  padding: 0.4rem 0.6rem;
 }
 
 .header-content {
@@ -432,20 +432,20 @@ onMounted(() => {
 .icon-box {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 0.3rem;
-  border-radius: 5px;
+  padding: 0.2rem;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .icon-box svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .timeline-title {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: #111827;
   margin: 0;
@@ -454,7 +454,7 @@ onMounted(() => {
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
@@ -571,25 +571,25 @@ onMounted(() => {
 
 /* Timeline Content */
 .timeline-content {
-  padding: 0.75rem;
+  padding: 0.3rem;
 }
 
 .timeline-stats {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   color: #6b7280;
-  margin-bottom: 0.75rem;
-  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.3rem;
+  padding: 0.25rem 0.4rem;
   background: white;
-  border-radius: 5px;
+  border-radius: 4px;
   border: 1px solid #e5e7eb;
 }
 
 .timeline-wrapper {
   position: relative;
-  max-height: 500px;
+  max-height: 300px;
   overflow-y: auto;
   overflow-x: hidden;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .timeline-wrapper::-webkit-scrollbar {
@@ -630,14 +630,14 @@ onMounted(() => {
 /* Empty State */
 .empty-state {
   text-align: center;
-  padding: 1.5rem 0;
+  padding: 1rem 0;
   margin-left: 125px;
 }
 
 .empty-card {
   background: white;
   display: inline-block;
-  padding: 1rem;
+  padding: 0.75rem;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
 }
@@ -664,7 +664,7 @@ onMounted(() => {
 
 /* Timeline Groups */
 .timeline-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.6rem;
   position: relative;
   z-index: 1;
 }
@@ -672,7 +672,7 @@ onMounted(() => {
 .month-header {
   display: flex;
   align-items: center;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.3rem;
 }
 
 .month-date {
@@ -683,7 +683,7 @@ onMounted(() => {
 
 .month-name {
   display: block;
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: #9ca3af;
   line-height: 1;
@@ -691,7 +691,7 @@ onMounted(() => {
 
 .month-year {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #9ca3af;
   font-weight: 600;
 }
@@ -700,7 +700,7 @@ onMounted(() => {
 .events-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.3rem;
 }
 
 .event-row {
@@ -800,23 +800,23 @@ onMounted(() => {
 }
 
 .card-content {
-  padding: 0.75rem;
+  padding: 0.4rem;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 0.5rem;
-  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+  gap: 0.3rem;
 }
 
 .card-title {
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: #111827;
   margin: 0;
-  line-height: 1.3;
+  line-height: 1.2;
   transition: color 0.2s;
 }
 
@@ -838,9 +838,9 @@ onMounted(() => {
 
 .card-description {
   color: #6b7280;
-  font-size: 0.7rem;
-  line-height: 1.4;
-  margin-bottom: 0.5rem;
+  font-size: 0.65rem;
+  line-height: 1.3;
+  margin-bottom: 0.2rem;
 }
 
 .card-tags {

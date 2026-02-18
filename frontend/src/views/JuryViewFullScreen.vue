@@ -139,6 +139,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { store } from '../store'
 
 const router = useRouter()
 const route = useRoute()
@@ -152,11 +153,25 @@ const addError = ref('')
 
 onMounted(async () => {
   // Load juries from route params or API
-  const editathonId = route.params.editathonId
+  const editathonId = route.params.editathonId || route.params.id
   if (editathonId) {
-    // You can fetch jury data from API here
-    // For now, using mock data
-    loadMockJuries()
+    // Fetch jury data from API
+    try {
+      const response = await fetch(`http://localhost:5000/api/editathon/${editathonId}`)
+      const data = await response.json()
+      juries.value = data.juries || []
+      
+      // Check if current user is a jury member
+      const isJury = store.user && juries.value.some(jury => jury.username === store.user.username)
+      if (!isJury) {
+        alert('Access denied: Only jury members can manage jury settings')
+        router.push(`/editathon/${editathonId}`)
+        return
+      }
+    } catch (error) {
+      console.error('Error loading jury data:', error)
+      loadMockJuries()
+    }
   }
 })
 

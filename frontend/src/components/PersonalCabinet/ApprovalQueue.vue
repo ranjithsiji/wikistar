@@ -64,7 +64,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const pendingEditathons = ref([])
 const loading = ref(true)
 
@@ -137,8 +139,7 @@ async function approveOrReject(id, action, reason = null) {
 }
 
 function viewDetails(id) {
-  // Show details modal or navigate to detail view
-  console.log('View details for editathon:', id)
+  router.push(`/editathon/${id}/edit`)
 }
 
 onMounted(() => {

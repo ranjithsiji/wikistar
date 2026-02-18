@@ -48,23 +48,23 @@
 
         <div class="box-actions">
           <router-link 
-            v-if="editathon.status === 'approved'" 
+            v-if="editathon.status === 'approved' || editathon.status === 'active'" 
             :to="`/editathon/${editathon.id}`" 
             class="btn-action btn-manage">
             Manage
           </router-link>
-          <button 
-            v-else-if="editathon.status === 'pending'" 
-            class="btn-action btn-pending" 
-            disabled>
-            Pending Review
-          </button>
-          <button 
-            v-else-if="editathon.status === 'rejected'" 
-            @click="editEditathon(editathon)" 
+          <router-link
+            v-else-if="editathon.status === 'pending' || editathon.status === 'draft'"
+            :to="`/editathon/${editathon.id}/edit`"
             class="btn-action btn-edit">
-            Edit & Resubmit
-          </button>
+            ✏️ Edit
+          </router-link>
+          <router-link
+            v-else-if="editathon.status === 'rejected'"
+            :to="`/editathon/${editathon.id}/edit`"
+            class="btn-action btn-edit">
+            ✏️ Edit & Resubmit
+          </router-link>
           <button 
             @click="deleteEditathon(editathon.id)" 
             class="btn-action btn-delete">
@@ -129,58 +129,44 @@ async function deleteEditathon(id) {
   if (!confirm('Are you sure you want to delete this editathon? This action cannot be undone.')) {
     return
   }
-  
+
   try {
     const response = await fetch(`http://localhost:5000/api/editathon/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
     })
-    
-    if (response.ok) {
+
+    const result = await response.json()
+
+    if (response.ok && result.success) {
       editathons.value = editathons.value.filter(e => e.id !== id)
-      alert('Editathon deleted successfully')
     } else {
-      alert('Failed to delete editathon')
+      alert('Failed to delete: ' + (result.error || 'Unknown error'))
     }
   } catch (error) {
     console.error('Error deleting editathon:', error)
-    alert('Error deleting editathon')
+    alert('Network error while deleting editathon')
   }
 }
 
 onMounted(async () => {
   loading.value = true
   try {
-    // Load created editathons from API
-    const response = await fetch(`http://localhost:5000/api/user/${props.user}/editathons`)
+    const response = await fetch(`http://localhost:5000/api/personal-cabinet/${props.user}`)
     if (response.ok) {
-      editathons.value = await response.json()
+      const data = await response.json()
+      // Map backend field names to frontend expected names
+      editathons.value = (data.created_editathons || []).map(e => ({
+        ...e,
+        startDate: e.start_date,
+        endDate: e.end_date,
+        wiki_language: e.language || e.wiki_language || 'N/A'
+      }))
     } else {
-      // Fallback to mock data
-      editathons.value = [
-        {
-          id: 3,
-          name: 'Women in STEM 2024',
-          description: 'Highlighting women in science and technology',
-          wiki_language: 'ml',
-          status: 'approved',
-          created: '2024-01-15',
-          startDate: '2024-02-01',
-          endDate: '2024-02-28'
-        },
-        {
-          id: 4,
-          name: 'Local History Project',
-          description: 'Documenting local historical figures',
-          wiki_language: 'ml',
-          status: 'pending',
-          created: '2024-03-01',
-          startDate: '2024-03-15',
-          endDate: '2024-04-15'
-        }
-      ]
+      editathons.value = []
     }
   } catch (error) {
-    console.error('Error loading editathons:', error)
+    console.error('Error loading created editathons:', error)
     editathons.value = []
   } finally {
     loading.value = false
@@ -197,13 +183,13 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
   flex-wrap: wrap;
   gap: 1rem;
 }
 
 .section-title {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #1f2937;
   margin: 0;
@@ -276,14 +262,14 @@ onMounted(async () => {
 .editathons-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .editathon-box {
   background: white;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
-  padding: 1.5rem;
+  padding: 0.75rem 1rem;
   transition: all 0.3s ease;
 }
 
@@ -296,11 +282,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .box-title {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #1f2937;
   margin: 0;
@@ -337,18 +323,18 @@ onMounted(async () => {
 
 .box-description {
   color: #6b7280;
-  font-size: 0.95rem;
-  margin-bottom: 1rem;
-  line-height: 1.5;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
 }
 
 .box-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 1rem;
+  padding-top: 0.75rem;
   border-top: 1px solid #f3f4f6;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .meta-item {
@@ -372,10 +358,10 @@ onMounted(async () => {
 }
 
 .note {
-  padding: 0.75rem;
+  padding: 0.6rem 0.75rem;
   border-radius: 6px;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
 }
 
 .note.warning {

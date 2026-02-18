@@ -6,9 +6,9 @@
 
     <div class="title-and-buttons">
       <h1 class="main-title">{{ editathon.name || 'Loading...' }}</h1>
-      <div class="action-buttons">
-        <router-link :to="`/editathon/${editathonId}/submit`" class="btn btn-submit">Submit Article</router-link>
-        <router-link :to="`/editathon/${editathonId}/articles`" class="btn btn-judge">Judge</router-link>
+      <div class="action-buttons" v-if="store.user">
+        <router-link v-if="!isCurrentUserJury && !isEditathonFinished" :to="`/editathon/${editathonId}/submit`" class="btn btn-submit">Submit Article</router-link>
+        <router-link v-if="isCurrentUserJury" :to="`/editathon/${editathonId}/review`" class="btn btn-judge">Judge</router-link>
       </div>
     </div>
 
@@ -25,106 +25,115 @@
       </span>
     </div>
 
-    <!-- Top Section: Overview and Top Contributors -->
-    <div class="top-section-layout">
-      <!-- Left: Editathon Overview -->
-      <div class="overview-panel">
-        <div class="stats-header">
-          <h2>📊 Editathon Overview</h2>
+    <!-- Main Content: Leaderboard and Side Panels -->
+    <div class="main-content-layout">
+      <!-- Left: Leaderboard Table -->
+      <div class="left-column">
+        <div class="leaderboard-card">
+          <table class="leaderboard">
+            <thead>
+              <tr><th>User</th><th>Articles</th><th>Points*</th></tr>
+            </thead>
+            <tbody>
+              <template v-for="user in leaderboard" :key="user.id">
+                <tr
+                  class="user-row"
+                  :class="{ expanded: expandedUser === user.id }"
+                  @click="toggleUserExpansion(user.id)"
+                >
+                  <td class="user-cell">
+                    <span class="expand-icon">{{ expandedUser === user.id ? '▼' : '▶' }}</span>
+                    <a :href="getUserWikipediaUrl(user.username)" target="_blank" class="wiki-user-link">{{ user.username }}</a>
+                  </td>
+                  <td>{{ user.articlesCount }}</td>
+                  <td>{{ user.totalPoints }}</td>
+                </tr>
+
+                <!-- Expanded Article Details -->
+                <tr v-if="expandedUser === user.id" :key="'details-' + user.id">
+                  <td colspan="3" class="article-details">
+                    <div v-for="article in user.articles" :key="article.id" class="article-item">
+                      <span class="article-info">
+                        <a
+                          :href="getWikipediaUrl(article.title)"
+                          target="_blank"
+                          class="article-title"
+                        >
+                          {{ article.title }}
+                        </a>
+                        <span class="article-meta">{{ formatArticleMeta(article) }}</span>
+                      </span>
+                      <span>{{ formatDate(article.addedOn) }}</span>
+                      <span class="article-points">{{ article.points || 0 }}</span>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
         </div>
-
-        <!-- Key Metrics -->
-        <div class="key-metrics">
-          <div class="metric-card primary">
-            <div class="metric-icon">👥</div>
-            <div class="metric-content">
-              <div class="metric-value">{{ stats.users }}</div>
-              <div class="metric-label">Total Participants</div>
-            </div>
-          </div>
-
-          <div class="metric-card success">
-            <div class="metric-icon">📝</div>
-            <div class="metric-content">
-              <div class="metric-value">{{ stats.articles }}</div>
-              <div class="metric-label">Total Articles</div>
-            </div>
-          </div>
-
-          <div class="metric-card info">
-            <div class="metric-icon">✅</div>
-            <div class="metric-content">
-              <div class="metric-value">{{ stats.marks }}</div>
-              <div class="metric-label">Articles Reviewed</div>
-            </div>
-          </div>
-
-          <div class="metric-card warning">
-            <div class="metric-icon">⏳</div>
-            <div class="metric-content">
-              <div class="metric-value">{{ stats.withoutMarks }}</div>
-              <div class="metric-label">Pending Review</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- User Statistics Minimal -->
-        <UserStatsMinimal />
       </div>
 
-      <!-- Right: Top Contributors -->
-      <div class="inspector-panel">
-        <TopContributors :leaderboard="leaderboard" :wikiLanguage="wikiLanguage" />
+      <!-- Right: Overview, Top Contributors -->
+      <div class="right-column">
+        <div class="overview-row">
+          <div class="overview-panel">
+            <div class="stats-header">
+              <h2>📊 Editathon Overview</h2>
+            </div>
+
+            <!-- Key Metrics -->
+            <div class="key-metrics">
+              <div class="metric-card primary">
+                <div class="metric-icon">👥</div>
+                <div class="metric-content">
+                  <div class="metric-value">{{ stats.users }}</div>
+                  <div class="metric-label">Participants</div>
+                </div>
+              </div>
+
+              <div class="metric-card success">
+                <div class="metric-icon">📝</div>
+                <div class="metric-content">
+                  <div class="metric-value">{{ stats.articles }}</div>
+                  <div class="metric-label">Articles</div>
+                </div>
+              </div>
+
+              <div class="metric-card info">
+                <div class="metric-icon">✅</div>
+                <div class="metric-content">
+                  <div class="metric-value">{{ stats.marks }}</div>
+                  <div class="metric-label">Reviewed</div>
+                </div>
+              </div>
+
+              <div class="metric-card warning">
+                <div class="metric-icon">⏳</div>
+                <div class="metric-content">
+                  <div class="metric-value">{{ stats.withoutMarks }}</div>
+                  <div class="metric-label">Pending</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- User Statistics Minimal inside same card -->
+            <div class="overview-user-stats">
+              <UserStatsMinimal />
+            </div>
+          </div>
+
+          <TopContributors :leaderboard="leaderboard" :wikiLanguage="wikiLanguage" />
+        </div>
       </div>
     </div>
 
-    <!-- Leaderboard Table -->
-    <table class="leaderboard">
-      <thead>
-        <tr><th>User</th><th>Articles</th><th>Points*</th></tr>
-      </thead>
-      <tbody>
-        <template v-for="user in leaderboard" :key="user.id">
-          <tr
-            class="user-row"
-            :class="{ expanded: expandedUser === user.id }"
-            @click="toggleUserExpansion(user.id)"
-          >
-            <td class="user-cell">
-              <span class="expand-icon">{{ expandedUser === user.id ? '▼' : '▶' }}</span>
-              <a :href="getUserWikipediaUrl(user.username)" target="_blank" class="wiki-user-link">{{ user.username }}</a>
-            </td>
-            <td>{{ user.articlesCount }}</td>
-            <td>{{ user.totalPoints }}</td>
-          </tr>
-
-          <!-- Expanded Article Details -->
-          <tr v-if="expandedUser === user.id" :key="'details-' + user.id">
-            <td colspan="3" class="article-details">
-              <div v-for="article in user.articles" :key="article.id" class="article-item">
-                <span class="article-info">
-                  <a
-                    :href="getWikipediaUrl(article.title)"
-                    target="_blank"
-                    class="article-title"
-                  >
-                    {{ article.title }}
-                  </a>
-                  <button 
-                    class="btn-judge-small" 
-                    @click="openArticleJudge(article)"
-                    title="Review this article"
-                  >📝</button>
-                  <span class="article-meta">{{ formatArticleMeta(article) }}</span>
-                </span>
-                <span>{{ formatDate(article.addedOn) }}</span>
-                <span class="article-points">{{ article.points || 0 }}</span>
-              </div>
-            </td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
+    <div class="charts-section">
+      <div class="charts-grid">
+        <UserArticlesChart :leaderboard="leaderboard" />
+        <EditathonOverviewChart :stats="stats" :editathon="editathon" />
+      </div>
+    </div>
 
     <!-- Jury Article List Modal -->
     <div v-if="showJudgeModal" class="modal-overlay" @click="showJudgeModal = false">
@@ -150,11 +159,6 @@
             >
               {{ article.title }}
             </a>
-            <button 
-              class="btn-judge-icon" 
-              @click="openArticleJudge(article)"
-              title="Review this article"
-            >📝</button>
             <div class="jury-review-status">
               <div
                 v-for="jury in juries"
@@ -287,14 +291,17 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { store } from '../store'
 import { fetchEditathonDashboard, judgeArticle as judgeArticleAPI, findArticleWithFallback } from '../services/api'
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Chart, BarController } from 'chart.js'
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Chart, BarController, PointElement, LineElement, Filler, ArcElement } from 'chart.js'
 import TopContributors from '../components/TopContributors.vue'
 import UserStatsMinimal from '../components/UserStatsMinimal.vue'
 import WikipediaArticleViewer from '../components/WikipediaArticleViewer.vue'
+import UserArticlesChart from '../components/UserArticlesChart.vue'
+import EditathonOverviewChart from '../components/EditathonOverviewChart.vue'
 
 // Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, BarController)
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, BarController, PointElement, LineElement, Filler, ArcElement)
 
 const route = useRoute()
 const router = useRouter()
@@ -332,6 +339,33 @@ const totalAccepted = computed(() => {
   return leaderboard.value.reduce((total, user) => {
     return total + user.articles.filter(article => article.points > 0).length
   }, 0)
+})
+
+// Check if current user is a jury member
+const isCurrentUserJury = computed(() => {
+  if (!store.user || !juries.value || juries.value.length === 0) {
+    return false
+  }
+  return juries.value.some(jury => jury.username === store.user.username)
+})
+
+// Check if editathon has finished
+const isEditathonFinished = computed(() => {
+  if (!editathon.value) return false
+  
+  // Check status
+  if (editathon.value.status === 'completed' || editathon.value.status === 'archived') {
+    return true
+  }
+  
+  // Check end date
+  const endDate = editathon.value.end_date || editathon.value.endDate
+  if (endDate) {
+    const end = new Date(endDate)
+    return end < new Date()
+  }
+  
+  return false
 })
 
 // Computed for charts
@@ -456,9 +490,9 @@ async function openArticleJudge(article) {
                  ⚠️ Article not found in ${wikiLanguage.value.toUpperCase()}, showing ${foundLanguage.toUpperCase()} version
                  ${result.totalLanguages > 1 ? ` • Available in ${result.totalLanguages} languages` : ''}
                </div>`
-            : result.totalLanguages > 1 
-              ? `<div class="language-info">ℹ️ Available in ${result.totalLanguages} languages</div>`
-              : ''
+            : (result.totalLanguages > 1 
+               ? `<div class="language-info">ℹ️ Available in ${result.totalLanguages} languages</div>`
+               : '')
           
           articleHTML.value = `
             <div class="wiki-full-article">
@@ -654,11 +688,6 @@ onMounted(async () => {
   margin-bottom: 30px; 
 }
 
-.pencil-icon { 
-  float: left; 
-  margin-right: 10px; 
-  font-size: 24px; 
-}
 
 .main-title {
   font-size: 24px;
@@ -798,19 +827,69 @@ onMounted(async () => {
 .leaderboard { 
   width: 100%; 
   border-collapse: collapse; 
-  font-size: 15px; 
+  font-size: 13px; 
 }
 
 .leaderboard th, .leaderboard td { 
-  padding: 8px 0; 
+  padding: 4px 0; 
   text-align: left; 
   border-bottom: 1px solid #eaeaeb; 
 }
 
 .leaderboard th { 
-  font-weight: bold; 
+  font-weight: 600; 
   color: #54595d; 
   border-bottom: 2px solid #a2a9b1; 
+}
+
+.leaderboard-card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.mini-leaderboard-card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.mini-leaderboard-header {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.mini-leaderboard {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.mini-leaderboard th,
+.mini-leaderboard td {
+  padding: 3px 0;
+  text-align: left;
+}
+
+.mini-leaderboard th:last-child,
+.mini-leaderboard td:last-child {
+  text-align: right;
+}
+
+.mini-user {
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-points {
+  font-weight: 600;
 }
 
 .leaderboard th:last-child, .leaderboard td:last-child { 
@@ -866,35 +945,6 @@ onMounted(async () => {
   font-weight: bold; 
 }
 
-.btn-judge-small {
-  background: none;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 5px;
-  margin-left: 8px;
-  opacity: 0.6;
-  transition: opacity 0.2s;
-}
-
-.btn-judge-small:hover {
-  opacity: 1;
-}
-
-.btn-judge-icon {
-  background: none;
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0 8px;
-  margin-left: 10px;
-  opacity: 0.6;
-  transition: opacity 0.2s;
-}
-
-.btn-judge-icon:hover {
-  opacity: 1;
-}
 
 .modal-overlay { 
   position: fixed; 
@@ -1652,21 +1702,42 @@ onMounted(async () => {
   margin-left: auto;
 }
 
-/* Top Section Layout */
-.top-section-layout {
+/* Main Content Layout */
+.main-content-layout {
   display: grid;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: 1.7fr 1.1fr;
   gap: 2rem;
   margin: 2rem 0;
   padding: 0 1rem;
 }
 
+.left-column {
+  min-width: 0;
+}
+
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.overview-row {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.overview-user-stats {
+  margin-top: 0.6rem;
+}
+
 /* Overview Panel */
 .overview-panel {
   background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  padding: 0.8rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 /* Charts Section (Bottom) */
@@ -1678,34 +1749,47 @@ onMounted(async () => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .stats-header h2 {
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #111827;
-  margin: 0 0 1.5rem 0;
+  margin: 0 0 0.5rem 0;
 }
 
 /* Key Metrics Cards */
 .key-metrics {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .metric-card {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  border-radius: 8px;
-  border-left: 4px solid;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border-left: 3px solid;
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
 }
 
 .metric-card.primary {
@@ -1729,7 +1813,7 @@ onMounted(async () => {
 }
 
 .metric-icon {
-  font-size: 2rem;
+  font-size: 1.25rem;
 }
 
 .metric-content {
@@ -1737,19 +1821,19 @@ onMounted(async () => {
 }
 
 .metric-value {
-  font-size: 1.75rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #111827;
   line-height: 1;
 }
 
 .metric-label {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 0.25rem;
+  letter-spacing: 0.3px;
+  margin-top: 0.2rem;
 }
 
 /* Chart Sections */

@@ -1,21 +1,21 @@
 <template>
-  <div class="container container-max py-4">
-    <div class="d-flex justify-content-end align-items-center mb-3">
-      <router-link to="/create" class="btn btn-primary">Create New Editathon</router-link>
+  <div class="container container-max py-1">
+    <div class="d-flex justify-content-end align-items-center mb-1">
+      <router-link to="/create" class="btn btn-primary btn-sm" v-if="store.user" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Create New Editathon</router-link>
     </div>
 
     <!-- Timeline Component -->
     <EditathonTimeline />
 
-    <h4 class="mt-4">Ongoing</h4>
-    <div class="row mt-2">
+    <h6 class="mt-1 mb-1" style="font-size: 0.9rem; font-weight: 600;">Ongoing</h6>
+    <div class="row mt-0 g-1">
       <div class="col-md-6" v-for="e in ongoingEditathons" :key="e.id">
         <EditathonCard :editathon="e" />
       </div>
     </div>
 
-    <h4 class="mt-4">Finished</h4>
-    <div class="row mt-2">
+    <h6 class="mt-1 mb-1" style="font-size: 0.9rem; font-weight: 600;">Finished</h6>
+    <div class="row mt-0 g-1">
       <div class="col-md-6" v-for="e in finishedEditathons" :key="e.id">
         <EditathonCard :editathon="e" />
       </div>

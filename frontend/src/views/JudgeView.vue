@@ -106,17 +106,19 @@
               </div>
             </div>
 
-            <div class="decision-section">
-              <div class="section-title">✅ Review Decision</div>
-              <div class="decision-buttons">
-                <button class="btn-accept" @click="handleVote('accept')">✓ Accept</button>
-                <button class="btn-reject" @click="handleVote('reject')">✕ Reject</button>
+            <div class="review-card">
+              <div class="card-section">
+                <div class="section-label">✅ Decision</div>
+                <div class="decision-buttons">
+                  <button class="btn-accept" @click="handleVote('accept')">✓ Accept</button>
+                  <button class="btn-reject" @click="handleVote('reject')">✕ Reject</button>
+                </div>
               </div>
-            </div>
 
-            <div class="comment-section">
-              <div class="section-title">💬 Comment</div>
-              <textarea v-model="judgeComment" placeholder="Add your review comments..."></textarea>
+              <div class="card-section">
+                <div class="section-label">💬 Comment</div>
+                <textarea v-model="judgeComment" placeholder="Add your review comments..."></textarea>
+              </div>
             </div>
           </div>
         </div>
@@ -129,6 +131,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { fetchEditathon } from '../services/api'
+import { store } from '../store'
 import axios from 'axios'
 
 const router = useRouter()
@@ -185,6 +188,14 @@ onMounted(async () => {
   
   if(data.juries && data.juries.length > 0) {
     juries.value = data.juries
+  }
+  
+  // Check if current user is a jury member
+  const isJury = store.user && juries.value.some(jury => jury.username === store.user.username)
+  if (!isJury) {
+    alert('Access denied: Only jury members can judge articles')
+    router.push(`/editathon/${editId.value}`)
+    return
   }
 })
 
@@ -701,86 +712,121 @@ function toggleJuryMark(articleId, juryUsername) {
 }
 
 .review-sidebar {
-  width: 320px;
+  width: 280px;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
 }
 
 .user-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
   background: #f9f9f9;
   border-bottom: 1px solid #eee;
 }
 
 .avatar {
-  font-size: 2rem;
+  font-size: 1.3rem;
 }
 
 .user-name {
   font-weight: 600;
+  font-size: 0.9rem;
 }
 
 .user-role {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   color: #888;
 }
 
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.4rem;
+  padding: 0.5rem;
   border-bottom: 1px solid #eee;
 }
 
 .info-item {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 0.2rem;
+  padding: 0.5rem 0.3rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.info-item:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .info-item .icon {
-  font-size: 1.1rem;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .info-item .label {
-  font-size: 0.65rem;
-  color: #888;
+  font-size: 0.55rem;
+  color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .info-item .value {
-  font-weight: 500;
-  font-size: 0.9rem;
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: #111827;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
-.decision-section, .comment-section {
-  padding: 1rem;
-  border-bottom: 1px solid #eee;
+.review-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-.section-title {
+.card-section {
+  padding: 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.card-section:last-child {
+  border-bottom: none;
+}
+
+.section-label {
   font-weight: 600;
-  margin-bottom: 0.75rem;
+  font-size: 0.7rem;
+  margin-bottom: 0.4rem;
+  color: #333;
 }
 
 .decision-buttons {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.3rem;
 }
 
 .btn-accept, .btn-reject {
   flex: 1;
-  padding: 0.6rem;
+  padding: 0.35rem 0.3rem;
   border: 2px solid;
   border-radius: 4px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 0.7rem;
 }
 
 .btn-accept {
@@ -805,14 +851,15 @@ function toggleJuryMark(articleId, juryUsername) {
   color: white;
 }
 
-.comment-section textarea {
+.card-section textarea {
   width: 100%;
-  min-height: 100px;
-  padding: 0.75rem;
+  min-height: 40px;
+  padding: 0.4rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   resize: vertical;
   font-family: inherit;
+  font-size: 0.7rem;
 }
 
 /* WikiLite-style Search Box */

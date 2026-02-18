@@ -63,6 +63,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { store } from '../store'
 
 const router = useRouter()
 const route = useRoute()
@@ -76,57 +77,68 @@ onMounted(() => {
   loadData()
 })
 
-function loadData() {
+async function loadData() {
   const editathonId = route.params.id
-  
-  // Fetch editathon data from backend
-  fetch(`http://localhost:5000/api/editathon/${editathonId}`)
-    .then(response => response.json())
-    .then(data => {
-      // Load wiki language from editathon
-      wikiLanguage.value = data.editathon?.wiki_language || 'en'
-      
-      // Load juries from editathon
-      juries.value = data.juries || []
-      
-      // Load articles from editathon leaderboard
-      const articlesSet = new Set()
-      const articlesMap = {}
-      
-      if (data.leaderboard) {
-        data.leaderboard.forEach((user, userIndex) => {
-          if (user.articles) {
-            user.articles.forEach((article, articleIndex) => {
-              const key = article.title
-              if (!articlesMap[key]) {
-                articlesMap[key] = {
-                  id: articlesSet.size + 1,
-                  title: article.title,
-                  author: article.author
-                }
-                articlesSet.add(key)
+
+  try {
+    // Fetch editathon data and jury reviews in parallel
+    const [editathonRes, reviewsRes] = await Promise.all([
+      fetch(`http://localhost:5000/api/editathon/${editathonId}`),
+      fetch(`http://localhost:5000/api/editathon/${editathonId}/jury-reviews`)
+    ])
+
+    const data = await editathonRes.json()
+    const reviewsData = await reviewsRes.json()
+
+    // Load wiki language
+    wikiLanguage.value = data.editathon?.wiki_language || 'en'
+
+    // Load juries
+    juries.value = data.juries || []
+    
+    // Check if current user is a jury member
+    const isJury = store.user && juries.value.some(jury => jury.username === store.user.username)
+    if (!isJury) {
+      alert('Access denied: Only jury members can view jury article reviews')
+      router.push(`/editathon/${editathonId}`)
+      return
+    }
+
+    // Load articles from leaderboard (use real DB id)
+    const articlesMap = {}
+    if (data.leaderboard) {
+      data.leaderboard.forEach(user => {
+        if (user.articles) {
+          user.articles.forEach(article => {
+            if (!articlesMap[article.title]) {
+              articlesMap[article.title] = {
+                id: article.id,
+                title: article.title,
+                author: article.author
               }
-            })
-          }
-        })
-      }
-      
-      articles.value = Object.values(articlesMap)
-      
-      // Initialize review status
-      articles.value.forEach(article => {
-        reviewStatus.value[article.id] = {}
-        juries.value.forEach(jury => {
-          reviewStatus.value[article.id][jury.id] = false
-        })
+            }
+          })
+        }
+      })
+    }
+
+    articles.value = Object.values(articlesMap)
+
+    // Build reviewStatus from saved backend data
+    // reviewsData.reviews = { article_id: [jury_username, ...] }
+    const savedReviews = reviewsData.reviews || {}
+    articles.value.forEach(article => {
+      reviewStatus.value[article.id] = {}
+      juries.value.forEach(jury => {
+        const reviewedBy = savedReviews[article.id] || []
+        reviewStatus.value[article.id][jury.id] = reviewedBy.includes(jury.username)
       })
     })
-    .catch(error => {
-      console.error('Error loading editathon data:', error)
-      // Fallback to empty data
-      juries.value = []
-      articles.value = []
-    })
+  } catch (error) {
+    console.error('Error loading editathon data:', error)
+    juries.value = []
+    articles.value = []
+  }
 }
 
 function getWikipediaUrl(title) {
@@ -137,11 +149,34 @@ function isArticleReviewedBy(article, jury) {
   return reviewStatus.value[article.id]?.[jury.id] || false
 }
 
-function toggleReview(article, jury) {
+async function toggleReview(article, jury) {
   if (!reviewStatus.value[article.id]) {
     reviewStatus.value[article.id] = {}
   }
-  reviewStatus.value[article.id][jury.id] = !reviewStatus.value[article.id][jury.id]
+  const newValue = !reviewStatus.value[article.id][jury.id]
+  reviewStatus.value[article.id][jury.id] = newValue
+
+  try {
+    const res = await fetch('http://localhost:5000/api/jury-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        article_id: article.id,
+        jury_username: jury.username,
+        checked: newValue
+      })
+    })
+    const result = await res.json()
+    if (!result.success) {
+      // Revert on failure
+      reviewStatus.value[article.id][jury.id] = !newValue
+      console.error('Failed to save review:', result.error)
+    }
+  } catch (err) {
+    // Revert on network error
+    reviewStatus.value[article.id][jury.id] = !newValue
+    console.error('Network error saving review:', err)
+  }
 }
 
 function openArticleReview(article) {
@@ -163,8 +198,8 @@ function getWikipediaIframeUrl(title) {
 }
 
 function saveJuryReviews() {
-  console.log('Saving jury reviews...', reviewStatus.value)
-  // Call API to save reviews
+  // All changes are already saved on toggle — just go back
+  goBack()
 }
 
 function goBack() {

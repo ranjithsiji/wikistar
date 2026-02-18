@@ -405,44 +405,44 @@ async function saveAll() {
 .create-editathon-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  padding: 2rem 0;
+  padding: 1rem 0;
 }
 
 .container {
   max-width: 900px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 15px;
 }
 
 .header-section {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .page-title {
-  font-size: 2.5rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #2c3e50;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .page-subtitle {
   color: #7f8c8d;
-  font-size: 1.1rem;
+  font-size: 0.85rem;
 }
 
 /* Progress Indicator */
 .progress-indicator {
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .progress-bar-container {
   width: 100%;
-  height: 8px;
+  height: 6px;
   background-color: #e9ecef;
   border-radius: 10px;
   overflow: hidden;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .progress-bar {
@@ -476,8 +476,8 @@ async function saveAll() {
 }
 
 .step-circle {
-  width: 50px;
-  height: 50px;
+  width: 35px;
+  height: 35px;
   border-radius: 50%;
   background-color: #e9ecef;
   color: #6c757d;
@@ -485,11 +485,11 @@ async function saveAll() {
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  margin-bottom: 0.5rem;
-  border: 4px solid white;
+  margin-bottom: 0.3rem;
+  border: 3px solid white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
 }
 
 .progress-step.active .step-circle {
@@ -505,7 +505,7 @@ async function saveAll() {
 }
 
 .step-label {
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   color: #6c757d;
   font-weight: 600;
   text-align: center;
@@ -529,7 +529,7 @@ async function saveAll() {
 }
 
 .tab-header {
-  padding: 1.5rem 2rem;
+  padding: 0.75rem 1.25rem;
   border-bottom: 2px solid #f0f0f0;
   display: flex;
   justify-content: space-between;
@@ -540,25 +540,25 @@ async function saveAll() {
 
 .tab-header h2 {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: 1.2rem;
   font-weight: 600;
 }
 
 .step-counter {
   background: rgba(255, 255, 255, 0.2);
-  padding: 0.5rem 1rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 20px;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
 .tab-body {
-  padding: 2rem;
-  min-height: 400px;
+  padding: 1rem 1.25rem;
+  min-height: 350px;
 }
 
 .tab-footer {
-  padding: 1.5rem 2rem;
+  padding: 0.75rem 1.25rem;
   border-top: 2px solid #f0f0f0;
   display: flex;
   justify-content: space-between;
@@ -575,9 +575,9 @@ async function saveAll() {
 .validation-summary {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   color: #dc3545;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -587,18 +587,18 @@ async function saveAll() {
 
 /* Button Styling */
 .btn {
-  padding: 0.75rem 2rem;
+  padding: 0.5rem 1.25rem;
   border: none;
-  border-radius: 8px;
-  font-size: 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  min-width: 130px;
+  min-width: 100px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .btn-secondary {

@@ -1,5 +1,10 @@
 <template>
   <div class="template-tab">
+    <!-- Header Section -->
+    <div class="template-header">
+      <h3>Template Configuration</h3>
+    </div>
+
     <!-- Automatically add template -->
     <div class="checkbox-section">
       <label class="checkbox-label">
@@ -176,26 +181,39 @@ watch(() => props.editathon?._templateSaved, (newSaved) => {
   padding: 0;
 }
 
+.template-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.template-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 /* Checkbox Section */
 .checkbox-section {
-  margin-bottom: 2rem;
-  padding: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
   background: #f8f9fa;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   cursor: pointer;
   font-weight: 600;
   color: #2c3e50;
+  font-size: 0.85rem;
 }
 
 .checkbox-label input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   cursor: pointer;
 }
 
@@ -203,26 +221,26 @@ watch(() => props.editathon?._templateSaved, (newSaved) => {
 .form-section {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.75rem;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.3rem;
 }
 
 .form-group label {
   font-weight: 600;
   color: #2c3e50;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
 }
 
 .input {
-  padding: 0.6rem;
+  padding: 0.5rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   transition: border-color 0.2s;
 }
 
@@ -235,8 +253,8 @@ watch(() => props.editathon?._templateSaved, (newSaved) => {
 /* Radio Group */
 .radio-group {
   display: flex;
-  gap: 1.5rem;
-  margin-top: 0.5rem;
+  gap: 1rem;
+  margin-top: 0.3rem;
 }
 
 .radio-label {

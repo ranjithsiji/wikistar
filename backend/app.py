@@ -168,7 +168,7 @@ class Editathon(db.Model):
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
     wiki_domain = db.Column(db.String(100), default='en.wikipedia.org')
-    status = db.Column(db.Enum('draft', 'active', 'completed', 'archived'), default='draft')
+    status = db.Column(db.Enum('draft', 'pending', 'active', 'completed', 'archived', 'rejected'), default='draft')
     min_marks_needed = db.Column(db.Integer, default=1)
     marks_config = db.Column(db.JSON)
     is_published = db.Column(db.Boolean, default=False)
@@ -386,6 +386,7 @@ def get_personal_cabinet(username):
                 'name': editathon.name,
                 'description': editathon.description,
                 'status': editathon.status,
+                'language': editathon.language,
                 'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
                 'end_date': editathon.end_date.isoformat() if editathon.end_date else None
             }
@@ -613,11 +614,16 @@ def get_editathon_dashboard(editathon_id):
             'editathon': {
                 'id': editathon.id,
                 'name': editathon.name,
+                'code': editathon.code,
                 'status': editathon.status,
                 'description': editathon.description,
                 'wiki_language': editathon.language,
+                'wiki_domain': editathon.wiki_domain,
                 'project': project_label,
                 'project_domain': project_obj.name if project_obj else None,
+                'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
+                'end_date': editathon.end_date.isoformat() if editathon.end_date else None,
+                'marks_config': editathon.marks_config,
                 'rules': rules
             },
             'stats': {
@@ -677,6 +683,31 @@ def get_all_editathons():
         return jsonify({"error": str(e)}), 500
 
 # 4. Submit Article to Editathon (New Schema)
+@app.route('/api/editathon/<int:editathon_id>', methods=['DELETE'])
+def delete_editathon(editathon_id):
+    try:
+        editathon = Editathon.query.get(editathon_id)
+        if not editathon:
+            return jsonify({"error": "Editathon not found"}), 404
+
+        # Delete related records first (foreign key order)
+        Mark.query.filter(
+            Mark.article_id.in_(
+                db.session.query(Article.id).filter_by(editathon_id=editathon_id)
+            )
+        ).delete(synchronize_session='fetch')
+        Article.query.filter_by(editathon_id=editathon_id).delete()
+        EditathonJury.query.filter_by(editathon_id=editathon_id).delete()
+        EditathonRule.query.filter_by(editathon_id=editathon_id).delete()
+        EditathonStat.query.filter_by(editathon_id=editathon_id).delete()
+
+        db.session.delete(editathon)
+        db.session.commit()
+        return jsonify({"success": True, "message": f"Editathon {editathon_id} deleted"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/editathon/<editathon_id>/submit', methods=['POST'])
 def submit_article(editathon_id):
     try:
@@ -936,6 +967,111 @@ def create_new_editathon():
         print(f"Error creating editathon: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/editathon/<int:editathon_id>', methods=['PUT'])
+def update_editathon(editathon_id):
+    """Update an existing editathon (for editing draft/pending editathons before approval)."""
+    try:
+        editathon = Editathon.query.get(editathon_id)
+        if not editathon:
+            return jsonify({"error": "Editathon not found"}), 404
+
+        data = request.json
+        from datetime import datetime
+
+        # Update basic fields
+        if data.get('title'):
+            editathon.name = data['title']
+        if data.get('description') is not None:
+            editathon.description = data['description']
+        if data.get('wiki_language'):
+            editathon.language = data['wiki_language']
+            editathon.wiki_domain = f"{data['wiki_language']}.wikipedia.org"
+        if data.get('startDate'):
+            editathon.start_date = datetime.strptime(data['startDate'], '%Y-%m-%d').date()
+        if data.get('endDate'):
+            editathon.end_date = datetime.strptime(data['endDate'], '%Y-%m-%d').date()
+        if data.get('code'):
+            editathon.code = data['code']
+
+        # Update project
+        if data.get('project'):
+            project = Project.query.filter_by(name=data['project']).first()
+            if not project:
+                creator = User.query.get(editathon.created_by)
+                project = Project(
+                    name=data['project'],
+                    description=f"Project for {data['project']}",
+                    created_by=creator.id if creator else None
+                )
+                db.session.add(project)
+                db.session.flush()
+            editathon.project_id = project.id
+
+        # Update marks config
+        marks_data = data.get('marks', [])
+        if marks_data:
+            editathon.marks_config = {
+                'marks': marks_data,
+                'hidden_marks': data.get('hiddenMarks', False),
+                'consensual_vote': data.get('consensualVote', False)
+            }
+
+        # Re-set status to draft so it goes back for approval
+        editathon.status = 'draft'
+
+        # Update jury: remove old assignments, add new ones
+        EditathonJury.query.filter_by(editathon_id=editathon_id).delete()
+        jury_data = data.get('jury', [])
+        for jury_member in jury_data:
+            if isinstance(jury_member, dict) and jury_member.get('username'):
+                username = jury_member['username']
+                jury_user = User.query.filter_by(username=username).first()
+                if not jury_user:
+                    jury_user = User(
+                        username=username,
+                        email=f"{username}@wikipedia.org",
+                        password_hash='oauth_user',
+                        role='jury'
+                    )
+                    db.session.add(jury_user)
+                    db.session.flush()
+                db.session.add(EditathonJury(
+                    editathon_id=editathon.id,
+                    user_id=jury_user.id,
+                    role='main'
+                ))
+
+        # Update rules: remove old, add new
+        old_rule_links = EditathonRule.query.filter_by(editathon_id=editathon_id).all()
+        for link in old_rule_links:
+            db.session.delete(link)
+        db.session.flush()
+
+        rules_data = data.get('rules', [])
+        creator = User.query.get(editathon.created_by)
+        for rule_data in rules_data:
+            if isinstance(rule_data, dict) and rule_data.get('type'):
+                rule = Rule(
+                    name=rule_data.get('type', 'Rule'),
+                    rule_type=rule_data.get('type', 'custom'),
+                    condition_text=str(rule_data.get('config', {})),
+                    description=rule_data.get('description', ''),
+                    created_by=creator.id if creator else None
+                )
+                db.session.add(rule)
+                db.session.flush()
+                db.session.add(EditathonRule(
+                    editathon_id=editathon.id,
+                    rule_id=rule.id,
+                    is_active=True
+                ))
+
+        db.session.commit()
+        return jsonify({"success": True, "id": editathon.id, "status": editathon.status})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 # Get Draft Editathons for Approval (Admin only)
 @app.route('/api/editathons/pending', methods=['GET'])
 def get_pending_editathons():
@@ -945,18 +1081,23 @@ def get_pending_editathons():
         result = []
         for editathon in pending_editathons:
             creator = User.query.get(editathon.created_by)
+            project_obj = Project.query.get(editathon.project_id) if editathon.project_id else None
             result.append({
                 'id': editathon.id,
                 'code': editathon.code,
+                # Use field names that match ApprovalQueue.vue template
+                'title': editathon.name,
                 'name': editathon.name,
                 'description': editathon.description,
-                'language': editathon.language,
-                'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
-                'end_date': editathon.end_date.isoformat() if editathon.end_date else None,
-                'created_by': creator.username if creator else 'Unknown',
+                'wiki_language': editathon.language,
+                'project': project_obj.name if project_obj else editathon.wiki_domain or 'N/A',
+                'startDate': editathon.start_date.isoformat() if editathon.start_date else None,
+                'endDate': editathon.end_date.isoformat() if editathon.end_date else None,
+                'submissionDate': editathon.created_at.isoformat() if editathon.created_at else None,
+                'createdBy': creator.username if creator else 'Unknown',
                 'status': editathon.status
             })
-        
+
         return jsonify({
             "success": True,
             "editathons": result,
@@ -1075,6 +1216,74 @@ def submit_article_to_editathon():
         })
     except Exception as e:
         db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# Jury review checkbox toggle (simple checked/unchecked per jury per article)
+@app.route('/api/jury-review', methods=['POST'])
+def jury_review_toggle():
+    """Toggle or set a jury review mark for an article (simple checkbox model)."""
+    try:
+        data = request.json
+        article_id = data.get('article_id')
+        jury_username = data.get('jury_username')
+        checked = data.get('checked', True)  # True = reviewed, False = un-reviewed
+
+        if not article_id or not jury_username:
+            return jsonify({"error": "article_id and jury_username are required"}), 400
+
+        # Find article
+        article = Article.query.get(article_id)
+        if not article:
+            return jsonify({"error": "Article not found"}), 404
+
+        # Find jury user (create if not exists so dev mode works without strict roles)
+        jury_user = User.query.filter_by(username=jury_username).first()
+        if not jury_user:
+            return jsonify({"error": f"User '{jury_username}' not found"}), 404
+
+        # Find existing mark
+        mark = Mark.query.filter_by(article_id=article.id, jury_id=jury_user.id).first()
+
+        if checked:
+            if mark:
+                # Already exists — update decision to 'accept' to mark reviewed
+                mark.decision = 'accept'
+            else:
+                mark = Mark(
+                    article_id=article.id,
+                    jury_id=jury_user.id,
+                    criteria_scores={},
+                    total_score=0,
+                    decision='accept'
+                )
+                db.session.add(mark)
+        else:
+            # Un-check: delete the mark if it exists
+            if mark:
+                db.session.delete(mark)
+
+        db.session.commit()
+        return jsonify({"success": True, "checked": checked, "article_id": article_id, "jury_username": jury_username})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# Get all jury reviews for an editathon (returns article_id -> [jury_usernames that reviewed])
+@app.route('/api/editathon/<int:editathon_id>/jury-reviews', methods=['GET'])
+def get_jury_reviews(editathon_id):
+    try:
+        articles = Article.query.filter_by(editathon_id=editathon_id).all()
+        result = {}
+        for article in articles:
+            marks = Mark.query.filter_by(article_id=article.id).all()
+            reviewers = []
+            for mark in marks:
+                jury = User.query.get(mark.jury_id)
+                if jury:
+                    reviewers.append(jury.username)
+            result[article.id] = reviewers
+        return jsonify({"reviews": result})
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # Add marks (new schema)

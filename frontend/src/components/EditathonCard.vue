@@ -1,24 +1,24 @@
 <template>
-  <div class="card editathon-card mb-3" v-if="editathon">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-start mb-2">
+  <div class="card editathon-card mb-0" v-if="editathon">
+    <div class="card-body" style="padding: 0.4rem;">
+      <div class="d-flex justify-content-between align-items-start mb-0">
         <router-link :to="`/editathon/${editathon.id}`" class="card-title-link">
-          <h5 class="card-title mb-0">{{ editathon.name || 'Unnamed Editathon' }}</h5>
+          <h6 class="card-title mb-0" style="font-size: 0.85rem;">{{ editathon.name || 'Unnamed Editathon' }}</h6>
         </router-link>
       </div>
-      <p class="text-muted mb-1">{{ shortRange(editathon.startDate, editathon.endDate) }}</p>
-      <p class="small text-muted meta-line">
+      <p class="text-muted mb-0" style="font-size: 0.7rem;">{{ shortRange(editathon.startDate, editathon.endDate) }}</p>
+      <p class="text-muted meta-line mb-0" style="font-size: 0.7rem;">
         {{ (editathon.language || 'en').toUpperCase() }} · {{ editathon.project || 'Wikimedia Project' }}
       </p>
-      <p class="small text-muted">{{ editathon.description || '' }}</p>
-      <div>
-        <span v-for="j in (editathon.juries || [])" :key="j.id" class="badge badge-jury me-1">{{ j.username }}</span>
+      <p class="text-muted mb-0" style="font-size: 0.7rem; line-height: 1.2;">{{ editathon.description || '' }}</p>
+      <div style="margin-top: 0.2rem;">
+        <span v-for="j in (editathon.juries || [])" :key="j.id" class="badge badge-jury me-1" style="font-size: 0.65rem; padding: 0.1rem 0.3rem;">{{ j.username }}</span>
       </div>
     </div>
   </div>
-  <div v-else class="card editathon-card mb-3">
-    <div class="card-body">
-      <p class="text-muted">Loading editathon...</p>
+  <div v-else class="card editathon-card mb-0">
+    <div class="card-body" style="padding: 0.4rem;">
+      <p class="text-muted small">Loading editathon...</p>
     </div>
   </div>
 </template>

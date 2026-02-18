@@ -17,7 +17,7 @@
               type="text" 
               v-model="articleTitle"
               @input="searchWikipediaArticles"
-              placeholder="Search titles across Wikimedia projects"
+              placeholder="Search article titles"
               autocomplete="off"
               class="search-input"
             >
@@ -131,6 +131,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchEditathonDashboard, findArticleWithFallback } from '../services/api'
+import { store } from '../store'
 
 const route = useRoute()
 const router = useRouter()
@@ -433,6 +434,27 @@ onMounted(async () => {
     const data = await fetchEditathonDashboard(editathonId.value)
     editathon.value = data.editathon
     wikiLanguage.value = data.editathon?.wiki_language || 'ml'
+    
+    // Check if editathon has finished
+    const isFinished = data.editathon?.status === 'completed' || data.editathon?.status === 'archived'
+    const endDate = data.editathon?.end_date || data.editathon?.endDate
+    const hasEndDatePassed = endDate && new Date(endDate) < new Date()
+    
+    if (isFinished || hasEndDatePassed) {
+      alert('Cannot submit articles: This editathon has finished')
+      router.push(`/editathon/${editathonId.value}`)
+      return
+    }
+    
+    // Check if current user is a jury member
+    const juries = data.juries || []
+    const isJury = store.user && juries.some(jury => jury.username === store.user.username)
+    if (isJury) {
+      alert('Access denied: Jury members cannot submit articles')
+      router.push(`/editathon/${editathonId.value}`)
+      return
+    }
+    
     evaluateRules()
     
     // Check for pre-filled title from query params AFTER loading language
@@ -463,11 +485,11 @@ onMounted(async () => {
 }
 
 .step-container.compact .modal-header {
-  padding: 16px 28px;
+  padding: 10px 20px;
 }
 
 .step-container.compact .page-title {
-  font-size: 20px;
+  font-size: 16px;
 }
 
 .step-container.full-height {
@@ -476,7 +498,7 @@ onMounted(async () => {
 }
 
 .modal-header {
-  padding: 20px 40px;
+  padding: 12px 24px;
   border-bottom: 1px solid #eee;
   background: white;
   display: flex;
@@ -486,17 +508,17 @@ onMounted(async () => {
 
 .page-title {
   margin: 0;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: normal;
 }
 
 .close-btn {
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: 20px;
   cursor: pointer;
   color: #333;
-  padding: 5px;
+  padding: 3px;
 }
 
 .close-btn:hover {
@@ -513,16 +535,16 @@ onMounted(async () => {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 40px 24px 64px;
+  padding: 20px 16px 32px;
 }
 
 
 .search-card {
   width: min(1100px, 100%);
   background: white;
-  padding: 40px 48px;
-  border-radius: 18px;
-  box-shadow: 0 18px 55px rgba(15, 23, 42, 0.12);
+  padding: 20px 28px;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.1);
   border: 1px solid #d7e0f5;
 }
 
@@ -531,29 +553,29 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: baseline;
   gap: 1rem;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .search-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 16px;
   color: #0f172a;
   font-weight: 600;
 }
 
 .search-hint {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
 }
 
 .search-container {
   position: relative;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .search-container.condensed {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .search-input-wrapper {
@@ -572,10 +594,10 @@ onMounted(async () => {
 
 .search-input {
   width: 100%;
-  padding: 14px 18px;
-  font-size: 16px;
+  padding: 10px 14px;
+  font-size: 14px;
   border: 1px solid #cbd5f5;
-  border-radius: 10px;
+  border-radius: 8px;
   box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -587,9 +609,10 @@ onMounted(async () => {
 }
 
 .loading-indicator {
-  padding: 10px;
+  padding: 8px;
   text-align: center;
   color: #666;
+  font-size: 13px;
 }
 
 .suggestions-dropdown {
@@ -608,7 +631,7 @@ onMounted(async () => {
 }
 
 .suggestion-item {
-  padding: 12px;
+  padding: 8px;
   cursor: pointer;
   border-bottom: 1px solid #f0f0f0;
 }
@@ -623,6 +646,7 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: 14px;
 }
 
 .lang-badge {
@@ -635,21 +659,22 @@ onMounted(async () => {
 }
 
 .suggestion-description {
-  font-size: 13px;
+  font-size: 12px;
   color: #666;
 }
 
 .no-results {
-  padding: 12px;
+  padding: 8px;
   text-align: left;
   color: #999;
+  font-size: 13px;
 }
 
 .action-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 12px;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .action-buttons.compact {
@@ -657,8 +682,8 @@ onMounted(async () => {
 }
 
 .btn {
-  padding: 10px 20px;
-  font-size: 16px;
+  padding: 8px 16px;
+  font-size: 14px;
   border: none;
   border-radius: 3px;
   cursor: pointer;
@@ -710,7 +735,7 @@ onMounted(async () => {
 }
 
 .review-sidebar {
-  padding: 30px;
+  padding: 12px;
   overflow: hidden;
   border-left: 1px solid #eee;
   background: white;
@@ -722,28 +747,31 @@ onMounted(async () => {
 }
 
 .article-heading {
-  font-size: 22px;
+  font-size: 16px;
   margin-top: 0;
   color: #0645ad;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
   flex-shrink: 0;
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 
 .metadata-box {
-  flex: 1;
+  flex: 0 1 auto;
   overflow-y: auto;
-  padding-right: 5px; /* Avoid scrollbar overlapping content */
+  padding-right: 5px;
+  min-height: 0;
+  max-height: 70vh;
 }
 
 .metadata-item {
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 0;
+  gap: 8px;
+  padding: 5px 0;
   border-bottom: 1px solid #f5f5f5;
+  font-size: 13px;
 }
 
 .metadata-item:last-child {
@@ -764,29 +792,31 @@ onMounted(async () => {
 }
 
 .metadata-item.warning ul.rule-list {
-  margin: 6px 0 0 0;
-  padding-left: 18px;
+  margin: 4px 0 0 0;
+  padding-left: 16px;
   color: #555;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .icon {
-  font-size: 20px;
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
 .stats-box {
-  margin-top: 20px;
-  padding: 20px;
+  margin-top: 10px;
+  padding: 12px;
   background: #f8f9fa;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #e9ecef;
 }
 
 .stats-box p {
-  margin: 8px 0;
+  margin: 5px 0;
   display: flex;
   justify-content: space-between;
   color: #495057;
+  font-size: 13px;
 }
 
 .stats-box strong {
@@ -794,12 +824,12 @@ onMounted(async () => {
 }
 
 .sidebar-footer {
-  margin-top: 20px;
-  padding-top: 20px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid #eee;
   display: flex;
-  justify-content: flex-end;
-  gap: 15px;
+  justify-content: space-between;
+  gap: 10px;
   flex-shrink: 0;
   background: white;
 }

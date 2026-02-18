@@ -70,6 +70,19 @@ function addRule(type) {
   }, 50)
 }
 
+function toDatetimeLocal(dateStr) {
+  if (!dateStr) return ''
+  // If it's already datetime-local format, return as-is
+  if (dateStr.includes('T')) return dateStr.slice(0, 16)
+  return dateStr + 'T00:00'
+}
+
+function toDatetimeLocalEnd(dateStr) {
+  if (!dateStr) return ''
+  if (dateStr.includes('T')) return dateStr.slice(0, 16)
+  return dateStr + 'T23:59'
+}
+
 function getDefaultConfig(type) {
   switch (type) {
     case 'namespace':
@@ -77,7 +90,10 @@ function getDefaultConfig(type) {
     case 'size':
       return { min: 1000, max: 10000, metric: 'bytes', maxMetric: 'bytes', hasMax: false }
     case 'creation_date':
-      return { notBefore: '', notAfter: '' }
+      return {
+        notBefore: toDatetimeLocal(props.editathon?.startDate),
+        notAfter: toDatetimeLocalEnd(props.editathon?.endDate)
+      }
     case 'created_by_submitter':
       return { required: true }
     case 'submitter_registration':
@@ -100,6 +116,23 @@ function removeRule(index) {
 watch(() => props.editathon?.rules, (newRules) => {
   localRules.value = Array.isArray(newRules) ? [...newRules] : []
 })
+
+// Sync creation_date rules when editathon start/end dates change
+watch(
+  () => [props.editathon?.startDate, props.editathon?.endDate],
+  ([newStart, newEnd]) => {
+    localRules.value.forEach(rule => {
+      if (rule.type === 'creation_date') {
+        rule.config.notBefore = toDatetimeLocal(newStart)
+        rule.config.notAfter = toDatetimeLocalEnd(newEnd)
+        rule._saved = false
+      }
+    })
+    if (localRules.value.some(r => r.type === 'creation_date')) {
+      emit('update', { rules: localRules.value })
+    }
+  }
+)
 </script>
 
 <style scoped>
@@ -111,20 +144,26 @@ watch(() => props.editathon?.rules, (newRules) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+}
+
+.rules-header h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .empty-state {
   text-align: center;
-  padding: 40px;
+  padding: 20px;
   color: #666;
   background: #f9f9f9;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #e0e0e0;
+  font-size: 0.85rem;
 }
 
 .rules-list {
-  margin-bottom: 30px;
+  margin-bottom: 15px;
 }
 </style>
     optional: false,

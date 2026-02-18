@@ -1,7 +1,7 @@
 <template>
-  <div v-if="user" class="dropdown">
+  <div v-if="store.user" class="dropdown">
     <button class="btn btn-outline-secondary dropdown-toggle" @click="toggleDropdown" type="button">
-      👤 {{ user.username }}
+      👤 {{ store.user.username }}
     </button>
     <ul class="dropdown-menu dropdown-menu-end" v-show="isOpen" :class="{ show: isOpen }">
       <li>
@@ -10,7 +10,7 @@
         </router-link>
       </li>
       <li><hr class="dropdown-divider"></li>
-      <li><a class="dropdown-item text-danger" href="/api/logout">🚪 Log out</a></li>
+      <li><a class="dropdown-item text-danger" href="#" @click="handleLogout">🚪 Log out</a></li>
     </ul>
   </div>
   <div v-else>
@@ -20,9 +20,8 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
+import { store, fetchCurrentUser, logout } from '../store'
 
-const user = ref(null)
 const isOpen = ref(false)
 
 function toggleDropdown(event) {
@@ -34,6 +33,12 @@ function closeDropdown() {
   isOpen.value = false
 }
 
+function handleLogout(event) {
+  event.preventDefault()
+  closeDropdown()
+  logout()
+}
+
 function handleClickOutside(event) {
   const dropdown = event.target.closest('.dropdown')
   if (!dropdown) {
@@ -43,13 +48,8 @@ function handleClickOutside(event) {
 
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
-  try {
-    const response = await axios.get('/api/me')
-    if (response.data.user) {
-      user.value = response.data.user
-    }
-  } catch (e) {
-    console.error("Failed to fetch user", e)
+  if (!store.isAuthChecked) {
+    await fetchCurrentUser()
   }
 })
 

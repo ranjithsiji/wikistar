@@ -261,43 +261,44 @@ function onProjectChange() {
 
 <style scoped>
 .general-tab {
-  max-width: 600px;
+  max-width: 800px;
 }
 
 .form-section {
-  margin-bottom: 30px;
-  padding: 20px;
+  margin-bottom: 15px;
+  padding: 12px;
   background: #f9f9f9;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #e0e0e0;
 }
 
 .form-section h3 {
-  margin: 0 0 20px 0;
+  margin: 0 0 10px 0;
   color: #333;
-  font-size: 1.1em;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 .form-row {
-  margin-bottom: 15px;
+  margin-bottom: 8px;
 }
 
 .form-row label {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   font-weight: 500;
   color: #555;
+  font-size: 0.85rem;
 }
 
 .form-input,
 .form-select,
 .form-textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 6px 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 0.85rem;
   background: white;
   transition: border-color 0.2s ease;
 }
@@ -312,19 +313,20 @@ function onProjectChange() {
 
 .form-textarea {
   resize: vertical;
-  min-height: 80px;
+  min-height: 50px;
 }
 
 .checkbox-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .form-checkbox {
   margin-top: 2px;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .checkbox-label {
@@ -333,29 +335,30 @@ function onProjectChange() {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  font-size: 0.85rem;
 }
 
 .help-text {
-  font-size: 12px;
+  font-size: 0.7rem;
   color: #666;
   font-weight: normal;
 }
 
 .save-section {
-  margin-top: 20px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
-  gap: 15px;
-  padding: 15px;
+  gap: 10px;
+  padding: 8px 10px;
   background: #f9f9f9;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #e0e0e0;
 }
 
 .status-badge {
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -372,12 +375,13 @@ function onProjectChange() {
 }
 
 .btn-save {
-  padding: 10px 20px;
+  padding: 6px 15px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   border-radius: 6px;
   font-weight: 600;
+  font-size: 0.85rem;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
 }

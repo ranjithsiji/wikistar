@@ -63,7 +63,7 @@
       <div class="review-sidebar">
         <!-- Jury Reviews Button - Top -->
         <button class="btn-view-jury-reviews" @click="goToJuryReviews">
-          📋 Jury Review
+          � Jury Review
         </button>
 
         <!-- Article Metadata -->
@@ -90,41 +90,77 @@
           </div>
         </div>
 
-        <!-- Review Decision Section -->
-        <div class="review-decision-box">
-          <div class="box-title">✅ Review Decision</div>
-          <div class="decision-buttons">
-            <button 
-              class="decision-btn accept"
-              :class="{ active: reviewDecision === 'accept' }"
-              @click="reviewDecision = 'accept'"
-            >
-              <span class="btn-icon">✓</span>
-              Accept
-            </button>
-            <button 
-              class="decision-btn reject"
-              :class="{ active: reviewDecision === 'reject' }"
-              @click="reviewDecision = 'reject'"
-            >
-              <span class="btn-icon">✕</span>
-              Reject
-            </button>
+        <!-- Review Decision & Comment Card -->
+        <div class="review-card">
+          <div class="card-section">
+            <div class="section-label">✅ Decision</div>
+            <div class="decision-buttons">
+              <button 
+                class="decision-btn accept"
+                :class="{ active: reviewDecision === 'accept' }"
+                @click="onAccept"
+              >
+                <span class="btn-icon">✓</span>
+                Accept
+              </button>
+              <button 
+                class="decision-btn reject"
+                :class="{ active: reviewDecision === 'reject' }"
+                @click="onReject"
+              >
+                <span class="btn-icon">✕</span>
+                Reject
+              </button>
+            </div>
+          </div>
+
+          <!-- Marks Section (shown when accepted) -->
+          <div v-if="reviewDecision === 'accept' && marksConfig.length > 0" class="card-section marks-section">
+            <div class="section-label">🏅 Marks</div>
+            <div v-for="mark in marksConfig" :key="mark.id" class="mark-input-row">
+              <span class="mark-label">{{ mark.title || mark.type }}</span>
+
+              <!-- Toggle -->
+              <label v-if="mark.type === 'toggle'" class="mark-toggle">
+                <input type="checkbox" v-model="markValues[mark.id]" />
+                <span class="mark-toggle-text">{{ markValues[mark.id] ? mark.value + ' pts' : '0 pts' }}</span>
+              </label>
+
+              <!-- Radio -->
+              <label v-else-if="mark.type === 'radio'" class="mark-toggle">
+                <input type="checkbox" v-model="markValues[mark.id]" />
+                <span class="mark-toggle-text">{{ markValues[mark.id] ? mark.value + ' pts' : '0 pts' }}</span>
+              </label>
+
+              <!-- Numeric -->
+              <div v-else-if="mark.type === 'numeric'" class="mark-numeric">
+                <button class="btn-spin" @click="markValues[mark.id] = Math.max(mark.min ?? 0, (markValues[mark.id] ?? mark.min ?? 0) - 1)">−</button>
+                <input
+                  type="number"
+                  :min="mark.min ?? 0"
+                  :max="mark.max ?? 100"
+                  v-model.number="markValues[mark.id]"
+                  class="mark-number-input"
+                />
+                <button class="btn-spin" @click="markValues[mark.id] = Math.min(mark.max ?? 100, (markValues[mark.id] ?? mark.min ?? 0) + 1)">+</button>
+                <span class="mark-range-hint">{{ mark.min }}–{{ mark.max }}</span>
+              </div>
+            </div>
+            <div class="marks-total">Total: <strong>{{ computedTotal }} pts</strong></div>
+          </div>
+
+          <div class="card-section">
+            <div class="section-label">💬 Comment</div>
+            <textarea 
+              v-model="reviewComment" 
+              class="comment-textarea"
+              placeholder="Add review comments..."
+            ></textarea>
           </div>
         </div>
 
-        <!-- Comment Box -->
-        <div class="comment-box">
-          <div class="box-title">💬 Comment</div>
-          <textarea 
-            v-model="reviewComment" 
-            class="comment-textarea"
-            placeholder="Add review comments..."
-          ></textarea>
-        </div>
-
-        <!-- Footer Actions -->
-        <div class="sidebar-footer">
+        <!-- Action Buttons -->
+        <div class="action-buttons">
           <button class="btn btn-secondary" @click="goBack">Cancel</button>
           <button class="btn btn-submit" @click="saveReview">Save</button>
         </div>
@@ -134,9 +170,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { findArticleWithFallback } from '../services/api'
+import { store } from '../store'
 
 const router = useRouter()
 const route = useRoute()
@@ -152,6 +189,40 @@ const showArticlesSidebar = ref(false)
 const articleContent = ref('')
 const loading = ref(false)
 const wikiLanguage = ref('en') // Default to English
+const marksConfig = ref([]) // marks defined during editathon creation
+const markValues = ref({}) // current mark values filled by jury
+
+// Auto-fill mark values to defaults when Accept is clicked
+function onAccept() {
+  reviewDecision.value = 'accept'
+  const defaults = {}
+  marksConfig.value.forEach(mark => {
+    if (mark.type === 'numeric') {
+      // For numeric: use value if exists, otherwise max (give full marks on accept)
+      defaults[mark.id] = mark.value ?? mark.max ?? mark.min ?? 0
+    } else if (mark.type === 'toggle' || mark.type === 'radio') {
+      defaults[mark.id] = true // checked by default to award configured points
+    } else {
+      defaults[mark.id] = mark.value ?? 0
+    }
+  })
+  markValues.value = defaults
+  console.log('Auto-filled marks on Accept:', defaults)
+}
+
+function onReject() {
+  reviewDecision.value = 'reject'
+  markValues.value = {}
+}
+
+const computedTotal = computed(() => {
+  return marksConfig.value.reduce((sum, mark) => {
+    const val = markValues.value[mark.id]
+    if (mark.type === 'numeric') return sum + (val ?? 0)
+    if (mark.type === 'toggle' || mark.type === 'radio') return sum + (val ? (mark.value ?? 0) : 0)
+    return sum
+  }, 0)
+})
 
 onMounted(() => {
   loadData()
@@ -167,9 +238,39 @@ function loadData() {
       // Load wiki language from editathon
       wikiLanguage.value = data.editathon?.wiki_language || 'en'
       console.log(`Wiki language: ${wikiLanguage.value}`)
-      
+
+      // Load marks config from editathon
+      const rawMarks = data.editathon?.marks_config
+      // marks_config can be: { marks: [...], hidden_marks: bool, consensual_vote: bool }
+      // or just an array for backward compatibility
+      let marksArray = []
+      if (rawMarks && typeof rawMarks === 'object' && !Array.isArray(rawMarks)) {
+        // It's an object with marks property
+        marksArray = rawMarks.marks || []
+      } else if (Array.isArray(rawMarks)) {
+        // It's directly an array (backward compatibility)
+        marksArray = rawMarks
+      } else if (typeof rawMarks === 'string') {
+        try {
+          const parsed = JSON.parse(rawMarks)
+          marksArray = parsed.marks || parsed || []
+        } catch {
+          marksArray = []
+        }
+      }
+      marksConfig.value = marksArray.filter(m => m && m.type && ['toggle', 'radio', 'numeric'].includes(m.type))
+      console.log('Loaded marks config:', marksConfig.value)
+
       // Load juries from editathon
       juries.value = data.juries || []
+
+      // Check if current user is a jury member
+      const isJury = store.user && juries.value.some(jury => jury.username === store.user.username)
+      if (!isJury) {
+        alert('Access denied: Only jury members can review articles')
+        router.push(`/editathon/${editathonId}`)
+        return
+      }
 
       // Load articles from editathon leaderboard
       const articlesMap = {}
@@ -270,6 +371,7 @@ function navigateToArticle(index) {
     // Reset review comment and decision when switching articles
     reviewComment.value = ''
     reviewDecision.value = null
+    markValues.value = {}
     // Fetch the new article content
     fetchArticleContent(article.title)
   }
@@ -906,87 +1008,104 @@ function goBack() {
 .review-sidebar {
   display: flex;
   flex-direction: column;
-  padding: 1rem;
-  overflow-y: auto;
+  padding: 0.5rem;
   background: #f9f9f9;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .article-metadata {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  padding: 0;
 }
 
 .metadata-item {
-  display: grid;
-  grid-template-columns: 20px 1fr;
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  font-size: 0.85rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #f0f0f0;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.5rem 0.3rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  text-align: center;
+  transition: all 0.2s;
 }
 
-.metadata-item:last-child {
-  border-bottom: none;
+.metadata-item:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .metadata-icon {
   font-size: 1rem;
-  text-align: center;
+  line-height: 1;
 }
 
 .metadata-label {
-  color: #666;
+  color: #6b7280;
   font-weight: 600;
   text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.3px;
+  font-size: 0.55rem;
+  letter-spacing: 0.5px;
+  line-height: 1;
 }
 
 .metadata-value {
-  color: #1a1a1a;
+  color: #111827;
   font-weight: 700;
-  text-align: right;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
-.review-decision-box {
-  padding: 1rem;
+.review-card {
+  padding: 0.5rem;
   background: white;
   border: 1px solid #e0e0e0;
   border-radius: 6px;
 }
 
-.box-title {
+.card-section {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.card-section:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.section-label {
   font-weight: 600;
   color: #333;
-  margin-bottom: 0.75rem;
-  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.7rem;
 }
 
 .decision-buttons {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-direction: row;
+  gap: 0.3rem;
 }
 
 .decision-btn {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.8rem;
+  gap: 0.25rem;
+  padding: 0.4rem 0.3rem;
   border: 2px solid #d0d0d0;
   background: white;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 0.7rem;
   transition: all 0.2s;
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -1022,12 +1141,11 @@ function goBack() {
 
 .btn-icon {
   font-weight: 700;
-  font-size: 1rem;
+  font-size: 0.75rem;
 }
 
-.jury-review-box,
-.comment-box {
-  padding: 1rem;
+.jury-review-box {
+  padding: 0.5rem;
   background: white;
   border: 1px solid #e0e0e0;
   border-radius: 6px;
@@ -1035,12 +1153,12 @@ function goBack() {
 
 .comment-textarea {
   width: 100%;
-  min-height: 180px;
-  padding: 0.75rem;
+  min-height: 40px;
+  padding: 0.4rem;
   border: 1px solid #d0d0d0;
   border-radius: 4px;
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 0.7rem;
   resize: vertical;
   transition: border-color 0.2s;
 }
@@ -1052,14 +1170,14 @@ function goBack() {
 
 .btn-view-jury-reviews {
   width: 100%;
-  padding: 0.9rem;
+  padding: 0.7rem;
   background: white;
   border: 2px solid #667eea;
   color: #667eea;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   transition: all 0.2s;
   text-transform: capitalize;
 }
@@ -1070,19 +1188,16 @@ function goBack() {
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
 }
 
-.sidebar-footer {
-  margin-top: auto;
-  padding-top: 1rem;
-  border-top: 1px solid #e0e0e0;
+.action-buttons {
   display: flex;
-  gap: 0.75rem;
-  flex-direction: column;
+  gap: 0.4rem;
+  flex-direction: row;
 }
 
-.sidebar-footer .btn {
-  width: 100%;
-  padding: 0.6rem;
-  font-size: 0.85rem;
+.action-buttons .btn {
+  flex: 1;
+  padding: 0.4rem;
+  font-size: 0.7rem;
 }
 
 .btn {

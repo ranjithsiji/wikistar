@@ -154,39 +154,39 @@ watch(() => [rule.optional, rule.showInJuryTool, rule.config, rule.type], () => 
 .rule-card {
   background: #f8f9fa;
   border: 2px solid #e9ecef;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
   transition: all 0.3s ease;
 }
 
 .rule-card.is-saved {
   background: #f0f8ff;
   border: 2px solid #b0d4ff;
-  padding: 12px 16px;
+  padding: 8px 10px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .title-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex: 1;
-  font-size: 16px;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #212529;
 }
 
 .header-controls {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -195,8 +195,8 @@ watch(() => [rule.optional, rule.showInJuryTool, rule.config, rule.type], () => 
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 13px;
+  gap: 3px;
+  font-size: 0.75rem;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -206,27 +206,27 @@ watch(() => [rule.optional, rule.showInJuryTool, rule.config, rule.type], () => 
 }
 
 .saved-preview {
-  padding: 8px 12px;
+  padding: 6px 10px;
   background: #e7f5ff;
-  border-left: 4px solid #0066cc;
+  border-left: 3px solid #0066cc;
   color: #0066cc;
-  font-size: 14px;
+  font-size: 0.8rem;
   border-radius: 4px;
   margin: 0;
 }
 
 .body {
   background: white;
-  padding: 12px;
+  padding: 8px;
   border-radius: 6px;
   border: 1px solid #e9ecef;
 }
 
 .form-row {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
 }
 

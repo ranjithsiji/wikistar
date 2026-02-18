@@ -156,20 +156,20 @@ function formatDate(dateString) {
   background: #ffffff;
   border: 1px solid #d0d0d0;
   border-radius: 8px;
-  padding: 1.25rem;
-  margin-top: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 1rem;
+  margin-top: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .compact-header {
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
   border-bottom: 2px solid #f0f0f0;
 }
 
 .compact-header h4 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   color: #1a1a1a;
   font-weight: 600;
   letter-spacing: 0.3px;
@@ -179,12 +179,12 @@ function formatDate(dateString) {
   position: relative;
   display: flex;
   gap: 0.6rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .compact-search input {
   flex: 1;
-  padding: 0.7rem 0.9rem;
+  padding: 0.6rem 0.85rem;
   border: 1px solid #d0d0d0;
   border-radius: 6px;
   font-size: 0.9rem;
@@ -205,7 +205,7 @@ function formatDate(dateString) {
 }
 
 .btn-search {
-  padding: 0.7rem 1.2rem;
+  padding: 0.6rem 1rem;
   background: #667eea;
   color: white;
   border: none;
@@ -278,7 +278,7 @@ function formatDate(dateString) {
 /* Stats Result */
 .stats-result {
   border-top: 1px solid #f0f0f0;
-  padding-top: 1rem;
+  padding-top: 0.75rem;
   animation: slideIn 0.3s ease;
 }
 
@@ -297,12 +297,12 @@ function formatDate(dateString) {
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .result-avatar {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   background: #667eea;
   color: white;
   border-radius: 50%;
@@ -310,7 +310,7 @@ function formatDate(dateString) {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   flex-shrink: 0;
   box-shadow: 0 2px 6px rgba(102, 126, 234, 0.2);
 }
@@ -344,9 +344,9 @@ function formatDate(dateString) {
 }
 
 .result-stats {
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   background: #f7f9fc;
-  padding: 0.9rem;
+  padding: 0.7rem;
   border-radius: 6px;
   border: 1px solid #e8ecf1;
 }

@@ -162,7 +162,7 @@ onMounted(() => {
 .cabinet-header {
   background: white;
   border-bottom: 2px solid #e5e7eb;
-  padding: 1.5rem 0;
+  padding: 0.75rem 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
@@ -178,7 +178,7 @@ onMounted(() => {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .user-icon {
@@ -193,14 +193,16 @@ onMounted(() => {
 }
 
 .header-text h1 {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #111827;
+  margin: 0;
 }
 
 .header-text p {
   color: #6b7280;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
+  margin: 0.25rem 0 0;
 }
 
 .btn-back {
@@ -247,9 +249,9 @@ onMounted(() => {
   display: flex;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
   width: 100%;
-  gap: 2rem;
+  gap: 1rem;
   flex: 1;
 }
 
@@ -271,10 +273,10 @@ onMounted(() => {
 
 .nav-item {
   text-align: left;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1rem;
   background: transparent;
   border: none;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 500;
   color: #4b5563;
   cursor: pointer;
@@ -300,7 +302,7 @@ onMounted(() => {
   background: white;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  padding: 2rem;
+  padding: 1rem;
   min-height: 500px;
 }
 

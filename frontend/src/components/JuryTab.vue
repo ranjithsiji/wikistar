@@ -1,5 +1,10 @@
 <template>
   <div class="jury-tab">
+    <!-- Header Section -->
+    <div class="jury-header">
+      <h3>Jury Members</h3>
+    </div>
+
     <!-- Jury Members List -->
     <div class="jury-members-section">
       <transition-group name="jury-list" tag="div" class="jury-list">
@@ -198,29 +203,42 @@ function decrementMarks() {
 
 <style scoped>
 .jury-tab {
+  max-width: 800px;
   padding: 0;
+}
+
+.jury-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.jury-header h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 /* Jury Members Section */
 .jury-members-section {
-  margin-bottom: 2rem;
+  margin-bottom: 0.75rem;
 }
 
 .jury-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
 }
 
 .jury-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   background: white;
   border: 2px solid #e9ecef;
   border-radius: 6px;
-  padding: 0.5rem;
+  padding: 0.4rem;
   transition: all 0.3s ease;
 }
 

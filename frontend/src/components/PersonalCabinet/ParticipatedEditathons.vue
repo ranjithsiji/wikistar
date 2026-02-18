@@ -92,13 +92,14 @@ function statusText(endDate) {
 .participated-section {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .section-title {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #111827;
+  margin: 0;
 }
 
 .empty-state,
@@ -114,14 +115,14 @@ function statusText(endDate) {
 .editathons-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .editathon-card {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 1.25rem 1.5rem;
+  padding: 0.75rem 1rem;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
@@ -130,11 +131,11 @@ function statusText(endDate) {
   justify-content: space-between;
   gap: 1rem;
   align-items: flex-start;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .title-link {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #1f2937;
   text-decoration: none;
@@ -145,9 +146,9 @@ function statusText(endDate) {
 }
 
 .meta-text {
-  margin: 0.25rem 0 0;
+  margin: 0.1rem 0 0;
   color: #6b7280;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 .rank-chip {
