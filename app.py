@@ -24,8 +24,14 @@ def create_app(config_class=Config):
             name='mediawiki',
             client_id=app.config.get('MW_CLIENT_ID'),
             client_secret=app.config.get('MW_CLIENT_SECRET'),
-            server_metadata_url=app.config.get('MW_METADATA_URL'),
-            client_kwargs={'scope': 'openid profile'},
+            authorize_url='https://meta.wikimedia.org/w/rest.php/oauth2/authorize',
+            access_token_url='https://meta.wikimedia.org/w/rest.php/oauth2/access_token',
+            client_kwargs={
+                'scope': 'openid profile',
+                'headers': {
+                    'User-Agent': 'Wikistar Tool/1.0 (https://gitlab.wikimedia.org/toolforge-repos/wikistar)'
+                }
+            },
         )
         print("✅ OAuth 2.0 (Authlib) enabled")
     else:

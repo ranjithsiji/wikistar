@@ -57,9 +57,18 @@ def create_new_editathon():
             if not data.get(field):
                 return jsonify({"error": f"Missing required field: {field}"}), 400
         
-        creator = User.query.filter_by(username=data.get('createdBy')).first()
+        username = data.get('createdBy')
+        creator = User.query.filter_by(username=username).first()
         if not creator:
-            return jsonify({"error": "Creator user not found"}), 404
+            # Auto-create user if they don't exist (happens in dev mode or desync)
+            creator = User(
+                username=username,
+                email=f"{username}@local.dev",
+                password_hash="auto_created",
+                role='admin' # Default to admin if they are creating editathons
+            )
+            db.session.add(creator)
+            db.session.flush()
         
         try:
             start_date = datetime.strptime(data.get('startDate'), '%Y-%m-%d').date()

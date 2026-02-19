@@ -465,51 +465,46 @@ async function openArticleJudge(article) {
       
       console.log(`✓ Article found in ${foundLanguage}: "${foundTitle}"`)
       
-      // Fetch full article content
-      const extractUrl = `https://${foundLanguage}.wikipedia.org/w/api.php?` +
-        `action=query&prop=extracts&exsectionformat=wiki&titles=${encodeURIComponent(foundTitle)}` +
-        `&redirects=true&format=json&origin=*`
+      // Fetch full article content using parse API for better rendering
+      const parseUrl = `https://${foundLanguage}.wikipedia.org/w/api.php?` +
+        `action=parse&format=json&page=${encodeURIComponent(foundTitle)}&prop=text|displaytitle|revisions&origin=*`
       
-      const response = await fetch(extractUrl)
+      const response = await fetch(parseUrl)
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       
       const data = await response.json()
-      const pages = data.query?.pages
       
-      if (pages) {
-        const pageId = Object.keys(pages)[0]
-        const page = pages[pageId]
+      if (data.parse) {
+        const page = data.parse
+        const content = page.text['*']
+        const displayTitle = page.displaytitle || foundTitle
         
-        if (pageId !== '-1' && page && page.extract) {
-          // Show language indicator if found in different language
-          const langIndicator = foundLanguage !== wikiLanguage.value 
-            ? `<div class="language-notice">
-                 ⚠️ Article not found in ${wikiLanguage.value.toUpperCase()}, showing ${foundLanguage.toUpperCase()} version
-                 ${result.totalLanguages > 1 ? ` • Available in ${result.totalLanguages} languages` : ''}
-               </div>`
-            : (result.totalLanguages > 1 
-               ? `<div class="language-info">ℹ️ Available in ${result.totalLanguages} languages</div>`
-               : '')
-          
-          articleHTML.value = `
-            <div class="wiki-full-article">
-              ${langIndicator}
-              <h2 class="wiki-article-title">${page.title || foundTitle}</h2>
-              <div class="wiki-source">
-                Source: <a href="${result.url}" target="_blank">${foundLanguage.toUpperCase()} Wikipedia</a>
-              </div>
-              <div class="wiki-extract">${page.extract}</div>
+        // Show language indicator if found in different language
+        const langIndicator = foundLanguage !== wikiLanguage.value 
+          ? `<div class="language-notice">
+               ⚠️ Article not found in ${wikiLanguage.value.toUpperCase()}, showing ${foundLanguage.toUpperCase()} version
+               ${result.totalLanguages > 1 ? ` • Available in ${result.totalLanguages} languages` : ''}
+             </div>`
+          : (result.totalLanguages > 1 
+             ? `<div class="language-info">ℹ️ Available in ${result.totalLanguages} languages</div>`
+             : '')
+        
+        articleHTML.value = `
+          <div class="wiki-full-article mw-parser-output">
+            ${langIndicator}
+            <h2 class="wiki-article-title">${displayTitle}</h2>
+            <div class="wiki-source">
+              Source: <a href="${result.url}" target="_blank">${foundLanguage.toUpperCase()} Wikipedia</a>
             </div>
-          `
-          console.log('SUCCESS - Article content loaded')
-        } else {
-          throw new Error('No content available for this article')
-        }
+            <div class="wiki-extract">${content}</div>
+          </div>
+        `
+        console.log('SUCCESS - Article content loaded')
       } else {
-        throw new Error('Invalid API response - no pages found')
+        throw new Error('No content available for this article')
       }
     } else {
       // Article not found in any language

@@ -1,12 +1,14 @@
 <template>
   <div class="rules-tab">
-    <div class="rules-header">
-      <h3>Eligibility Rules</h3>
-      <RuleSelector @add="addRule" />
+    <div class="rules-header mb-3">
+      <h5 class="fw-bold mb-0">Eligibility Rules</h5>
     </div>
 
-    <div v-if="localRules.length === 0" class="empty-state">
-      <p>No rules added yet. Add a rule using the dropdown above.</p>
+    <RuleSelector @add="addRule" />
+
+    <div v-if="localRules.length === 0" class="empty-state shadow-sm">
+      <div class="display-6 opacity-25 mb-3">📋</div>
+      <p class="mb-0">No rules added yet. Use the selector above to define what articles qualify for this editathon.</p>
     </div>
 
     <div v-else class="rules-list">
@@ -15,15 +17,26 @@
         :key="rule.id"
         :rule="rule"
         :index="index"
-         @save="(updated) => updateRule(index, updated)"
+        @save="(updated) => updateRule(index, updated)"
         @remove="() => removeRule(index)"
       />
     </div>
-      <!-- Preview Section -->
-      <div v-if="localRules.length > 0" class="preview">
-        <h4>Preview</h4>
-        <pre>{{ formattedPreview }}</pre>
+
+    <!-- Preview Section -->
+    <div v-if="localRules.length > 0" class="mt-4 border-top pt-3">
+      <button 
+        class="btn btn-sm btn-link text-decoration-none p-0 text-muted" 
+        @click="showPreview = !showPreview"
+      >
+        {{ showPreview ? 'Hide' : 'Show' }} JSON Preview Configuration
+      </button>
+      
+      <div v-if="showPreview" class="preview mt-3">
+        <div class="bg-dark rounded p-3">
+          <pre class="text-info small mb-0 m-0 overflow-auto" style="max-height: 300px;">{{ formattedPreview }}</pre>
+        </div>
       </div>
+    </div>
   </div>
 </template>
 
@@ -42,6 +55,7 @@ const props = defineProps({
 const emit = defineEmits(['update'])
 
 const localRules = ref(Array.isArray(props.editathon?.rules) ? [...props.editathon.rules] : [])
+const showPreview = ref(false)
 
 const formattedPreview = computed(() => {
   try {
@@ -61,7 +75,7 @@ function addRule(type) {
   }
   localRules.value.push(newRule)
   emit('update', { rules: localRules.value })
-  // Scroll to and visually focus newly added rule
+  
   setTimeout(() => {
     const items = document.querySelectorAll('.rule-card')
     if (items && items.length) {
@@ -72,7 +86,6 @@ function addRule(type) {
 
 function toDatetimeLocal(dateStr) {
   if (!dateStr) return ''
-  // If it's already datetime-local format, return as-is
   if (dateStr.includes('T')) return dateStr.slice(0, 16)
   return dateStr + 'T00:00'
 }
@@ -117,7 +130,6 @@ watch(() => props.editathon?.rules, (newRules) => {
   localRules.value = Array.isArray(newRules) ? [...newRules] : []
 })
 
-// Sync creation_date rules when editathon start/end dates change
 watch(
   () => [props.editathon?.startDate, props.editathon?.endDate],
   ([newStart, newEnd]) => {
@@ -140,30 +152,21 @@ watch(
   max-width: 800px;
 }
 
-.rules-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.rules-header h3 {
-  margin: 0;
-  font-size: 1rem;
-}
-
 .empty-state {
   text-align: center;
-  padding: 20px;
-  color: #666;
-  background: #f9f9f9;
-  border-radius: 6px;
-  border: 1px solid #e0e0e0;
-  font-size: 0.85rem;
+  padding: 40px;
+  color: #6c757d;
+  background: white;
+  border-radius: 12px;
+  border: 1px dashed #dee2e6;
 }
 
 .rules-list {
   margin-bottom: 15px;
 }
+
+.preview pre {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  line-height: 1.5;
+}
 </style>
-    optional: false,

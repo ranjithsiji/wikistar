@@ -5,16 +5,16 @@ import ParticipatedEditathons from '../components/PersonalCabinet/ParticipatedEd
 import CreatedEditathons from '../components/PersonalCabinet/CreatedEditathons.vue'
 import ApprovalQueue from '../components/PersonalCabinet/ApprovalQueue.vue'
 import MyArticles from '../components/PersonalCabinet/MyArticles.vue'
+import { store } from '../store'
 
 const activeTab = ref('participated')
 const currentUser = ref(null)
 const userData = ref(null)
 const loading = ref(true)
 
-// Mock admin check - replace with actual auth
+// Role check using store
 const isAdmin = computed(() => {
-  const adminUsers = ['Clintacc', 'admin', 'Ranjithjsiji']
-  return currentUser.value && adminUsers.includes(currentUser.value)
+  return store.user && (store.user.role === 'admin' || store.user.role === 'jury')
 })
 
 // NEW: Fetch personal cabinet data from backend
@@ -22,12 +22,9 @@ async function fetchPersonalCabinetData() {
   try {
     loading.value = true
     
-    // Fetch current user first
-    const userResponse = await axios.get('/api/me')
-    if (userResponse.data.user) {
-      currentUser.value = userResponse.data.user.username
+    if (store.user) {
+      currentUser.value = store.user.username
     } else {
-      // Not logged in
       loading.value = false
       return
     }

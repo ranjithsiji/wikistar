@@ -7,8 +7,15 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/api/login')
 def login():
     if not current_app.config.get('OAUTH_ENABLED'):
-        # For dev mode, auto-login as TestUser if regular login is hit
-        session['user'] = {'username': 'TestParticipant', 'id': 999, 'role': 'participant'}
+        # For dev mode, auto-login as TestUser
+        username = 'TestParticipant'
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            user = User(username=username, email=f"{username}@local.dev", password_hash="dev_pass", role='participant')
+            db.session.add(user)
+            db.session.commit()
+            
+        session['user'] = {'username': user.username, 'id': user.id, 'role': user.role}
         return redirect('/')
     
     redirect_uri = url_for('auth.callback', _external=True)
@@ -67,14 +74,34 @@ def dev_login_role(role):
     if current_app.config.get('OAUTH_ENABLED'):
         return "Dev login disabled in production", 403
     
-    roles = {
-        'admin': {'id': 1, 'username': 'DevAdmin', 'role': 'admin'},
-        'jury': {'id': 2, 'username': 'DevJury', 'role': 'jury'},
-        'participant': {'id': 3, 'username': 'DevUser', 'role': 'participant'}
+    roles_map = {
+        'admin': {'username': 'DevAdmin', 'role': 'admin'},
+        'jury': {'username': 'DevJury', 'role': 'jury'},
+        'participant': {'username': 'DevUser', 'role': 'participant'}
     }
     
-    if role not in roles:
+    if role not in roles_map:
         return "Invalid role", 400
         
-    session['user'] = roles[role]
+    user_info = roles_map[role]
+    user = User.query.filter_by(username=user_info['username']).first()
+    if not user:
+        user = User(
+            username=user_info['username'],
+            email=f"{user_info['username']}@local.dev",
+            password_hash="dev_pass",
+            role=user_info['role']
+        )
+        db.session.add(user)
+        db.session.commit()
+    else:
+        # Sync role
+        user.role = user_info['role']
+        db.session.commit()
+
+    session['user'] = {
+        'id': user.id,
+        'username': user.username,
+        'role': user.role
+    }
     return redirect('/')

@@ -1,14 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from './views/Home.vue'
-import CreateEditathon from './views/CreateEditathon.vue'
-import EditathonDashboard from './views/EditathonDashboard.vue'
-import PersonalCabinet from './views/PersonalCabinet.vue'
-import JudgeView from './views/JudgeView.vue'
-import JuryViewFullScreen from './views/JuryViewFullScreen.vue'
-import JuryArticlesFullScreen from './views/JuryArticlesFullScreen.vue'
-import ArticleReviewFullScreen from './views/ArticleReviewFullScreen.vue'
-import SubmitArticle from './views/SubmitArticle.vue'
-import EditEditathon from './views/EditEditathon.vue'
+const CreateEditathon = () => import('./views/CreateEditathon.vue')
+const EditathonDashboard = () => import('./views/EditathonDashboard.vue')
+const PersonalCabinet = () => import('./views/PersonalCabinet.vue')
+const JudgeView = () => import('./views/JudgeView.vue')
+const JuryViewFullScreen = () => import('./views/JuryViewFullScreen.vue')
+const JuryArticlesFullScreen = () => import('./views/JuryArticlesFullScreen.vue')
+const ArticleReviewFullScreen = () => import('./views/ArticleReviewFullScreen.vue')
+const SubmitArticle = () => import('./views/SubmitArticle.vue')
+const EditEditathon = () => import('./views/EditEditathon.vue')
 import { store, fetchCurrentUser } from './store'
 
 const routes = [

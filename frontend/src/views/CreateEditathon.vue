@@ -1,18 +1,5 @@
 <template>
   <div class="create-editathon-container">
-    <!-- Pending Editathon Modal -->
-    <div v-if="showPendingModal" class="modal-overlay">
-      <div class="modal-content">
-        <div class="modal-body">
-          <p class="modal-message">You already have a draft '<strong>{{ pendingEditathon?.title || 'sswad' }}</strong>'. Please ask an administrator to approve it before creating another one.</p>
-          <p class="modal-question">Do you want to edit the draft now?</p>
-        </div>
-        <div class="modal-footer">
-          <button @click="editDraft" class="btn-modal btn-edit-draft">Edit draft</button>
-          <button @click="cancelCreate" class="btn-modal btn-cancel">Cancel</button>
-        </div>
-      </div>
-    </div>
 
     <div class="container">
       <div class="header-section">
@@ -96,6 +83,7 @@
 import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { createEditathon, fetchUserPendingEditathons } from '../services/api'
+import { store } from '../store'
 import GeneralTab from '../components/GeneralTab.vue'
 import RulesTab from '../components/RulesTab.vue'
 import MarksTab from '../components/MarksTab.vue'
@@ -108,27 +96,8 @@ const active = ref('General')
 const completedTabs = ref([])
 const validationErrors = ref([])
 const isSubmitting = ref(false)
-const showPendingModal = ref(false)
-const pendingEditathon = ref(null)
-const currentUsername = ref('Clintacc') // Replace with actual auth later
+const currentUsername = computed(() => store.user?.username || 'Guest')
 
-onMounted(async () => {
-  // Check for pending editathons
-  try {
-    console.log('Checking pending editathons for user:', currentUsername.value)
-    const pending = await fetchUserPendingEditathons(currentUsername.value)
-    console.log('Pending editathons response:', pending)
-    if (pending && pending.length > 0) {
-      pendingEditathon.value = pending[0]
-      showPendingModal.value = true
-      console.log('Modal shown with draft:', pendingEditathon.value.title)
-    } else {
-      console.log('No pending editathons found')
-    }
-  } catch (error) {
-    console.error('Error checking pending editathons:', error)
-  }
-})
 
 const form = reactive({
   title: '',
@@ -141,7 +110,7 @@ const form = reactive({
   maxSize: 10000,
   startDate: '',
   endDate: '',
-  createdBy: 'Clintacc',
+  createdBy: store.user?.username || 'Guest',
   submissionDate: new Date().toISOString().split('T')[0],
   consensualVote: false,
   hiddenMarks: false,
@@ -160,82 +129,6 @@ const form = reactive({
 
 const currentStep = computed(() => tabs.indexOf(active.value) + 1)
 const progressPercentage = computed(() => (currentStep.value / tabs.length) * 100)
-
-function editDraft() {
-  try {
-    // Load the pending draft data into the form for editing
-    if (pendingEditathon.value) {
-      const draft = pendingEditathon.value
-      console.log('Loading draft:', draft)
-      
-      form.title = draft.title || ''
-      form.code = draft.code || ''
-      form.project = draft.project || 'ml.wikipedia.org'
-      form.wiki_language = draft.wiki_language || 'ml'
-      form.description = draft.description || ''
-      form.namespace = draft.namespace || 'Main'
-      form.minSize = draft.minSize || 0
-      form.maxSize = draft.maxSize || 10000
-      form.startDate = draft.startDate ? (typeof draft.startDate === 'string' ? draft.startDate.split('T')[0] : draft.startDate) : ''
-      form.endDate = draft.endDate ? (typeof draft.endDate === 'string' ? draft.endDate.split('T')[0] : draft.endDate) : ''
-      form.createdBy = draft.createdBy || 'Clintacc'
-      form.submissionDate = draft.submissionDate ? (typeof draft.submissionDate === 'string' ? draft.submissionDate.split('T')[0] : draft.submissionDate) : new Date().toISOString().split('T')[0]
-      
-      // Load rules, marks, jury, template from the draft
-      if (draft.rules) {
-        try {
-          form.rules = typeof draft.rules === 'string' ? JSON.parse(draft.rules) : draft.rules
-        } catch (e) {
-          console.error('Error parsing rules:', e)
-          form.rules = []
-        }
-      }
-      
-      if (draft.marks) {
-        try {
-          form.marks = typeof draft.marks === 'string' ? JSON.parse(draft.marks) : draft.marks
-        } catch (e) {
-          console.error('Error parsing marks:', e)
-          form.marks = [{ label: 'Accept', points: 1, hidden: false }]
-        }
-      }
-      
-      if (draft.jury) {
-        try {
-          form.jury = typeof draft.jury === 'string' ? JSON.parse(draft.jury) : draft.jury
-        } catch (e) {
-          console.error('Error parsing jury:', e)
-          form.jury = []
-        }
-      }
-      
-      if (draft.template) {
-        try {
-          form.template = typeof draft.template === 'string' ? JSON.parse(draft.template) : draft.template
-        } catch (e) {
-          console.error('Error parsing template:', e)
-          form.template = { name: '', onThePage: 'no', created: false }
-        }
-      }
-      
-      // Mark all tabs as completed since we're loading existing data
-      completedTabs.value = [...tabs]
-      console.log('Draft loaded successfully')
-    }
-    
-    showPendingModal.value = false
-    active.value = 'General'
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  } catch (error) {
-    console.error('Error in editDraft:', error)
-    alert('Error loading draft: ' + error.message)
-  }
-}
-
-function cancelCreate() {
-  showPendingModal.value = false
-  router.push('/')
-}
 
 function updateForm(updates) {
   Object.assign(form, updates)

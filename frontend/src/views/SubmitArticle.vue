@@ -190,20 +190,28 @@ async function fetchArticleContent(title) {
       
       // Fetch the article summary (extract) instead of full content
       const response = await fetch(
-        `https://${foundLanguage}.wikipedia.org/w/api.php?action=query&format=json&prop=extracts|pageimages|revisions&exintro=true&pithumbsize=800&piprop=original&rvprop=user|timestamp|size&rvlimit=1&rvdir=newer&titles=${encodeURIComponent(foundTitle)}&origin=*`
+        `https://${foundLanguage}.wikipedia.org/w/api.php?action=parse&format=json&page=${encodeURIComponent(foundTitle)}&prop=text|images|displaytitle|revisions&origin=*`
       )
       const data = await response.json()
-      const pages = data.query.pages
-      const pageId = Object.keys(pages)[0]
       
-      if (pageId !== '-1' && pages[pageId].extract) {
-        const page = pages[pageId]
-        const content = page.extract
-        const imageUrl = page?.original?.source || page?.thumbnail?.source
-        const firstRevision = page?.revisions?.[0]
+      if (data.parse) {
+        const page = data.parse
+        const content = page.text['*']
+        const displayTitle = page.displaytitle || foundTitle
+        
+        // Revisions for metadata (creation info)
+        // Parse API doesn't give first revision easily, so we might still need a query for stats
+        const statsResponse = await fetch(
+          `https://${foundLanguage}.wikipedia.org/w/api.php?action=query&format=json&prop=revisions&rvprop=user|timestamp|size&rvlimit=1&rvdir=newer&titles=${encodeURIComponent(foundTitle)}&origin=*`
+        )
+        const statsData = await statsResponse.json()
+        const pages = statsData.query.pages
+        const pageId = Object.keys(pages)[0]
+        const firstRevision = pages[pageId]?.revisions?.[0]
+        
         const createdAt = firstRevision?.timestamp || null
         const createdBy = firstRevision?.user || null
-        const bytes = firstRevision?.size || page?.length || null
+        const bytes = firstRevision?.size || null
         const words = estimateWordCount(content)
         
         // Show language indicator if found in different language
@@ -213,12 +221,6 @@ async function fetchArticleContent(title) {
              </div>`
           : ''
 
-        const leadImage = imageUrl
-          ? `<div class="lead-image">
-               <img src="${imageUrl}" alt="${foundTitle}" loading="lazy" />
-             </div>`
-          : ''
-        
         articleContent.value = `
           <div class="wikipedia-article">
             ${langIndicator}
@@ -226,8 +228,10 @@ async function fetchArticleContent(title) {
               Source: <a href="${result.url}" target="_blank">${foundLanguage.toUpperCase()} Wikipedia</a>
               ${result.totalLanguages > 1 ? ` • Available in ${result.totalLanguages} languages` : ''}
             </div>
-            ${leadImage}
-            ${content}
+            <h1 class="page-title-internal">${displayTitle}</h1>
+            <div class="wiki-body-content mw-parser-output">
+              ${content}
+            </div>
           </div>
         `
 
@@ -410,13 +414,13 @@ async function addArticle() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        username: 'Clintacc',
+        username: store.user?.username || 'Guest',
         article_title: articleTitle.value
       })
     })
 
     if (response.ok) {
-      alert(`Article "${articleTitle.value}" successfully added by Clintacc!`)
+      alert(`Article "${articleTitle.value}" successfully added by ${store.user?.username || 'Guest'}!`)
       goBackToDashboard()
     } else {
       const error = await response.json()
@@ -976,23 +980,44 @@ onMounted(async () => {
 }
 
 /* Wikipedia Content Styles */
+/* Wikipedia Content Styles */
 :deep(.wikipedia-article) {
-  font-family: sans-serif;
+  font-family: 'Linux Libertine', 'Georgia', 'Times', serif;
   line-height: 1.6;
   color: #202122;
+  background: white;
 }
 
-:deep(.wikipedia-article h1),
-:deep(.wikipedia-article h2),
-:deep(.wikipedia-article h3) {
+:deep(.page-title-internal) {
+  font-family: 'Linux Libertine', 'Georgia', 'Times', serif;
+  font-size: 1.8rem;
+  font-weight: normal;
   border-bottom: 1px solid #a2a9b1;
   margin-bottom: 0.5em;
   padding-bottom: 0.2em;
+}
+
+:deep(.wiki-body-content) {
+  font-size: 0.95rem;
+  font-family: sans-serif;
+}
+
+:deep(.wiki-body-content p) {
+  margin: 0.5em 0 1em 0;
+}
+
+:deep(.wiki-body-content h2) {
+  border-bottom: 1px solid #a2a9b1;
+  margin: 1.5em 0 0.5em 0;
+  padding-bottom: 0.2em;
+  font-size: 1.5rem;
   font-weight: normal;
 }
 
-:deep(.wikipedia-article p) {
-  margin: 0.5em 0 1em 0;
+:deep(.wiki-body-content h3) {
+  margin: 1.2em 0 0.4em 0;
+  font-size: 1.2rem;
+  font-weight: bold;
 }
 
 :deep(.wikipedia-article a) {
@@ -1009,9 +1034,107 @@ onMounted(async () => {
   height: auto;
 }
 
+/* Handle Infoboxes and Thumbnails */
+:deep(.infobox) {
+  float: right;
+  clear: right;
+  margin: 0.5em 0 1em 1em;
+  border: 1px solid #a2a9b1;
+  background: #f8f9fa;
+  padding: 0.5em;
+  font-size: 88%;
+  max-width: 300px;
+}
+
+:deep(.thumb) {
+  margin-bottom: 0.5em;
+  width: auto;
+  background-color: transparent;
+  clear: both;
+}
+
+:deep(.tright) {
+  float: right;
+  margin: 0.5em 0 1.3em 1.4em;
+}
+
+:deep(.tleft) {
+  float: left;
+  margin: 0.5em 1.4em 1.3em 0;
+}
+
+:deep(.thumbinner) {
+  border: 1px solid #c8ccd1;
+  padding: 3px;
+  background-color: #f8f9fa;
+  font-size: 94%;
+  text-align: center;
+  overflow: hidden;
+}
+
+:deep(.thumbcaption) {
+  border: none;
+  line-height: 1.4em;
+  padding: 3px;
+  font-size: 88%;
+  text-align: left;
+}
+
+/* Hide edit sections and maintenance/nav elements */
 :deep(.mw-editsection),
 :deep(.mw-empty-elt),
-:deep(.noprint) {
-  display: none;
+:deep(.noprint),
+:deep(.navbox),
+:deep(.ambox),
+:deep(.hatnote),
+:deep(.side-box),
+:deep(.metadata) {
+  display: none !important;
+}
+
+/* Table styling */
+:deep(table.wikitable) {
+  background-color: #f8f9fa;
+  color: #202122;
+  margin: 1em 0;
+  border: 1px solid #a2a9b1;
+  border-collapse: collapse;
+  font-size: 85%;
+  width: 100% !important;
+  display: block;
+  overflow-x: auto;
+}
+
+:deep(table.wikitable > tr > th),
+:deep(table.wikitable > * > tr > th) {
+  background-color: #eaecf0;
+  text-align: center;
+}
+
+:deep(table.wikitable > tr > th),
+:deep(table.wikitable > tr > td),
+:deep(table.wikitable > * > tr > th),
+:deep(table.wikitable > * > tr > td) {
+  border: 1px solid #a2a9b1;
+  padding: 0.4em 0.6em;
+}
+
+/* List styling */
+:deep(.wikipedia-article ul), :deep(.wikipedia-article ol) {
+  margin: 0.5em 0 1em 1.5em;
+}
+
+:deep(.wikipedia-article li) {
+  margin-bottom: 0.2em;
+}
+
+/* Specific fix for floating elements on mobile */
+@media (max-width: 600px) {
+  :deep(.infobox), :deep(.thumb) {
+    float: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 1em 0 !important;
+  }
 }
 </style>

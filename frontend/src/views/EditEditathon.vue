@@ -82,6 +82,8 @@ import MarksTab from '../components/MarksTab.vue'
 import TemplateTab from '../components/TemplateTab.vue'
 import JuryTab from '../components/JuryTab.vue'
 
+import { store } from '../store'
+
 const router = useRouter()
 const route = useRoute()
 
@@ -105,7 +107,7 @@ const form = reactive({
   maxSize: 10000,
   startDate: '',
   endDate: '',
-  createdBy: 'Clintacc',
+  createdBy: store.user?.username || 'Guest',
   submissionDate: new Date().toISOString().split('T')[0],
   consensualVote: false,
   hiddenMarks: false,
