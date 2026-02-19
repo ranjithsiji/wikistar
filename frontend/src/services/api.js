@@ -1,6 +1,6 @@
 // src/services/api.js
 
-const API_BASE = 'http://localhost:5000/api'
+const API_BASE = '/api'
 
 // Fetch all editathons - REAL DATA from MariaDB
 export async function fetchEditathons() {
@@ -277,11 +277,11 @@ export async function fetchWikimediaSites() {
       const group = sm[key]
       const langCode = group?.code
       const langName = group?.name || group?.localname || group?.code
-      ;(group?.site || []).forEach(site => pushSite(langCode, langName, site))
+        ; (group?.site || []).forEach(site => pushSite(langCode, langName, site))
     })
 
-    // Include specials (commons, meta, wikidata, etc.)
-    ;(sm?.specials || []).forEach(site => pushSite('', site?.sitename || '', site))
+      // Include specials (commons, meta, wikidata, etc.)
+      ; (sm?.specials || []).forEach(site => pushSite('', site?.sitename || '', site))
 
     // Sort by project then by language name
     sites.sort((a, b) => {
@@ -337,7 +337,7 @@ export async function fetchArticleLanguageVersions(articleTitle, sourceLang = 'e
 
   const cleanTitle = articleTitle.trim().replace(/_/g, ' ')
   const apiUrl = `https://${sourceLang}.${project}.org/w/api.php`
-  
+
   const params = new URLSearchParams({
     action: 'query',
     prop: 'langlinks',
@@ -357,7 +357,7 @@ export async function fetchArticleLanguageVersions(articleTitle, sourceLang = 'e
     const data = await response.json()
     const pages = data?.query?.pages || {}
     const pageId = Object.keys(pages)[0]
-    
+
     if (!pageId || pageId === '-1') {
       return {
         success: false,
@@ -370,10 +370,10 @@ export async function fetchArticleLanguageVersions(articleTitle, sourceLang = 'e
     const page = pages[pageId]
     const langLinks = page?.langlinks || []
     const normalizedTitle = page?.title || cleanTitle
-    
+
     // Build language versions array
     const languages = []
-    
+
     // Add source language first
     const sourceLangName = await getLanguageName(sourceLang)
     languages.push({
@@ -390,7 +390,7 @@ export async function fetchArticleLanguageVersions(articleTitle, sourceLang = 'e
       const langCode = link.lang
       const langTitle = link['*'] // Article title in that language
       const langName = await getLanguageName(langCode)
-      
+
       languages.push({
         code: langCode,
         title: langTitle,
@@ -465,11 +465,11 @@ async function getLanguageName(langCode) {
  */
 export async function findArticleWithFallback(articleTitle, languagePriority = ['en', 'ml'], project = 'wikipedia') {
   const errors = []
-  
+
   for (const lang of languagePriority) {
     try {
       const result = await fetchArticleLanguageVersions(articleTitle, lang, project)
-      
+
       if (result.success && result.languages.length > 0) {
         const sourceVersion = result.languages.find(l => l.isSource)
         return {
@@ -523,7 +523,7 @@ export async function articleExistsInLanguage(articleTitle, langCode, project = 
     const data = await response.json()
     const pages = data?.query?.pages || {}
     const pageId = Object.keys(pages)[0]
-    
+
     return pageId && pageId !== '-1'
   } catch (error) {
     console.error(`Error checking article existence in ${langCode}:`, error)

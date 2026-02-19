@@ -39,19 +39,14 @@ A comprehensive web application for managing and reviewing Wikipedia editathons,
 
 ### Backend Setup
 
-1. **Navigate to backend directory**
-   ```bash
-   cd backend
-   ```
-
-2. **Create virtual environment**
+1. **Setup Environment**
    ```bash
    python -m venv venv
-   venv\Scripts\activate  # Windows
-   # source venv/bin/activate  # Linux/Mac
+   source venv/bin/activate  # Linux/Mac
+   # venv\Scripts\activate  # Windows
    ```
 
-3. **Install dependencies**
+2. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
@@ -91,13 +86,12 @@ A comprehensive web application for managing and reviewing Wikipedia editathons,
 
 ```
 Starkforge_reviewtool/
-├── backend/
-│   ├── app.py              # Main Flask application
-│   ├── models.py           # Database models
-│   ├── requirements.txt    # Python dependencies
-│   ├── cleanup_db.py       # Database utilities
-│   └── import_editathons.py # Data import scripts
-├── frontend/
+├── app.py              # Main Flask application (serves API & Frontend)
+├── models.py           # Database models
+├── requirements.txt    # Python dependencies
+├── cleanup_db.py       # Database utilities
+├── import_editathons.py # Data import scripts
+├── frontend/           # Vue.js frontend source
 │   ├── src/
 │   │   ├── components/     # Vue components
 │   │   ├── views/         # Page views
@@ -105,14 +99,14 @@ Starkforge_reviewtool/
 │   │   └── router/        # Vue Router configuration
 │   ├── package.json       # Node.js dependencies
 │   └── vite.config.mjs    # Vite configuration
-└── instance/              # Instance-specific files
+└── instance/              # Instance-specific files (OAuth credentials)
 ```
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-Create a `.env` file in the backend directory:
+Create a `.env` file in the root directory:
 
 ```env
 FLASK_ENV=development

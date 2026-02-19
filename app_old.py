@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, redirect, session, url_for
+from flask import Flask, jsonify, request, redirect, session, url_for, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
 import pymysql
@@ -13,7 +13,7 @@ from sqlalchemy import func
 from flask_mwoauth import MWOAuth
 # from oauth_utils import patch_requests_for_oauth, test_mediawiki_connectivity
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='frontend/dist', static_url_path='/')
 # Enable CORS for frontend-backend communication (cookies needed for OAuth session)
 CORS(app, supports_credentials=True)
 
@@ -88,7 +88,7 @@ app.config.update(
 
 # Load OAuth credentials
 creds_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'instance', 'Oauth', 'flask-mwoauth', 'credentials.do_not_commit.json')
+    os.path.join(os.path.dirname(__file__), 'instance', 'Oauth', 'flask-mwoauth', 'credentials.do_not_commit.json')
 )
 consumer_key = os.environ.get('OAUTH_CONSUMER_KEY')
 consumer_secret = os.environ.get('OAUTH_CONSUMER_SECRET')
@@ -124,11 +124,11 @@ else:
     def dev_login():
         from flask import session
         session['mwoauth_username'] = 'TestUser'
-        return redirect('http://localhost:5173/')
+        return redirect('/')
     
     @app.route('/oauth-callback')
     def dev_callback():
-        return redirect('http://localhost:5173/')
+        return redirect('/')
 
 # ========== SQLAlchemy Models for New Schema ==========
 
@@ -279,8 +279,7 @@ def auth_success():
             db.session.commit()
     
     # Redirect to frontend
-    # Assuming frontend is running on port 5173 (Vite default)
-    return redirect("http://localhost:5173/")
+    return redirect("/")
 
 @app.route('/api/me')
 def get_current_user_api():
@@ -313,6 +312,17 @@ def api_logout():
 # ========== HOME ROUTE ==========
 @app.route('/')
 def home():
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    if path != "" and os.path.exists(app.static_folder + '/' + path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/api/status')
+def api_status():
     return jsonify({
         "message": "✅ Editathon Backend Connected to MariaDB (WikiFountain Schema)",
         "status": "success",
