@@ -5,7 +5,8 @@ import router from './router'
 export const store = reactive({
   selectedLanguage: null,
   user: null,
-  isAuthChecked: false
+  isAuthChecked: false,
+  devMode: false
 })
 
 // Fetch current user on app load
@@ -15,6 +16,7 @@ export async function fetchCurrentUser() {
     if (response.data.user) {
       store.user = response.data.user
     }
+    store.devMode = response.data.dev_mode || false
   } catch (e) {
     console.error('Failed to fetch user', e)
     store.user = null

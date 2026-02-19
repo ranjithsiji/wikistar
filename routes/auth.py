@@ -7,13 +7,11 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/api/login')
 def login():
     if not current_app.config.get('OAUTH_ENABLED'):
-        # For dev mode when OAuth is disabled
-        session['user'] = {'username': 'TestUser', 'id': 999}
+        # For dev mode, auto-login as TestUser if regular login is hit
+        session['user'] = {'username': 'TestParticipant', 'id': 999, 'role': 'participant'}
         return redirect('/')
     
     redirect_uri = url_for('auth.callback', _external=True)
-    # Toolforge specific override if needed, but url_for should work if SERVER_NAME is set
-    # redirect_uri = 'https://wikistar.toolforge.org/oauth-callback'
     return oauth.mediawiki.authorize_redirect(redirect_uri)
 
 @auth_bp.route('/oauth-callback')
@@ -49,22 +47,34 @@ def callback():
 @auth_bp.route('/api/me')
 def get_current_user():
     user_data = session.get('user')
-    if not user_data:
-        return jsonify({"user": None})
+    # Return both user data and dev_mode status
+    # dev_mode is true if OAuth is disabled
+    dev_mode = not current_app.config.get('OAUTH_ENABLED')
     
-    return jsonify({"user": user_data})
+    return jsonify({
+        "user": user_data,
+        "dev_mode": dev_mode
+    })
 
 @auth_bp.route('/api/logout')
 def logout():
     session.pop('user', None)
     return redirect('/')
 
-# Dev routes
-@auth_bp.route('/dev-login')
-def dev_login():
-    session['user'] = {
-        'id': 1,
-        'username': 'WikiFountainAdmin',
-        'role': 'admin'
+# Dev routes for easy testing of different roles
+@auth_bp.route('/api/dev-login/<role>')
+def dev_login_role(role):
+    if current_app.config.get('OAUTH_ENABLED'):
+        return "Dev login disabled in production", 403
+    
+    roles = {
+        'admin': {'id': 1, 'username': 'DevAdmin', 'role': 'admin'},
+        'jury': {'id': 2, 'username': 'DevJury', 'role': 'jury'},
+        'participant': {'id': 3, 'username': 'DevUser', 'role': 'participant'}
     }
+    
+    if role not in roles:
+        return "Invalid role", 400
+        
+    session['user'] = roles[role]
     return redirect('/')

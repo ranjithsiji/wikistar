@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, db
+from flask import Blueprint, jsonify
 from extensions import db
 from models import User, Article, Editathon, Project, EditathonJury
 from utils import format_project_label
