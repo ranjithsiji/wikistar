@@ -1072,6 +1072,13 @@ def update_editathon(editathon_id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+
+
+
+
+
+
+
 # Get Draft Editathons for Approval (Admin only)
 @app.route('/api/editathons/pending', methods=['GET'])
 def get_pending_editathons():
