@@ -5,7 +5,7 @@
       <div class="container py-4">
         <div class="row align-items-center">
           <div class="col-lg-8">
-            <h1 class="display-4 fw-bold text-dark mb-3">Starkforge <span class="text-primary">Review Tool</span></h1>
+            <h1 class="display-4 fw-bold text-dark mb-3">Wiki <span class="text-primary">Edit-a-thons Reviews</span></h1>
             <p class="lead text-secondary mb-4">A unified platform for managing Wikipedia content drives, jury reviews, and contribution tracking.</p>
             <div class="d-flex gap-2">
               <router-link to="/create" v-if="store.user" class="btn btn-primary px-4 py-2 fw-bold">
