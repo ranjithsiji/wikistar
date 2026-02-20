@@ -243,6 +243,11 @@
                   </div>
                 </div>
 
+                <!-- User Wiki Lookup -->
+                <div v-else-if="activeTab === 'user-lookup'" key="user-lookup">
+                  <UserLookupPanel />
+                </div>
+
               </transition>
             </div>
           </div>
@@ -258,6 +263,7 @@ import axios from 'axios'
 import { store } from '../store'
 import UserManagement from '../components/PersonalCabinet/UserManagement.vue'
 import ApprovalQueue from '../components/PersonalCabinet/ApprovalQueue.vue'
+import UserLookupPanel from './UserLookup.vue'
 
 const activeTab = ref('overview')
 const stats = ref(null)
@@ -276,6 +282,7 @@ const tabs = [
   { id: 'approval', label: 'Approval Queue', icon: 'bi-inbox' },
   { id: 'articles', label: 'All Articles', icon: 'bi-file-text' },
   { id: 'users', label: 'User Management', icon: 'bi-people' },
+  { id: 'user-lookup', label: 'User Lookup', icon: 'bi-search' },
   { id: 'logs', label: 'Audit Logs', icon: 'bi-shield-exclamation' }
 ]
 

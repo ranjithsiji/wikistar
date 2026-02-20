@@ -82,6 +82,12 @@ const routes = [
     name: 'AdminDashboard',
     component: () => import('./views/AdminDashboard.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/user-lookup',
+    name: 'UserLookup',
+    component: () => import('./views/UserLookup.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

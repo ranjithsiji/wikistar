@@ -25,6 +25,12 @@
           <li class="nav-item" v-if="store.user">
             <router-link class="nav-link" to="/create">Create Editathon</router-link>
           </li>
+          <li class="nav-item" v-if="store.user && ['admin','coordinator','jury'].includes(store.user.role)">
+            <router-link class="nav-link" to="/user-lookup">User Lookup</router-link>
+          </li>
+          <li class="nav-item" v-if="store.user && store.user.role === 'admin'">
+            <router-link class="nav-link text-danger fw-semibold" to="/admin">Admin Center</router-link>
+          </li>
         </ul>
 
         <!-- Right Side -->

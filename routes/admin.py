@@ -9,6 +9,11 @@ def is_admin():
     user_data = session.get('user')
     return user_data and user_data.get('role') == 'admin'
 
+def is_privileged():
+    """Returns True for admin, coordinator, or jury roles."""
+    user_data = session.get('user')
+    return user_data and user_data.get('role') in ('admin', 'coordinator', 'jury')
+
 @admin_bp.route('/api/admin/stats', methods=['GET'])
 def get_admin_stats():
     if not is_admin():
@@ -211,3 +216,94 @@ def admin_delete_campaign(campaign_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/wiki/user-info', methods=['GET'])
+def get_wiki_user_info():
+    """
+    Proxy endpoint to fetch user rights, edit count, and recent contributions
+    from any Wikimedia project via the MediaWiki API.
+    Accessible to admin, coordinator, and jury roles.
+    """
+    if not is_privileged():
+        return jsonify({"error": "Access denied. Admin, Coordinator or Jury role required."}), 403
+
+    username = request.args.get('username', '').strip()
+    wiki_domain = request.args.get('wiki', 'en.wikipedia.org').strip()
+    contribs_limit = min(request.args.get('limit', 20, type=int), 50)
+
+    if not username:
+        return jsonify({"error": "username parameter is required"}), 400
+
+    import requests as req
+    api_url = f"https://{wiki_domain}/w/api.php"
+    headers = {"User-Agent": "WikiSTAR/1.0 (https://wikistar.toolforge.org)"}
+
+    # ---- 1. Fetch user metadata (groups, rights, editcount, registration) ----
+    user_meta = {}
+    try:
+        resp = req.get(api_url, params={
+            "action": "query",
+            "list": "users",
+            "ususers": username,
+            "usprop": "groups|rights|editcount|registration|blockinfo",
+            "format": "json"
+        }, timeout=8, headers=headers)
+        data = resp.json()
+        users = data.get("query", {}).get("users", [])
+        if users:
+            u = users[0]
+            if "invalid" in u or "missing" in u:
+                return jsonify({"error": f"User '{username}' not found on {wiki_domain}"}), 404
+            user_meta = {
+                "username": u.get("name"),
+                "groups": u.get("groups", []),
+                "rights": u.get("rights", []),
+                "editcount": u.get("editcount", 0),
+                "registration": u.get("registration"),
+                "blocked": "blockedby" in u,
+                "block_reason": u.get("blockreason", None),
+                "is_sysop": "sysop" in u.get("groups", []),
+                "is_admin": "sysop" in u.get("groups", []),
+                "wiki_domain": wiki_domain,
+                "wiki_profile_url": f"https://{wiki_domain}/wiki/User:{username.replace(' ', '_')}"
+            }
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch user info: {str(e)}"}), 500
+
+    # ---- 2. Fetch recent contributions ----
+    contributions = []
+    try:
+        resp = req.get(api_url, params={
+            "action": "query",
+            "list": "usercontribs",
+            "ucuser": username,
+            "uclimit": contribs_limit,
+            "ucprop": "ids|title|timestamp|comment|size|sizediff|flags",
+            "ucnamespace": "0",  # mainspace only
+            "format": "json"
+        }, timeout=10, headers=headers)
+        data = resp.json()
+        raw_contribs = data.get("query", {}).get("usercontribs", [])
+        for c in raw_contribs:
+            contributions.append({
+                "revid": c.get("revid"),
+                "title": c.get("title"),
+                "timestamp": c.get("timestamp"),
+                "comment": c.get("comment", ""),
+                "size": c.get("size", 0),
+                "sizediff": c.get("sizediff", 0),
+                "new": "new" in c,
+                "minor": "minor" in c,
+                "article_url": f"https://{wiki_domain}/wiki/{c.get('title', '').replace(' ', '_')}",
+                "diff_url": f"https://{wiki_domain}/w/index.php?diff={c.get('revid')}"
+            })
+    except Exception as e:
+        # Contributions are non-critical, return empty list
+        contributions = []
+
+    return jsonify({
+        "user": user_meta,
+        "contributions": contributions,
+        "contributions_count": len(contributions),
+        "wiki_domain": wiki_domain
+    })
