@@ -1,205 +1,144 @@
 <template>
-  <div class="user-lookup-page bg-light min-vh-100">
+  <div class="lookup-page">
 
-    <!-- Page Header -->
-    <div class="page-header bg-white border-bottom shadow-sm">
-      <div class="container-xl">
-        <div class="d-flex align-items-center gap-3 py-3">
-          <div class="avatar-icon">🔍</div>
-          <div>
-            <h1 class="page-title mb-0">Wiki User Lookup</h1>
-            <p class="text-muted small mb-0">Check user rights and contributions on any Wikimedia project</p>
+    <!-- ── Search Bar ── -->
+    <div class="search-bar-wrap">
+      <div class="search-bar">
+        <div class="search-field">
+          <label>Wiki Username</label>
+          <input v-model="username" placeholder="e.g. Ranjithsiji" @keyup.enter="lookup" />
+        </div>
+
+        <div class="search-divider"></div>
+
+        <div class="search-field project-field">
+          <label>Project</label>
+          <input v-model="project" placeholder="e.g. ml.wikipedia.org" @keyup.enter="lookup" />
+          <div class="presets">
+            <button v-for="p in presets" :key="p" @click="project = p">{{ p }}</button>
           </div>
         </div>
+
+        <button class="lookup-btn" @click="lookup" :disabled="loading">
+          <span v-if="loading" class="spinner"></span>
+          <span v-else>🔍 Lookup</span>
+        </button>
       </div>
     </div>
 
-    <div class="container-xl py-4">
+    <!-- ── Error ── -->
+    <div v-if="error" class="error-banner">{{ error }}</div>
 
-      <!-- Access denied -->
-      <div v-if="!isPrivileged" class="alert alert-danger text-center py-5">
-        <div style="font-size:3rem;">🚫</div>
-        <h4>Access Restricted</h4>
-        <p>This tool is available to Admin, Coordinator, and Jury roles only.</p>
-        <button class="btn btn-primary" @click="$router.push('/')">Return Home</button>
+    <!-- ── Access denied ── -->
+    <div v-if="!isPrivileged && !loading" class="access-denied">
+      <p>🚫 This tool is available to Admin, Coordinator, and Jury roles only.</p>
+    </div>
+
+    <!-- ── Results ── -->
+    <div v-if="result" class="results-grid">
+
+      <!-- Left: Profile Card -->
+      <div class="card profile-card">
+        <div class="avatar" :class="{ sysop: result.isSysop }">
+          {{ result.username?.charAt(0)?.toUpperCase() }}
+        </div>
+        <div class="profile-name">{{ result.username }}</div>
+        <div class="profile-project">
+          <a :href="`https://${result.project}/wiki/User:${encodeURIComponent(result.username)}`" target="_blank">
+            {{ result.project }} ↗
+          </a>
+        </div>
+
+        <!-- Groups -->
+        <div class="groups">
+          <span v-for="g in result.groups" :key="g" class="group-badge" :class="groupClass(g)">{{ g }}</span>
+        </div>
+
+        <div class="profile-stats">
+          <div class="pstat">
+            <span class="pstat-val">{{ fmt(result.liveEdits) }}</span>
+            <span class="pstat-lbl">Live edits</span>
+          </div>
+          <div class="pstat">
+            <span class="pstat-val">{{ fmt(result.deletedEdits) }}</span>
+            <span class="pstat-lbl">Deleted edits</span>
+          </div>
+          <div class="pstat">
+            <span class="pstat-val">{{ fmt(result.creations) }}</span>
+            <span class="pstat-lbl">New pages</span>
+          </div>
+        </div>
+
+        <a :href="`https://xtools.wmcloud.org/ec/${result.project}/${encodeURIComponent(result.username)}`"
+           target="_blank" class="xtools-link">Full XTools Report ↗</a>
       </div>
 
-      <div v-else>
-        <!-- Search Form -->
-        <div class="card shadow-sm border-0 rounded-3 mb-4">
-          <div class="card-body p-4">
-            <h5 class="fw-bold mb-3">Search a User</h5>
-            <div class="row g-3 align-items-end">
-              <div class="col-md-4">
-                <label class="form-label fw-semibold small text-uppercase">Wiki Username</label>
-                <input
-                  v-model="searchUsername"
-                  type="text"
-                  class="form-control"
-                  placeholder="e.g. Ranjithsiji"
-                  @keyup.enter="lookup"
-                />
+      <!-- Right: Detailed Stats -->
+      <div class="right-col">
+
+        <!-- Namespace Breakdown -->
+        <div class="card">
+          <h3>Edits by Namespace</h3>
+          <div class="ns-list">
+            <div v-for="ns in result.namespaceSorted" :key="ns.id" class="ns-row">
+              <span class="ns-name">{{ ns.name }}</span>
+              <div class="ns-bar-wrap">
+                <div class="ns-bar" :style="{ width: ns.pct + '%', background: ns.color }"></div>
               </div>
-              <div class="col-md-4">
-                <label class="form-label fw-semibold small text-uppercase">Project Domain</label>
-                <div class="input-group">
-                  <input
-                    v-model="searchWiki"
-                    type="text"
-                    class="form-control"
-                    placeholder="e.g. ml.wikipedia.org"
-                  />
-                </div>
-                <div class="mt-1 d-flex flex-wrap gap-1">
-                  <button v-for="preset in wikiPresets" :key="preset" class="btn btn-xs btn-outline-secondary"
-                    @click="searchWiki = preset">{{ preset }}</button>
-                </div>
-              </div>
-              <div class="col-md-2">
-                <label class="form-label fw-semibold small text-uppercase">Contribs Limit</label>
-                <select v-model="contribsLimit" class="form-select">
-                  <option :value="10">10</option>
-                  <option :value="20">20</option>
-                  <option :value="50">50</option>
-                </select>
-              </div>
-              <div class="col-md-2">
-                <button class="btn btn-primary w-100" @click="lookup" :disabled="loading">
-                  <span v-if="loading" class="spinner-border spinner-border-sm me-1"></span>
-                  {{ loading ? 'Looking up...' : '🔍 Lookup' }}
-                </button>
-              </div>
-            </div>
-            <div v-if="errorMsg" class="alert alert-danger mt-3 mb-0 py-2">{{ errorMsg }}</div>
-          </div>
-        </div>
-
-        <!-- Results -->
-        <div v-if="result" class="row g-4">
-
-          <!-- Left: User Profile Card -->
-          <div class="col-lg-4">
-            <div class="card shadow-sm border-0 rounded-3 h-100">
-              <div class="card-body p-4">
-                <div class="d-flex align-items-center gap-3 mb-4">
-                  <div class="user-avatar" :class="result.user.is_sysop ? 'sysop' : ''">
-                    {{ result.user.username?.charAt(0).toUpperCase() }}
-                  </div>
-                  <div>
-                    <h5 class="mb-0 fw-bold">{{ result.user.username }}</h5>
-                    <a :href="result.user.wiki_profile_url" target="_blank" class="text-muted small text-decoration-none">
-                      {{ result.wiki_domain }} ↗
-                    </a>
-                  </div>
-                </div>
-
-                <!-- Key Stats -->
-                <div class="row g-2 mb-3">
-                  <div class="col-6">
-                    <div class="stat-box text-center border rounded p-2">
-                      <div class="stat-value text-primary">{{ result.user.editcount?.toLocaleString() }}</div>
-                      <div class="stat-label">Total Edits</div>
-                    </div>
-                  </div>
-                  <div class="col-6">
-                    <div class="stat-box text-center border rounded p-2">
-                      <div class="stat-value" :class="result.user.is_sysop ? 'text-success' : 'text-muted'">
-                        {{ result.user.is_sysop ? '✓ Yes' : 'No' }}
-                      </div>
-                      <div class="stat-label">Sysop</div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Registration Date -->
-                <div class="info-row mb-3">
-                  <span class="info-label">Member Since</span>
-                  <span class="info-val">{{ formatDate(result.user.registration) }}</span>
-                </div>
-
-                <!-- Blocked Status -->
-                <div v-if="result.user.blocked" class="alert alert-danger py-2 small mb-3">
-                  ⛔ <strong>User is blocked</strong><br>
-                  <span class="text-muted">{{ result.user.block_reason }}</span>
-                </div>
-
-                <!-- Groups -->
-                <div class="mb-3">
-                  <div class="info-label mb-1">Wiki Groups</div>
-                  <div class="d-flex flex-wrap gap-1">
-                    <span v-for="g in result.user.groups" :key="g"
-                      class="badge"
-                      :class="groupBadgeClass(g)">{{ g }}</span>
-                  </div>
-                </div>
-
-                <!-- Rights -->
-                <details class="mt-3">
-                  <summary class="info-label cursor-pointer">All Rights ({{ result.user.rights?.length || 0 }})</summary>
-                  <div class="mt-2 d-flex flex-wrap gap-1" style="max-height: 160px; overflow-y: auto;">
-                    <span v-for="r in result.user.rights" :key="r" class="badge bg-light text-dark border small">{{ r }}</span>
-                  </div>
-                </details>
-              </div>
-            </div>
-          </div>
-
-          <!-- Right: Contributions -->
-          <div class="col-lg-8">
-            <div class="card shadow-sm border-0 rounded-3">
-              <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                  <h5 class="fw-bold mb-0">Recent Contributions <span class="text-muted small fw-normal">(mainspace, latest {{ result.contributions_count }})</span></h5>
-                  <a :href="`https://${result.wiki_domain}/wiki/Special:Contributions/${result.user.username}`" target="_blank" class="btn btn-sm btn-outline-secondary">
-                    View All ↗
-                  </a>
-                </div>
-
-                <div v-if="result.contributions.length === 0" class="text-muted text-center py-4">
-                  No recent mainspace contributions found.
-                </div>
-
-                <div v-else class="contribs-list">
-                  <div v-for="c in result.contributions" :key="c.revid" class="contrib-row">
-                    <div class="d-flex align-items-start gap-2">
-                      <div class="contrib-badges flex-shrink-0 mt-1">
-                        <span v-if="c.new" class="badge bg-success" title="New article">N</span>
-                        <span v-if="c.minor" class="badge bg-secondary" title="Minor edit">m</span>
-                      </div>
-                      <div class="contrib-main flex-grow-1 min-width-0">
-                        <div class="d-flex justify-content-between align-items-start gap-2">
-                          <a :href="c.article_url" target="_blank" class="contrib-title fw-semibold text-decoration-none text-truncate">
-                            {{ c.title }}
-                          </a>
-                          <span class="size-diff flex-shrink-0"
-                            :class="c.sizediff > 0 ? 'text-success' : c.sizediff < 0 ? 'text-danger' : 'text-muted'">
-                            {{ c.sizediff > 0 ? '+' : '' }}{{ c.sizediff?.toLocaleString() }}
-                          </span>
-                        </div>
-                        <div class="d-flex justify-content-between gap-2 mt-1">
-                          <span class="contrib-comment text-muted small text-truncate" :title="c.comment">
-                            {{ c.comment || '(no summary)' }}
-                          </span>
-                          <span class="contrib-time text-muted small flex-shrink-0">{{ formatTime(c.timestamp) }}</span>
-                        </div>
-                      </div>
-                      <a :href="c.diff_url" target="_blank" class="btn btn-xs btn-outline-secondary flex-shrink-0" title="View diff">diff</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <span class="ns-count">{{ fmt(ns.count) }}</span>
             </div>
           </div>
         </div>
 
-        <!-- Empty state -->
-        <div v-else-if="!loading && !errorMsg" class="text-center text-muted py-5">
-          <div style="font-size: 3rem; opacity: 0.3;">👤</div>
-          <p class="mt-2">Enter a username and project domain to look up their wiki profile.</p>
+        <!-- Log Actions Summary -->
+        <div class="card" v-if="result.topLogs?.length">
+          <h3>Admin Actions (Log Summary)</h3>
+          <div class="log-grid">
+            <div v-for="log in result.topLogs" :key="log.key" class="log-item">
+              <span class="log-icon">{{ log.icon }}</span>
+              <span class="log-label">{{ log.label }}</span>
+              <span class="log-count">{{ fmt(log.count) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Contributions -->
+        <div class="card" v-if="result.contributions?.length">
+          <div class="card-header-row">
+            <h3>Recent Contributions</h3>
+            <a :href="`https://${result.project}/wiki/Special:Contributions/${encodeURIComponent(result.username)}`"
+               target="_blank" class="view-all">View All ↗</a>
+          </div>
+          <div class="contrib-list">
+            <div v-for="c in result.contributions" :key="c.revid" class="contrib-row">
+              <div class="contrib-badges">
+                <span v-if="c.new" class="badge-n" title="New">N</span>
+                <span v-if="c.minor" class="badge-m" title="Minor">m</span>
+              </div>
+              <div class="contrib-body">
+                <a :href="c.article_url" target="_blank" class="contrib-title">{{ c.title }}</a>
+                <span class="contrib-comment">{{ c.comment || '(no summary)' }}</span>
+              </div>
+              <div class="contrib-right">
+                <span class="size-diff" :class="c.sizediff > 0 ? 'pos' : c.sizediff < 0 ? 'neg' : 'neu'">
+                  {{ c.sizediff > 0 ? '+' : '' }}{{ c.sizediff?.toLocaleString() }}
+                </span>
+                <span class="contrib-time">{{ fmtTime(c.timestamp) }}</span>
+                <a :href="c.diff_url" target="_blank" class="diff-btn">diff</a>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
     </div>
+
+    <!-- Empty state -->
+    <div v-else-if="!loading && !error && isPrivileged" class="empty-state">
+      <div class="empty-icon">👤</div>
+      <p>Enter a username and project to look up their wiki profile and contributions.</p>
+    </div>
+
   </div>
 </template>
 
@@ -208,142 +147,436 @@ import { ref, computed } from 'vue'
 import axios from 'axios'
 import { store } from '../store'
 
-const searchUsername = ref('')
-const searchWiki = ref('en.wikipedia.org')
-const contribsLimit = ref(20)
+const username = ref('')
+const project = ref('en.wikipedia.org')
 const loading = ref(false)
-const errorMsg = ref('')
+const error = ref('')
 const result = ref(null)
 
-const wikiPresets = [
-  'en.wikipedia.org',
-  'ml.wikipedia.org',
-  'hi.wikipedia.org',
-  'ta.wikipedia.org',
-  'te.wikipedia.org',
-  'bn.wikipedia.org',
-  'commons.wikimedia.org',
+const presets = [
+  'en.wikipedia.org', 'ml.wikipedia.org', 'hi.wikipedia.org',
+  'ta.wikipedia.org', 'te.wikipedia.org', 'bn.wikipedia.org',
+  'commons.wikimedia.org'
 ]
 
-const isPrivileged = computed(() => {
-  return store.user && ['admin', 'coordinator', 'jury'].includes(store.user.role)
-})
+const isPrivileged = computed(() =>
+  store.user && ['admin', 'coordinator', 'jury'].includes(store.user.role)
+)
+
+// Namespace ID → human name map
+const NS_NAMES = {
+  '0': 'Article', '1': 'Talk', '2': 'User', '3': 'User Talk',
+  '4': 'Project', '5': 'Project Talk', '6': 'File', '7': 'File Talk',
+  '8': 'MediaWiki', '9': 'MediaWiki Talk', '10': 'Template',
+  '11': 'Template Talk', '12': 'Help', '13': 'Help Talk',
+  '14': 'Category', '15': 'Category Talk', '100': 'Portal',
+  '118': 'Draft', '119': 'Draft Talk', '828': 'Module', '829': 'Module Talk'
+}
+
+const NS_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899',
+                   '#06b6d4','#84cc16','#f97316','#6366f1','#14b8a6']
+
+const LOG_MAP = {
+  'delete-delete':   { icon: '🗑️', label: 'Deletions' },
+  'delete-restore':  { icon: '♻️', label: 'Restorations' },
+  'block-block':     { icon: '⛔', label: 'Blocks' },
+  'block-unblock':   { icon: '✅', label: 'Unblocks' },
+  'move-move':       { icon: '📦', label: 'Page moves' },
+  'protect-protect': { icon: '🔒', label: 'Protections' },
+  'patrol-patrol':   { icon: '👁️', label: 'Patrols' },
+  'import-interwiki':{ icon: '📥', label: 'Imports' },
+  'rights-rights':   { icon: '🔑', label: 'Rights changes' },
+  'thanks-thank':    { icon: '🙏', label: 'Thanks' },
+  'create-create':   { icon: '📄', label: 'Account creations' },
+}
 
 async function lookup() {
-  if (!searchUsername.value.trim()) {
-    errorMsg.value = 'Please enter a username.'
-    return
-  }
+  if (!username.value.trim()) { error.value = 'Enter a username.'; return }
+  if (!isPrivileged.value) { error.value = 'Access denied.'; return }
+
   loading.value = true
-  errorMsg.value = ''
+  error.value = ''
   result.value = null
+
   try {
-    const res = await axios.get('/api/wiki/user-info', {
-      params: {
-        username: searchUsername.value.trim(),
-        wiki: searchWiki.value.trim(),
-        limit: contribsLimit.value
-      }
-    })
-    result.value = res.data
+    const proj = project.value.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')
+    const user = username.value.trim()
+
+    // 1. XTools simple_editcount
+    const [simpleRes, nsRes, logRes, contribRes] = await Promise.all([
+      axios.get(`https://xtools.wmcloud.org/api/user/simple_editcount/${proj}/${encodeURIComponent(user)}`),
+      axios.get(`https://xtools.wmcloud.org/api/user/namespace_totals/${proj}/${encodeURIComponent(user)}`),
+      axios.get(`https://xtools.wmcloud.org/api/user/log_counts/${proj}/${encodeURIComponent(user)}`),
+      axios.get(`/api/wiki/user-info`, { params: { username: user, wiki: proj, limit: 20 } })
+    ])
+
+    const s = simpleRes.data
+    const ns = nsRes.data?.namespace_totals || {}
+    const logs = logRes.data?.log_counts || {}
+
+    const totalNs = Object.values(ns).reduce((a, b) => a + b, 0)
+    const namespaceSorted = Object.entries(ns)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([id, count], i) => ({
+        id,
+        name: NS_NAMES[id] || `NS ${id}`,
+        count,
+        pct: totalNs ? Math.round((count / totalNs) * 100) : 0,
+        color: NS_COLORS[i % NS_COLORS.length]
+      }))
+
+    const topLogs = Object.entries(logs)
+      .filter(([key, val]) => val > 0 && LOG_MAP[key])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 9)
+      .map(([key, count]) => ({ key, count, ...LOG_MAP[key] }))
+
+    result.value = {
+      username: s.username || user,
+      project: proj,
+      liveEdits: s.live_edit_count || 0,
+      deletedEdits: s.deleted_edit_count || 0,
+      creations: s.creation_count || 0,
+      groups: s.user_groups || [],
+      isSysop: (s.user_groups || []).includes('sysop'),
+      namespaceSorted,
+      topLogs,
+      contributions: contribRes.data?.contributions || []
+    }
   } catch (err) {
-    errorMsg.value = err.response?.data?.error || 'Failed to fetch user info.'
+    if (err.response?.status === 404) {
+      error.value = `User "${username.value}" not found on ${project.value}.`
+    } else {
+      error.value = err.response?.data?.error || err.message || 'Failed to fetch user info.'
+    }
   } finally {
     loading.value = false
   }
 }
 
-function formatDate(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+function fmt(n) { return (n || 0).toLocaleString() }
+
+function fmtTime(iso) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })
 }
 
-function formatTime(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-function groupBadgeClass(group) {
-  const map = {
-    sysop: 'bg-danger text-white',
-    bureaucrat: 'bg-dark text-white',
-    bot: 'bg-secondary text-white',
-    autoconfirmed: 'bg-success text-white',
-    confirmed: 'bg-success text-white',
-    '*': 'bg-light text-dark border',
-    user: 'bg-primary text-white',
-    checkuser: 'bg-warning text-dark',
-    steward: 'bg-purple text-white',
-    oversighter: 'bg-danger text-white',
-  }
-  return map[group] || 'bg-light text-dark border'
+function groupClass(g) {
+  const m = { sysop: 'g-sysop', bureaucrat: 'g-bureaucrat', bot: 'g-bot',
+              checkuser: 'g-check', steward: 'g-steward', 'interface-admin': 'g-ia',
+              autoconfirmed: 'g-auto', confirmed: 'g-auto', user: 'g-user', '*': 'g-star' }
+  return m[g] || 'g-other'
 }
 </script>
 
 <style scoped>
-.page-header { border-bottom: 1px solid #e9ecef; }
-.page-title { font-size: 1.3rem; font-weight: 700; color: #1a1a2e; }
-
-.avatar-icon {
-  width: 48px; height: 48px; border-radius: 12px;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem;
+/* ── Page ── */
+.lookup-page {
+  min-height: 100vh;
+  background: #f8f9fa;
+  font-family: 'Inter', system-ui, sans-serif;
+  padding-bottom: 60px;
 }
 
-.user-avatar {
-  width: 54px; height: 54px; border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #3b82f6);
-  color: white; font-size: 1.5rem; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
+/* ── Search bar ── */
+.search-bar-wrap {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 20px 32px;
+}
+
+.search-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  max-width: 900px;
+  background: #fff;
+  border: 1.5px solid #d1d5db;
+  border-radius: 12px;
+  overflow: visible;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+
+.search-field {
+  flex: 1;
+  padding: 10px 16px;
+  position: relative;
+}
+
+.search-field label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.search-field input {
+  width: 100%;
+  border: none;
+  outline: none;
+  font-size: 0.96rem;
+  color: #111827;
+  background: transparent;
+  padding: 0;
+}
+
+.search-field input::placeholder { color: #adb5bd; }
+
+.search-divider {
+  width: 1px;
+  height: 44px;
+  background: #e5e7eb;
+  align-self: center;
   flex-shrink: 0;
 }
-.user-avatar.sysop {
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
+
+/* Project presets */
+.project-field { flex: 1.4; }
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.presets button {
+  padding: 2px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 20px;
+  background: #f3f4f6;
+  font-size: 0.71rem;
+  color: #374151;
+  cursor: pointer;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.presets button:hover { background: #e5e7eb; }
+
+/* Lookup button */
+.lookup-btn {
+  padding: 0 28px;
+  height: 100%;
+  min-height: 64px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 0 10px 10px 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background .15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.lookup-btn:hover:not(:disabled) { background: #1d4ed8; }
+.lookup-btn:disabled { background: #93c5fd; cursor: default; }
+
+.spinner {
+  width: 18px; height: 18px;
+  border: 3px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg) } }
+
+/* ── Error / Access denied ── */
+.error-banner {
+  margin: 16px 32px 0;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: .9rem;
+}
+.access-denied {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
 }
 
-.stat-box { border-radius: 8px; }
-.stat-value { font-size: 1.3rem; font-weight: 700; }
-.stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; }
-
-.info-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; font-weight: 600; }
-.info-val { font-size: 0.9rem; font-weight: 500; }
-.info-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #f3f4f6; }
-
-/* Contributions list */
-.contribs-list {
-  display: flex; flex-direction: column; gap: 0;
-  max-height: 520px; overflow-y: auto;
+/* ── Results layout ── */
+.results-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 20px;
+  padding: 24px 32px;
+  align-items: start;
 }
 
+/* ── Card ── */
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.card:last-child { margin-bottom: 0; }
+
+.card h3 {
+  font-size: .9rem;
+  font-weight: 700;
+  color: #374151;
+  margin: 0 0 14px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+/* ── Profile card ── */
+.profile-card {
+  text-align: center;
+  position: sticky;
+  top: 20px;
+}
+
+.avatar {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  color: #fff;
+  font-size: 1.8rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px;
+}
+.avatar.sysop { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+
+.profile-name {
+  font-size: 1.1rem; font-weight: 700; color: #111827; margin-bottom: 4px;
+}
+.profile-project a {
+  font-size: .8rem; color: #6b7280; text-decoration: none;
+}
+.profile-project a:hover { text-decoration: underline; }
+
+.groups {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  justify-content: center; margin: 12px 0;
+}
+.group-badge {
+  padding: 2px 8px; border-radius: 12px; font-size: .72rem; font-weight: 600;
+}
+.g-sysop     { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.g-bureaucrat{ background: #1f2937; color: #fff; }
+.g-bot       { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+.g-check     { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.g-steward   { background: #ede9fe; color: #5b21b6; }
+.g-ia        { background: #ecfdf5; color: #065f46; }
+.g-auto      { background: #eff6ff; color: #1d4ed8; }
+.g-user      { background: #f3f4f6; color: #374151; }
+.g-star, .g-other { display: none; }
+
+.profile-stats {
+  display: flex; justify-content: space-between;
+  border-top: 1px solid #f3f4f6; padding-top: 12px; margin-top: 12px;
+  text-align: center;
+}
+.pstat-val {
+  display: block; font-size: 1.15rem; font-weight: 700; color: #1d4ed8;
+}
+.pstat-lbl {
+  display: block; font-size: .68rem; color: #9ca3af; margin-top: 2px;
+}
+
+.xtools-link {
+  display: inline-block; margin-top: 14px;
+  font-size: .78rem; color: #6b7280; text-decoration: none;
+  border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 10px;
+}
+.xtools-link:hover { background: #f9fafb; }
+
+/* ── Namespace bars ── */
+.ns-list { display: flex; flex-direction: column; gap: 8px; }
+.ns-row { display: flex; align-items: center; gap: 8px; }
+.ns-name { width: 110px; font-size: .8rem; color: #374151; flex-shrink: 0; }
+.ns-bar-wrap {
+  flex: 1; height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden;
+}
+.ns-bar { height: 100%; border-radius: 4px; transition: width .5s; }
+.ns-count { font-size: .8rem; font-weight: 600; color: #374151; width: 50px; text-align: right; }
+
+/* ── Log grid ── */
+.log-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+.log-item {
+  display: flex; flex-direction: column; align-items: center;
+  background: #f9fafb; border-radius: 8px; padding: 10px 8px; text-align: center;
+}
+.log-icon { font-size: 1.2rem; margin-bottom: 4px; }
+.log-label { font-size: .72rem; color: #6b7280; }
+.log-count { font-size: 1rem; font-weight: 700; color: #111827; margin-top: 2px; }
+
+/* ── Contributions ── */
+.card-header-row {
+  display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px;
+}
+.card-header-row h3 { margin: 0; }
+.view-all { font-size: .8rem; color: #6b7280; text-decoration: none; }
+.view-all:hover { text-decoration: underline; }
+
+.contrib-list { display: flex; flex-direction: column; }
 .contrib-row {
-  padding: 0.65rem 0;
-  border-bottom: 1px solid #f3f4f6;
-  transition: background 0.1s;
+  display: flex; align-items: flex-start; gap: 6px;
+  padding: 7px 0; border-bottom: 1px solid #f3f4f6;
 }
-.contrib-row:hover { background: #f8fafc; }
+.contrib-row:last-child { border-bottom: none; }
 
-.contrib-title { font-size: 0.9rem; color: #1d4ed8; max-width: 360px; display: block; }
-.contrib-comment { font-size: 0.8rem; max-width: 300px; display: block; }
-.contrib-time { font-size: 0.78rem; }
+.contrib-badges { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; width: 16px; margin-top: 2px; }
+.badge-n, .badge-m {
+  font-size: .65rem; font-weight: 700; width: 14px; height: 14px;
+  display: flex; align-items: center; justify-content: center; border-radius: 3px;
+}
+.badge-n { background: #d1fae5; color: #065f46; }
+.badge-m { background: #f3f4f6; color: #6b7280; }
 
-.size-diff { font-size: 0.82rem; font-weight: 600; }
-
-.btn-xs {
-  padding: 0.2rem 0.45rem;
-  font-size: 0.75rem;
-  border-radius: 4px;
-  line-height: 1.3;
+.contrib-body { flex: 1; min-width: 0; }
+.contrib-title {
+  display: block; font-size: .88rem; font-weight: 600;
+  color: #1d4ed8; text-decoration: none; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.contrib-title:hover { text-decoration: underline; }
+.contrib-comment {
+  display: block; font-size: .75rem; color: #6b7280;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
 }
 
-details summary { cursor: pointer; }
-details summary:hover { color: #2563eb; }
+.contrib-right {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0;
+}
+.size-diff { font-size: .8rem; font-weight: 600; }
+.pos { color: #059669; }
+.neg { color: #dc2626; }
+.neu { color: #9ca3af; }
+.contrib-time { font-size: .72rem; color: #9ca3af; }
+.diff-btn {
+  font-size: .7rem; border: 1px solid #d1d5db; border-radius: 4px;
+  padding: 1px 6px; color: #6b7280; text-decoration: none;
+}
+.diff-btn:hover { background: #f3f4f6; }
 
-.cursor-pointer { cursor: pointer; }
+/* ── Empty state ── */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: #9ca3af;
+}
+.empty-icon { font-size: 3rem; opacity: .3; margin-bottom: 12px; }
 
-.min-width-0 { min-width: 0; }
+/* ── Right col ── */
+.right-col { min-width: 0; }
 
-@media (max-width: 767px) {
-  .contrib-title { max-width: 180px; }
+@media (max-width: 768px) {
+  .results-grid { grid-template-columns: 1fr; }
+  .search-bar { flex-direction: column; border-radius: 12px; }
+  .lookup-btn { border-radius: 0 0 10px 10px; width: 100%; justify-content: center; }
+  .search-divider { width: 100%; height: 1px; }
 }
 </style>
