@@ -1,5 +1,21 @@
 <template>
   <div class="rules-tab">
+
+    <!-- ── Jury Settings ── -->
+    <div class="jury-settings-card mb-4">
+      <h5 class="fw-bold mb-3">⚖️ Jury Settings</h5>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Allow jury members to submit articles</div>
+          <div class="setting-desc">When disabled, jury members who are part of this editathon cannot add articles — they can only review.</div>
+        </div>
+        <label class="toggle-switch" :class="{ active: juryCanSubmit }">
+          <input type="checkbox" v-model="juryCanSubmit" @change="onJuryToggle" />
+          <span class="toggle-knob"></span>
+        </label>
+      </div>
+    </div>
+
     <div class="rules-header mb-3">
       <h5 class="fw-bold mb-0">Eligibility Rules</h5>
     </div>
@@ -56,6 +72,32 @@ const emit = defineEmits(['update'])
 
 const localRules = ref(Array.isArray(props.editathon?.rules) ? [...props.editathon.rules] : [])
 const showPreview = ref(false)
+
+// Jury submission toggle — derived from whether prevent_judge_submission rule is ABSENT
+const juryCanSubmit = ref(
+  !localRules.value.some(r => r.type === 'prevent_judge_submission')
+)
+
+function onJuryToggle() {
+  // juryCanSubmit = true  → remove prevent_judge_submission rule if it exists
+  // juryCanSubmit = false → add prevent_judge_submission rule if not already there
+  if (juryCanSubmit.value) {
+    const idx = localRules.value.findIndex(r => r.type === 'prevent_judge_submission')
+    if (idx !== -1) localRules.value.splice(idx, 1)
+  } else {
+    const already = localRules.value.some(r => r.type === 'prevent_judge_submission')
+    if (!already) {
+      localRules.value.push({
+        id: Date.now(),
+        type: 'prevent_judge_submission',
+        config: { required: true },
+        optional: false,
+        showInJuryTool: true
+      })
+    }
+  }
+  emit('update', { rules: localRules.value })
+}
 
 const formattedPreview = computed(() => {
   try {
@@ -129,6 +171,7 @@ function removeRule(index) {
 
 watch(() => props.editathon?.rules, (newRules) => {
   localRules.value = Array.isArray(newRules) ? [...newRules] : []
+  juryCanSubmit.value = !localRules.value.some(r => r.type === 'prevent_judge_submission')
 })
 
 watch(
@@ -149,6 +192,70 @@ watch(
 </script>
 
 <style scoped>
+/* Jury Settings card */
+.jury-settings-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.setting-info { flex: 1; }
+
+.setting-label {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.setting-desc {
+  font-size: 0.8rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+/* Toggle switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toggle-switch input { display: none; }
+
+.toggle-knob {
+  position: absolute;
+  inset: 0;
+  background: #d1d5db;
+  border-radius: 26px;
+  transition: background 0.2s;
+}
+
+.toggle-knob::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  transition: left 0.2s;
+}
+
+.toggle-switch.active .toggle-knob { background: #2563eb; }
+.toggle-switch.active .toggle-knob::after { left: 23px; }
+
 .rules-tab {
   max-width: 800px;
 }
