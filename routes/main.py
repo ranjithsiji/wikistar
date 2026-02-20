@@ -11,6 +11,8 @@ def home():
 def serve_static(path):
     if path != "" and os.path.exists(current_app.static_folder + '/' + path):
         return send_from_directory(current_app.static_folder, path)
+    elif path.startswith('api/'):
+        return jsonify({"error": "API route not found"}), 404
     else:
         return send_from_directory(current_app.static_folder, 'index.html')
 

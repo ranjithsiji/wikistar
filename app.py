@@ -49,3 +49,6 @@ def create_app(config_class=Config):
     auto_import_data(app)
 
     return app
+
+# Expose app for Gunicorn / Toolforge
+app = create_app()
