@@ -102,3 +102,112 @@ def delete_article(article_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/admin/campaigns', methods=['GET'])
+def get_all_campaigns():
+    if not is_admin():
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        from models import EditathonJury, EditathonStat
+        from datetime import date
+        editathons = Editathon.query.order_by(desc(Editathon.created_at)).all()
+        result = []
+        today = date.today()
+        for e in editathons:
+            creator = User.query.get(e.created_by)
+            project = Project.query.get(e.project_id) if e.project_id else None
+            stats = EditathonStat.query.filter_by(editathon_id=e.id).first()
+            jury_count = EditathonJury.query.filter_by(editathon_id=e.id).count()
+            article_count = Article.query.filter_by(editathon_id=e.id).count()
+            
+            # Compute effective running status
+            if e.status == 'active' and e.start_date and e.end_date:
+                if today < e.start_date:
+                    effective_status = 'upcoming'
+                elif today > e.end_date:
+                    effective_status = 'completed'
+                else:
+                    effective_status = 'running'
+            else:
+                effective_status = e.status
+
+            result.append({
+                'id': e.id,
+                'code': e.code,
+                'name': e.name,
+                'description': e.description,
+                'status': e.status,
+                'effective_status': effective_status,
+                'language': e.language,
+                'wiki_domain': e.wiki_domain,
+                'project': project.name if project else None,
+                'start_date': e.start_date.isoformat() if e.start_date else None,
+                'end_date': e.end_date.isoformat() if e.end_date else None,
+                'created_by': creator.username if creator else 'Unknown',
+                'created_at': e.created_at.isoformat() if e.created_at else None,
+                'article_count': article_count,
+                'jury_count': jury_count,
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/admin/campaigns/<int:campaign_id>', methods=['PATCH'])
+def admin_update_campaign(campaign_id):
+    if not is_admin():
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        editathon = Editathon.query.get(campaign_id)
+        if not editathon:
+            return jsonify({"error": "Campaign not found"}), 404
+        data = request.json
+        
+        if 'name' in data: editathon.name = data['name']
+        if 'description' in data: editathon.description = data['description']
+        if 'status' in data and data['status'] in ['draft', 'active', 'completed', 'archived', 'rejected']:
+            editathon.status = data['status']
+            if data['status'] == 'active':
+                editathon.is_published = True
+        if 'start_date' in data and data['start_date']:
+            from datetime import datetime
+            editathon.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        if 'end_date' in data and data['end_date']:
+            from datetime import datetime
+            editathon.end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+        if 'language' in data: editathon.language = data['language']
+
+        db.session.commit()
+        from logger import log_activity
+        log_activity(session['user']['id'], 'admin_update', 'editathon', editathon.id, {'changes': data})
+        return jsonify({"success": True, "message": f"Campaign '{editathon.name}' updated"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/admin/campaigns/<int:campaign_id>', methods=['DELETE'])
+def admin_delete_campaign(campaign_id):
+    if not is_admin():
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        from models import Mark, EditathonJury, EditathonRule, EditathonStat
+        editathon = Editathon.query.get(campaign_id)
+        if not editathon:
+            return jsonify({"error": "Campaign not found"}), 404
+        
+        name = editathon.name
+        Mark.query.filter(Mark.article_id.in_(
+            db.session.query(Article.id).filter_by(editathon_id=campaign_id)
+        )).delete(synchronize_session='fetch')
+        Article.query.filter_by(editathon_id=campaign_id).delete()
+        EditathonJury.query.filter_by(editathon_id=campaign_id).delete()
+        EditathonRule.query.filter_by(editathon_id=campaign_id).delete()
+        EditathonStat.query.filter_by(editathon_id=campaign_id).delete()
+        db.session.delete(editathon)
+        db.session.commit()
+        
+        from logger import log_activity
+        log_activity(session['user']['id'], 'admin_delete', 'editathon', campaign_id, {'name': name})
+        return jsonify({"success": True, "message": f"Campaign '{name}' deleted permanently"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
