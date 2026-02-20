@@ -408,11 +408,12 @@ async function addArticle() {
     return
   }
   try {
-    const response = await fetch(`http://localhost:5000/api/editathon/${editathonId.value}/submit`, {
+    const response = await fetch(`/api/editathon/${editathonId.value}/submit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include',   // ← send Flask session cookie
       body: JSON.stringify({
         username: store.user?.username || 'Guest',
         article_title: articleTitle.value
@@ -423,8 +424,8 @@ async function addArticle() {
       alert(`Article "${articleTitle.value}" successfully added by ${store.user?.username || 'Guest'}!`)
       goBackToDashboard()
     } else {
-      const error = await response.json()
-      alert(`Error: ${error.error}`)
+      const errData = await response.json()
+      alert(`Error: ${errData.error || 'Unknown error from server'}`)
     }
   } catch (error) {
     alert(`Error submitting article: ${error.message}`)

@@ -157,7 +157,7 @@ onMounted(async () => {
   if (editathonId) {
     // Fetch jury data from API
     try {
-      const response = await fetch(`http://localhost:5000/api/editathon/${editathonId}`)
+      const response = await fetch(`/api/editathon/${editathonId}`)
       const data = await response.json()
       juries.value = data.juries || []
       

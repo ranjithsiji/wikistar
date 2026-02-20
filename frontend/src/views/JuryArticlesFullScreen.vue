@@ -83,8 +83,8 @@ async function loadData() {
   try {
     // Fetch editathon data and jury reviews in parallel
     const [editathonRes, reviewsRes] = await Promise.all([
-      fetch(`http://localhost:5000/api/editathon/${editathonId}`),
-      fetch(`http://localhost:5000/api/editathon/${editathonId}/jury-reviews`)
+      fetch(`/api/editathon/${editathonId}`),
+      fetch(`/api/editathon/${editathonId}/jury-reviews`)
     ])
 
     const data = await editathonRes.json()
@@ -157,7 +157,7 @@ async function toggleReview(article, jury) {
   reviewStatus.value[article.id][jury.id] = newValue
 
   try {
-    const res = await fetch('http://localhost:5000/api/jury-review', {
+    const res = await fetch('/api/jury-review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

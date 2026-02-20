@@ -131,7 +131,7 @@ async function deleteEditathon(id) {
   }
 
   try {
-    const response = await fetch(`http://localhost:5000/api/editathon/${id}`, {
+    const response = await fetch(`/api/editathon/${id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' }
     })
@@ -152,7 +152,7 @@ async function deleteEditathon(id) {
 onMounted(async () => {
   loading.value = true
   try {
-    const response = await fetch(`http://localhost:5000/api/personal-cabinet/${props.user}`)
+    const response = await fetch(`/api/personal-cabinet/${props.user}`)
     if (response.ok) {
       const data = await response.json()
       // Map backend field names to frontend expected names

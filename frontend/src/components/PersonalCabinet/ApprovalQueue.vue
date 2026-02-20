@@ -86,7 +86,7 @@ function formatDate(dateString) {
 async function fetchPendingEditathons() {
   try {
     loading.value = true
-    const response = await fetch('http://localhost:5000/api/editathons/pending')
+    const response = await fetch('/api/editathons/pending')
     if (!response.ok) throw new Error('Failed to fetch pending editathons')
     const data = await response.json()
     pendingEditathons.value = data.editathons || []
@@ -114,8 +114,8 @@ function rejectEditathon(id) {
 async function approveOrReject(id, action, reason = null) {
   try {
     const endpoint = action === 'approve' 
-      ? `http://localhost:5000/api/editathon/${id}/approve`
-      : `http://localhost:5000/api/editathon/${id}/reject`
+      ? `/api/editathon/${id}/approve`
+      : `/api/editathon/${id}/reject`
     
     const options = {
       method: 'POST',

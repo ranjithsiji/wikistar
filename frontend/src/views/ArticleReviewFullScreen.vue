@@ -232,7 +232,7 @@ function loadData() {
   const editathonId = route.params.id
   
   // Fetch editathon data from backend
-  fetch(`http://localhost:5000/api/editathon/${editathonId}`)
+  fetch(`/api/editathon/${editathonId}`)
     .then(response => response.json())
     .then(data => {
       // Load wiki language from editathon

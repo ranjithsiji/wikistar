@@ -124,7 +124,7 @@ const progressPercentage = computed(() => (currentStep.value / tabs.length) * 10
 
 onMounted(async () => {
   try {
-    const res = await fetch(`http://localhost:5000/api/editathon/${editathonId.value}`)
+    const res = await fetch(`/api/editathon/${editathonId.value}`)
     const data = await res.json()
     const e = data.editathon
 
