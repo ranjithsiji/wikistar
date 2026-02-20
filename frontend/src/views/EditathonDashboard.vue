@@ -16,7 +16,7 @@
 
         <div class="action-buttons" v-if="store.user">
           <router-link
-            v-if="!isCurrentUserJury && !isEditathonFinished && editathon.status === 'active'"
+            v-if="!isCurrentUserJury && !isEditathonFinished"
             :to="`/editathon/${editathonId}/submit`"
             class="btn btn-submit-outline">submit article</router-link>
           <router-link
