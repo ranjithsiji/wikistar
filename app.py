@@ -13,7 +13,7 @@ from initialization import create_tables, auto_import_data, test_connection
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 def create_app(config_class=Config):
-    app = Flask(__name__, static_folder='frontend/dist', static_url_path='/')
+    app = Flask(__name__, static_folder='frontend/dist', static_url_path='/_flask_static')
     app.config.from_object(config_class)
     
     # Trust reverse proxy headers (Toolforge router)
