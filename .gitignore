@@ -1,58 +1,54 @@
-# System & OS
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
 
-# Python / Flask
-**/__pycache__/
-*.py[cod]
 *$py.class
-*.so
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.env
-instance/
-.pytest_cache/
-.coverage
-htmlcov/
-*.db
-*.sqlite3
-
-# Node / Vue
-node_modules/
-**/node_modules/
-dist/
-**/dist/
-.npm
-pnpm-debug.log*
-pnpm-lock.yaml
-**/pnpm-lock.yaml
-
-# IDEs
-.vscode/
-.idea/
-
+backend/__pycache__/
 # Backend specific
 backend/venv/
-backend/__pycache__/
-
-# Frontend specific
-frontend/node_modules/
+build/
+config.toml
+.coverage
+*.db
+develop-eggs/
+**/dist/
+dist/
+downloads/
+.DS_Store
+*.egg
+*.egg-info/
+.eggs/
+eggs/
+.env
+env/
 frontend/dist/
 frontend/.env
+frontend/node_modules/
+# Frontend specific
+htmlcov/
+.idea/
+# IDEs
+.installed.cfg
+instance/
+lib/
+lib64/
+**/node_modules/
+node_modules/
+# Node / Vue
+.npm
+parts/
+pnpm-debug.log*
+**/pnpm-lock.yaml
+pnpm-lock.yaml
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.Python
+# Python / Flask
+sdist/
+*.so
+*.sqlite3
+*.swo
+*.swp
+# System & OS
+Thumbs.db
+var/
+.vscode/
+wheels/

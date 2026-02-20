@@ -1,17 +1,26 @@
 import os
-from dotenv import load_dotenv
+import tomllib
 
-load_dotenv()
+# Resolve the config.toml path relative to this file
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_CONFIG_PATH = os.path.join(_BASE_DIR, 'config.toml')
+
+# Load config.toml
+with open(_CONFIG_PATH, 'rb') as _f:
+    _cfg = tomllib.load(_f)
+
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'change-me-in-production')
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'mysql+pymysql://root:maria123@localhost/wikifountain')
+    # Core
+    SECRET_KEY = _cfg.get('SECRET_KEY', 'change-me')
+    SQLALCHEMY_DATABASE_URI = _cfg.get('DATABASE_URL', 'sqlite:///fallback.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Session
-    SESSION_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = _cfg.get('SESSION_COOKIE_SECURE', False)
 
-    # MediaWiki OAuth 2.0
-    MW_CLIENT_ID = os.environ.get('MW_CLIENT_ID')
-    MW_CLIENT_SECRET = os.environ.get('MW_CLIENT_SECRET')
+    # MediaWiki OAuth 2.0  (variable names match Toolforge conventions)
+    CONSUMER_KEY    = _cfg.get('CONSUMER_KEY')
+    CONSUMER_SECRET = _cfg.get('CONSUMER_SECRET')
+    OAUTH_MWURI     = _cfg.get('OAUTH_MWURI', 'https://meta.wikimedia.org')

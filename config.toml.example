@@ -1,0 +1,21 @@
+# WikiSTAR Configuration
+# Copy this file to config.toml and fill in your values.
+# On Wikimedia Toolforge, place config.toml in the same directory as app.py.
+# NEVER commit config.toml to version control — add it to .gitignore.
+
+SECRET_KEY = "replace-with-a-long-random-secret-key"
+
+# Database — use the Toolforge replica DB URL in production
+# Example for Toolforge: "mysql+pymysql://s12345:password@tools.db.svc.wikimedia.cloud/s12345__wikistar"
+DATABASE_URL = "mysql+pymysql://root:21it@localhost/wikifountain"
+
+# MediaWiki OAuth 2.0 credentials
+# Register at: https://meta.wikimedia.org/wiki/Special:OAuthConsumerRegistration
+CONSUMER_KEY    = "your-consumer-key-here"
+CONSUMER_SECRET = "your-consumer-secret-here"
+
+# The base URL of the MediaWiki OAuth server (use meta.wikimedia.org for global auth)
+OAUTH_MWURI = "https://meta.wikimedia.org"
+
+# Set to true on HTTPS deployments (required on Toolforge)
+SESSION_COOKIE_SECURE = false

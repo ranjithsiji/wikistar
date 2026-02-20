@@ -11,12 +11,17 @@ def create_tables(app):
         print(f"❌ Error creating tables: {e}")
 
 def auto_import_data(app):
-    """Auto-import all finished editathons from sample data if database is empty"""
-    with app.app_context():
+    """Auto-import all finished editathons from sample data if database is empty."""
+    try:
+      with app.app_context():
         # Check if data already exists
         if Editathon.query.count() > 0:
             print("ℹ️ Database already has editathons, skipping auto-import")
             return
+    except Exception as e:
+        print(f"⚠️ auto_import_data skipped — DB not ready: {e}")
+        return
+    with app.app_context():
         
         print("📥 Auto-importing finished editathons...")
         try:
@@ -250,4 +255,4 @@ def test_connection(app):
             print("✅ Connected to Database successfully!")
             print(f"   📊 Users in database: {user_count}")
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        print(f"⚠️ Database not reachable at startup (will retry on first request): {e}")
