@@ -32,6 +32,7 @@ def create_app(config_class=Config):
         client_secret=app.config.get('CONSUMER_SECRET'),
         authorize_url=f'{mwuri}/w/rest.php/oauth2/authorize',
         access_token_url=f'{mwuri}/w/rest.php/oauth2/access_token',
+        api_base_url=f'{mwuri}/w/rest.php/',
         client_kwargs={
             'headers': {
                 'User-Agent': 'WikiSTAR/1.0 (https://wikistar.toolforge.org)'
