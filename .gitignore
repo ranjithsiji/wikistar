@@ -8,8 +8,6 @@ config.toml
 .coverage
 *.db
 develop-eggs/
-**/dist/
-dist/
 downloads/
 .DS_Store
 *.egg
@@ -18,7 +16,6 @@ downloads/
 eggs/
 .env
 env/
-frontend/dist/
 frontend/.env
 frontend/node_modules/
 # Frontend specific
