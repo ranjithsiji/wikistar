@@ -9,9 +9,14 @@ from routes.users import users_bp
 from initialization import create_tables, auto_import_data, test_connection
 
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 def create_app(config_class=Config):
     app = Flask(__name__, static_folder='frontend/dist', static_url_path='/')
     app.config.from_object(config_class)
+    
+    # Trust reverse proxy headers (Toolforge router)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     # Initialize extensions
     db.init_app(app)
@@ -28,7 +33,6 @@ def create_app(config_class=Config):
         authorize_url=f'{mwuri}/w/rest.php/oauth2/authorize',
         access_token_url=f'{mwuri}/w/rest.php/oauth2/access_token',
         client_kwargs={
-            'scope': 'openid profile',
             'headers': {
                 'User-Agent': 'WikiSTAR/1.0 (https://wikistar.toolforge.org)'
             }
