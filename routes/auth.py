@@ -53,8 +53,9 @@ def callback():
         return redirect('/')
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        return "Internal Server Error during login. Check server logs for details.", 500
+        error_details = traceback.format_exc()
+        print(error_details)
+        return f"<pre>Internal Server Error during login:\n\n{error_details}</pre>", 500
 
 @auth_bp.route('/api/me')
 def get_current_user():
