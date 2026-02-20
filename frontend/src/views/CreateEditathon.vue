@@ -278,13 +278,13 @@ async function saveAll() {
   
   try {
     const res = await createEditathon(payload)
-    const id = res.id || Math.floor(Math.random() * 1000) + 900
+    const slug = res.code || res.id
     
     // Show success message
-    alert('✅ Editathon submitted successfully!\n\nYour editathon has been submitted for approval. You can track its status in your Personal Cabinet.\n\nOnce approved, it will appear in the ongoing editathons list.')
+    alert('✅ Editathon submitted successfully!\n\nYour editathon has been submitted for approval. You can track its status in your Personal Cabinet.\n\nOnce approved by a sysop on this project\'s wiki, it will appear in the ongoing editathons list.')
     
-    // Redirect to personal cabinet
-    router.push('/personal-cabinet')
+    // Redirect to the editathon page using slug
+    router.push(`/editathon/${slug}`)
   } catch (error) {
     console.error('Failed to create editathon:', error)
     alert('❌ Failed to create editathon.\n\n' + (error.message || 'Please try again.'))

@@ -95,7 +95,25 @@ def create_new_editathon():
             'consensual_vote': data.get('consensualVote', False)
         } if marks_data else None
         
-        code = data.get('code') or f"editathon-{int(datetime.now().timestamp())}"
+        def slugify(text):
+            import re
+            return re.sub(r'[^a-z0-9_-]', '-', text.lower()).strip('-')
+
+        raw_code = data.get('code', '').strip()
+        if raw_code:
+            import re
+            if not re.match(r'^[a-z0-9][a-z0-9_-]*$', raw_code):
+                return jsonify({"error": "URL slug may only contain lowercase letters, numbers, hyphens, and underscores"}), 400
+            if Editathon.query.filter_by(code=raw_code).first():
+                return jsonify({"error": f"URL slug '{raw_code}' is already taken. Please choose another."}), 409
+            code = raw_code
+        else:
+            base = slugify(data.get('title', 'editathon'))
+            code = base
+            suffix = 1
+            while Editathon.query.filter_by(code=code).first():
+                code = f"{base}-{suffix}"
+                suffix += 1
         
         editathon = Editathon(
             code=code,
@@ -180,12 +198,23 @@ def create_new_editathon():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-@editathons_bp.route('/api/editathon/<int:editathon_id>', methods=['GET'])
-def get_editathon_dashboard(editathon_id):
+def _get_editathon_by_identifier(identifier):
+    """Accept either a numeric ID or a slug string."""
     try:
-        editathon = Editathon.query.get(editathon_id)
+        eid = int(identifier)
+        editathon = Editathon.query.get(eid)
+    except (ValueError, TypeError):
+        editathon = Editathon.query.filter_by(code=str(identifier)).first()
+    return editathon
+
+@editathons_bp.route('/api/editathon/<identifier>', methods=['GET'])
+def get_editathon_dashboard(identifier):
+    editathon_id_or_slug = identifier
+    try:
+        editathon = _get_editathon_by_identifier(identifier)
         if not editathon:
             return jsonify({"error": "Editathon not found"}), 404
+        editathon_id = editathon.id
 
         project_obj = Project.query.get(editathon.project_id) if editathon.project_id else None
         project_label = format_project_label(project_obj.name if project_obj else None)
@@ -314,7 +343,15 @@ def update_editathon(editathon_id):
             editathon.wiki_domain = f"{data['wiki_language']}.wikipedia.org"
         if data.get('startDate'): editathon.start_date = datetime.strptime(data['startDate'], '%Y-%m-%d').date()
         if data.get('endDate'): editathon.end_date = datetime.strptime(data['endDate'], '%Y-%m-%d').date()
-        if data.get('code'): editathon.code = data['code']
+        if data.get('code'):
+            import re
+            new_code = data['code'].strip()
+            if not re.match(r'^[a-z0-9][a-z0-9_-]*$', new_code):
+                return jsonify({"error": "Invalid slug format"}), 400
+            existing = Editathon.query.filter_by(code=new_code).first()
+            if existing and existing.id != editathon_id:
+                return jsonify({"error": f"Slug '{new_code}' is already taken"}), 409
+            editathon.code = new_code
 
         if data.get('project'):
             project = Project.query.filter_by(name=data['project']).first()
@@ -407,11 +444,11 @@ def get_pending_editathons():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@editathons_bp.route('/api/editathon/<int:editathon_id>/check-approval-rights', methods=['GET'])
-def check_approval_rights(editathon_id):
+@editathons_bp.route('/api/editathon/<identifier>/check-approval-rights', methods=['GET'])
+def check_approval_rights(identifier):
     """Returns whether the current logged-in user can approve this editathon."""
     try:
-        editathon = Editathon.query.get(editathon_id)
+        editathon = _get_editathon_by_identifier(identifier)
         if not editathon:
             return jsonify({"error": "Editathon not found"}), 404
 
@@ -435,10 +472,10 @@ def check_approval_rights(editathon_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@editathons_bp.route('/api/editathon/<editathon_id>/approve', methods=['POST'])
-def approve_editathon(editathon_id):
+@editathons_bp.route('/api/editathon/<identifier>/approve', methods=['POST'])
+def approve_editathon(identifier):
     try:
-        editathon = Editathon.query.get(editathon_id)
+        editathon = _get_editathon_by_identifier(identifier)
         if not editathon: return jsonify({"error": "Editathon not found"}), 404
 
         user_data = session.get('user')
@@ -467,12 +504,12 @@ def approve_editathon(editathon_id):
     except Exception as e:
         db.session.rollback(); return jsonify({"error": str(e)}), 500
 
-@editathons_bp.route('/api/editathon/<editathon_id>/reject', methods=['POST'])
-def reject_editathon(editathon_id):
+@editathons_bp.route('/api/editathon/<identifier>/reject', methods=['POST'])
+def reject_editathon(identifier):
     try:
         data = request.json
         reason = data.get('reason', 'No reason provided') if data else 'No reason provided'
-        editathon = Editathon.query.get(editathon_id)
+        editathon = _get_editathon_by_identifier(identifier)
         if not editathon: return jsonify({"error": "Editathon not found"}), 404
         editathon.status = 'rejected'; db.session.commit()
         from logger import log_activity

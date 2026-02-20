@@ -4,14 +4,21 @@ from models import User, Editathon, Article, Mark, EditathonJury, Rule, Editatho
 
 articles_bp = Blueprint('articles', __name__)
 
-@articles_bp.route('/api/editathon/<editathon_id>/submit', methods=['POST'])
-def submit_article(editathon_id):
+def _get_editathon_by_identifier(identifier):
+    try:
+        return Editathon.query.get(int(identifier))
+    except (ValueError, TypeError):
+        return Editathon.query.filter_by(code=str(identifier)).first()
+
+@articles_bp.route('/api/editathon/<identifier>/submit', methods=['POST'])
+def submit_article(identifier):
     try:
         data = request.json
         user = User.query.filter_by(username=data['username']).first()
         if not user: return jsonify({"error": "User not found"}), 404
-        editathon = Editathon.query.get(editathon_id)
+        editathon = _get_editathon_by_identifier(identifier)
         if not editathon: return jsonify({"error": "Editathon not found"}), 404
+        editathon_id = editathon.id
         
         is_jury = EditathonJury.query.filter_by(editathon_id=editathon_id, user_id=user.id).first() is not None
         if is_jury:

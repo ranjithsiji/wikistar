@@ -157,7 +157,7 @@ const articleTimestamp = ref('')
 let searchTimeout = null
 
 // Get editathon ID from route params
-const editId = computed(() => route.params.id)
+const editId = computed(() => route.params.slug || route.params.id)
 
 const current = computed(() => {
   return articles.value[currentIndex.value] || null

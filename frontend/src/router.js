@@ -24,48 +24,48 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/editathon/:id',
+    path: '/editathon/:slug',
     name: 'EditathonDashboard',
     component: EditathonDashboard,
     props: true
   },
   {
-    path: '/editathon/:id/judge',
+    path: '/editathon/:slug/judge',
     name: 'JudgeView',
     component: JudgeView,
     props: true,
     meta: { requiresAuth: true }
   },
   {
-    path: '/editathon/:id/jury',
+    path: '/editathon/:slug/jury',
     name: 'JuryViewFullScreen',
     component: JuryViewFullScreen,
     props: true,
     meta: { requiresAuth: true }
   },
   {
-    path: '/editathon/:id/articles',
+    path: '/editathon/:slug/articles',
     name: 'JuryArticlesFullScreen',
     component: JuryArticlesFullScreen,
     props: true,
     meta: { requiresAuth: true }
   },
   {
-    path: '/editathon/:id/review',
+    path: '/editathon/:slug/review',
     name: 'ArticleReviewFullScreen',
     component: ArticleReviewFullScreen,
     props: true,
     meta: { requiresAuth: true }
   },
   {
-    path: '/editathon/:id/submit',
+    path: '/editathon/:slug/submit',
     name: 'SubmitArticle',
     component: SubmitArticle,
     props: true,
     meta: { requiresAuth: true }
   },
   {
-    path: '/editathon/:id/edit',
+    path: '/editathon/:slug/edit',
     name: 'EditEditathon',
     component: EditEditathon,
     props: true,

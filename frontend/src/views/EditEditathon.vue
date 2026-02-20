@@ -87,7 +87,7 @@ import { store } from '../store'
 const router = useRouter()
 const route = useRoute()
 
-const editathonId = computed(() => route.params.id)
+const editathonId = computed(() => route.params.slug || route.params.id)
 
 const tabs = ['General', 'Rules', 'Marks', 'Template', 'Jury']
 const active = ref('General')

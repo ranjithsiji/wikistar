@@ -229,7 +229,7 @@ onMounted(() => {
 })
 
 function loadData() {
-  const editathonId = route.params.id
+  const editathonId = route.params.slug || route.params.id
   
   // Fetch editathon data from backend
   fetch(`/api/editathon/${editathonId}`)
@@ -464,7 +464,7 @@ function goToJuryReviews() {
   // Navigate to the jury articles review page
   router.push({
     name: 'JuryArticlesFullScreen',
-    params: { id: route.params.id }
+    params: { id: route.params.slug || route.params.id }
   })
 }
 
@@ -472,7 +472,7 @@ function goBack() {
   // Navigate back to editathon dashboard
   router.push({
     name: 'EditathonDashboard',
-    params: { id: route.params.id }
+    params: { id: route.params.slug || route.params.id }
   })
 }
 </script>

@@ -1,33 +1,65 @@
 <template>
   <div class="editathon-dashboard">
-    <!-- Utility Header -->
-    <div class="utility-header">
-    </div>
+    <!-- ===== HERO HEADER (matches screenshot) ===== -->
+    <div class="campaign-header">
+      <!-- Title row -->
+      <h1 class="campaign-title">{{ editathon.name || 'Loading...' }}</h1>
 
-    <div class="title-and-buttons">
-      <h1 class="main-title">{{ editathon.name || 'Loading...' }}</h1>
-      <div class="action-buttons" v-if="store.user">
-        <router-link v-if="!isCurrentUserJury && !isEditathonFinished" :to="`/editathon/${editathonId}/submit`" class="btn btn-submit">Submit Article</router-link>
-        <router-link v-if="isCurrentUserJury" :to="`/editathon/${editathonId}/review`" class="btn btn-judge">Judge</router-link>
-        <router-link v-if="isCoordinator || isGlobalAdmin" :to="`/editathon/${editathonId}/edit`" class="btn btn-secondary">Edit Campaign</router-link>
-        <!-- Approval actions: shown to sysops of the project and global admins -->
-        <template v-if="editathon.status === 'draft' && canApproveCampaign">
-          <button @click="approveCampaign" class="btn btn-approve-wiki" :disabled="approvalLoading">
-            <span v-if="approvalLoading">Checking...</span>
-            <span v-else>✓ Approve Campaign</span>
-          </button>
-          <button @click="rejectCampaign" class="btn btn-reject-wiki" :disabled="approvalLoading">✕ Reject</button>
-        </template>
-        <!-- Pending badge shown to coordinator when their campaign is in draft -->
-        <span v-if="editathon.status === 'draft' && (isCoordinator || isGlobalAdmin) && !canApproveCampaign" class="btn btn-pending">
-          ⏳ Pending Approval
-        </span>
+      <!-- Status + Actions row -->
+      <div class="campaign-meta-row">
+        <div class="campaign-status">
+          <span v-if="isEditathonFinished" class="status-text finished">The editathon has finished</span>
+          <span v-else-if="editathon.status === 'draft'" class="status-text draft">⏳ Pending Approval</span>
+          <span v-else-if="editathon.status === 'rejected'" class="status-text rejected">✕ Rejected</span>
+          <span v-else class="status-text active">🟢 Active</span>
+        </div>
+
+        <div class="action-buttons" v-if="store.user">
+          <router-link
+            v-if="!isCurrentUserJury && !isEditathonFinished && editathon.status === 'active'"
+            :to="`/editathon/${editathonId}/submit`"
+            class="btn btn-submit-outline">submit article</router-link>
+          <router-link
+            v-if="isCurrentUserJury"
+            :to="`/editathon/${editathonId}/review`"
+            class="btn btn-judge-solid">Judge</router-link>
+          <router-link
+            v-if="isCoordinator || isGlobalAdmin"
+            :to="`/editathon/${editathonId}/edit`"
+            class="btn btn-edit-solid">Edit Campaign</router-link>
+          <!-- Approve/reject for sysops -->
+          <template v-if="editathon.status === 'draft' && canApproveCampaign">
+            <button @click="approveCampaign" class="btn btn-approve-wiki" :disabled="approvalLoading">
+              <span v-if="approvalLoading">Checking...</span>
+              <span v-else>✓ Approve</span>
+            </button>
+            <button @click="rejectCampaign" class="btn btn-reject-wiki" :disabled="approvalLoading">✕ Reject</button>
+          </template>
+        </div>
       </div>
-    </div>
 
-    <!-- Status Bar -->
-    <div class="status-bar">
-      <div><p>The editathon has finished</p></div>
+      <!-- Stats row -->
+      <div class="campaign-stats-row" v-if="stats">
+        <div class="stat-item">
+          <span class="stat-label">Users</span>
+          <span class="stat-value">{{ stats.users || 0 }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">Articles</span>
+          <span class="stat-value">{{ stats.articles || 0 }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">Marks</span>
+          <span class="stat-value">{{ stats.marks || 0 }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">Without marks</span>
+          <span class="stat-value without-marks">{{ stats.withoutMarks || 0 }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Jury Members -->
@@ -704,7 +736,7 @@ function handleUseArticle(articleTitle) {
 
 // Lifecycle
 onMounted(async () => {
-  editathonId.value = route.params.id
+  editathonId.value = route.params.slug || route.params.id
   try {
     // Load editathon data from backend
     const data = await fetchEditathonDashboard(editathonId.value)
@@ -732,9 +764,127 @@ onMounted(async () => {
   font-family: 'Arial', sans-serif;
   color: #202122;
   margin: 0;
-  padding: 20px 40px;
+  padding: 0 40px 20px;
   background-color: #f8f9fa;
 }
+
+/* ── Campaign Hero Header ── */
+.campaign-header {
+  background: #fff;
+  border-bottom: 1px solid #e9ecef;
+  padding: 18px 0 12px;
+  margin: 0 -40px 20px;
+  padding-left: 40px;
+  padding-right: 40px;
+}
+
+.campaign-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 10px;
+  color: #202122;
+}
+
+.campaign-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.campaign-status .status-text {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.status-text.finished { color: #202122; }
+.status-text.draft    { color: #b45309; }
+.status-text.rejected { color: #dc2626; }
+.status-text.active   { color: #15803d; }
+
+/* Stats row */
+.campaign-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0 24px 0 0;
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  color: #6b7280;
+  text-transform: none;
+  margin-bottom: 2px;
+}
+
+.stat-value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: #202122;
+  line-height: 1.1;
+}
+
+.stat-value.without-marks { color: #dc2626; }
+
+.stat-divider {
+  width: 1px;
+  height: 36px;
+  background: #d1d5db;
+  margin: 0 20px 0 0;
+  flex-shrink: 0;
+}
+
+/* Action Buttons (screenshot style) */
+.btn-submit-outline {
+  padding: 5px 14px;
+  border: 2px solid #e0458e;
+  border-radius: 3px;
+  color: #e0458e;
+  background: transparent;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-submit-outline:hover {
+  background: #e0458e;
+  color: #fff;
+}
+
+.btn-judge-solid {
+  padding: 5px 20px;
+  background: #2563eb;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+}
+.btn-judge-solid:hover { background: #1d4ed8; color: #fff; }
+
+.btn-edit-solid {
+  padding: 5px 14px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  color: #374151;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn-edit-solid:hover { background: #e5e7eb; }
 
 .utility-header { 
   text-align: right; 

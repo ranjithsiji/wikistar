@@ -433,7 +433,7 @@ async function addArticle() {
 }
 
 onMounted(async () => {
-  editathonId.value = route.params.id
+  editathonId.value = route.params.slug || route.params.id
   
   try {
     const data = await fetchEditathonDashboard(editathonId.value)

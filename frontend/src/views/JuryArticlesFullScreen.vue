@@ -78,7 +78,7 @@ onMounted(() => {
 })
 
 async function loadData() {
-  const editathonId = route.params.id
+  const editathonId = route.params.slug || route.params.id
 
   try {
     // Fetch editathon data and jury reviews in parallel
@@ -183,7 +183,7 @@ function openArticleReview(article) {
   // Open review for this article
   router.push({
     name: 'ArticleReviewFullScreen',
-    params: { id: route.params.id },
+    params: { id: route.params.slug || route.params.id },
     query: { articleId: article.id, title: article.title }
   })
 }

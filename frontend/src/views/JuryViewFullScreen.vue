@@ -153,7 +153,7 @@ const addError = ref('')
 
 onMounted(async () => {
   // Load juries from route params or API
-  const editathonId = route.params.editathonId || route.params.id
+  const editathonId = route.params.editathonId || route.params.slug || route.params.id
   if (editathonId) {
     // Fetch jury data from API
     try {
