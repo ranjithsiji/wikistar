@@ -11,17 +11,29 @@ const activeTab = ref('participated')
 const currentUser = ref(null)
 const userData = ref(null)
 const loading = ref(true)
+const error = ref(null)
 
-// Role check using store
 const isAdmin = computed(() => {
   return store.user && (store.user.role === 'admin' || store.user.role === 'jury')
 })
 
-// NEW: Fetch personal cabinet data from backend
+const tabs = computed(() => {
+  const base = [
+    { id: 'participated', label: 'My Participation', icon: 'bi-trophy' },
+    { id: 'evaluation', label: 'My Articles', icon: 'bi-journal-text' },
+    { id: 'created', label: 'Created', icon: 'bi-folder-plus' },
+  ]
+  if (isAdmin.value) {
+    base.push({ id: 'approval', label: 'Approval Queue', icon: 'bi-check2-circle' })
+  }
+  return base
+})
+
 async function fetchPersonalCabinetData() {
   try {
     loading.value = true
-    
+    error.value = null
+
     if (store.user) {
       currentUser.value = store.user.username
     } else {
@@ -29,19 +41,11 @@ async function fetchPersonalCabinetData() {
       return
     }
 
-    const response = await fetch(`http://localhost:5000/api/personal-cabinet/${currentUser.value}`)
-    if (!response.ok) throw new Error('Failed to fetch data')
-    userData.value = await response.json()
-  } catch (error) {
-    console.error('Error fetching personal cabinet data:', error)
-    // Fallback to mock data if API fails
-    userData.value = {
-      username: currentUser.value || 'Guest',
-      stats: { participated: 3, created: 2, articles: 15, points: 25 },
-      participated_editathons: [],
-      created_editathons: [],
-      articles: []
-    }
+    const response = await axios.get(`/api/personal-cabinet/${currentUser.value}`)
+    userData.value = response.data
+  } catch (err) {
+    console.error('Error fetching personal cabinet data:', err)
+    error.value = 'Failed to load your data. Please try again.'
   } finally {
     loading.value = false
   }
@@ -53,311 +57,189 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="personal-cabinet">
-    <!-- Header -->
-    <div class="cabinet-header">
-      <div class="header-content">
-        <div class="header-left">
-          <div class="user-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          </div>
-          <div class="header-text">
-            <h1>Personal Cabinet</h1>
-            <p>{{ currentUser }}'s Account</p>
-          </div>
-        </div>
-        <button @click="$router.back()" class="btn-back">← Back</button>
-      </div>
-    </div>
-
-    <!-- Show loading state -->
-    <div v-if="loading" class="loading-container">
-      <div class="spinner"></div>
-      <p>Loading your data...</p>
-    </div>
-
-    <!-- Show content when data is loaded -->
-    <div v-else class="cabinet-layout">
-      <!-- Sidebar Navigation -->
-      <aside class="sidebar">
-        <nav class="sidebar-nav">
-          <button
-            class="nav-item"
-            :class="{ active: activeTab === 'participated' }"
-            @click="activeTab = 'participated'"
-          >
-            Participation
-          </button>
-          <button
-            class="nav-item"
-            :class="{ active: activeTab === 'evaluation' }"
-            @click="activeTab = 'evaluation'"
-          >
-            Evaluation
-          </button>
-          <button
-            class="nav-item"
-            :class="{ active: activeTab === 'created' }"
-            @click="activeTab = 'created'"
-          >
-            Created
-          </button>
-          <button
-            v-if="isAdmin"
-            class="nav-item"
-            :class="{ active: activeTab === 'approval' }"
-            @click="activeTab = 'approval'"
-          >
-            Approval
-          </button>
-        </nav>
-      </aside>
-
-      <!-- Main Content Area -->
-      <main class="main-content">
-        <transition name="fade" mode="out-in">
-          <div :key="activeTab" class="content-pane">
-            <!-- Participated Editathons Tab -->
-            <ParticipatedEditathons v-if="activeTab === 'participated'" :user="currentUser" :editathons="userData.participated_editathons" />
-
-            <!-- Evaluation (My Articles) Tab -->
-            <MyArticles v-if="activeTab === 'evaluation'" :user="currentUser" :articles="userData.articles" />
-
-            <!-- Created Editathons Tab -->
-            <CreatedEditathons v-if="activeTab === 'created'" :user="currentUser" :editathons="userData.created_editathons" />
-
-            <!-- Approval Queue Tab (Admin Only) -->
-            <div v-if="activeTab === 'approval'">
-              <ApprovalQueue v-if="isAdmin" />
-              <div v-else class="alert-box">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; margin-right: 8px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                Admin access required to view approval queue
+  <div class="personal-cabinet bg-light min-vh-100">
+    <!-- Page Header -->
+    <div class="page-header bg-white border-bottom">
+      <div class="container-xl">
+        <div class="d-flex align-items-center justify-content-between py-3">
+          <div class="d-flex align-items-center gap-3">
+            <div class="avatar-lg">
+              {{ currentUser ? currentUser.charAt(0).toUpperCase() : '?' }}
+            </div>
+            <div>
+              <h1 class="page-title mb-0">{{ currentUser || 'Personal Cabinet' }}</h1>
+              <div class="d-flex align-items-center gap-2 mt-1">
+                <span class="badge text-capitalize"
+                  :class="store.user?.role === 'admin' ? 'bg-danger' : store.user?.role === 'jury' ? 'bg-warning text-dark' : 'bg-secondary'">
+                  {{ store.user?.role || 'participant' }}
+                </span>
+                <span class="text-muted small">Wikipedia contributor</span>
               </div>
             </div>
           </div>
-        </transition>
-      </main>
+          <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" @click="$router.back()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="loading" class="d-flex flex-column align-items-center justify-content-center" style="min-height:60vh;">
+      <div class="spinner-border text-primary mb-3" role="status"></div>
+      <p class="text-muted">Loading your data...</p>
+    </div>
+
+    <!-- Error -->
+    <div v-else-if="error" class="container-xl py-5">
+      <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        {{ error }}
+        <button class="btn btn-sm btn-outline-danger ms-auto" @click="fetchPersonalCabinetData">Retry</button>
+      </div>
+    </div>
+
+    <!-- Not Logged In -->
+    <div v-else-if="!store.user" class="container-xl py-5 text-center">
+      <div class="py-5">
+        <div style="font-size:4rem;margin-bottom:1rem;">🔒</div>
+        <h3>Sign in to view your cabinet</h3>
+        <p class="text-muted mb-4">Access your editathon history, articles, and contributions</p>
+        <a href="/api/login" class="btn btn-primary btn-lg px-5">Sign in with Wikimedia</a>
+      </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div v-else class="container-xl py-4">
+      <div class="row g-4">
+
+        <!-- Sidebar (desktop) / Scrollable tabs (mobile) -->
+        <div class="col-lg-3">
+          <div class="card shadow-sm border-0 rounded-3 overflow-hidden sticky-top" style="top: 80px;">
+            <div class="card-body p-0">
+              <nav class="cabinet-nav">
+                <button
+                  v-for="tab in tabs"
+                  :key="tab.id"
+                  class="cabinet-nav-item"
+                  :class="{ active: activeTab === tab.id }"
+                  @click="activeTab = tab.id"
+                >
+                  <i :class="`bi ${tab.icon} me-2`"></i>
+                  {{ tab.label }}
+                  <span v-if="tab.id === 'approval'" class="badge bg-danger ms-auto small">!</span>
+                </button>
+              </nav>
+            </div>
+          </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="col-lg-9">
+          <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-body p-4">
+              <transition name="fade" mode="out-in">
+                <div :key="activeTab">
+                  <ParticipatedEditathons v-if="activeTab === 'participated'" :user="currentUser" :editathons="userData?.participated_editathons || []" />
+                  <MyArticles v-if="activeTab === 'evaluation'" :user="currentUser" :articles="userData?.articles || []" />
+                  <CreatedEditathons v-if="activeTab === 'created'" :user="currentUser" :editathons="userData?.created_editathons || []" />
+                  <ApprovalQueue v-if="activeTab === 'approval' && isAdmin" />
+                  <div v-if="activeTab === 'approval' && !isAdmin" class="alert alert-warning">
+                    <strong>Access denied.</strong> You need admin or jury privileges to view the approval queue.
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+.page-header {
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 }
 
-.personal-cabinet {
-  min-height: 100vh;
-  background: #f8f9fa;
-  display: flex;
-  flex-direction: column;
+.page-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1a1a2e;
 }
 
-/* Header Section */
-.cabinet-header {
-  background: white;
-  border-bottom: 2px solid #e5e7eb;
-  padding: 0.75rem 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.header-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.user-icon {
-  width: 48px;
-  height: 48px;
-  background: #667eea;
-  border-radius: 8px;
+.avatar-lg {
+  width: 52px;
+  height: 52px;
+  background: linear-gradient(135deg, #0d6efd, #6610f2);
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-}
-
-.header-text h1 {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #111827;
-  margin: 0;
-}
-
-.header-text p {
-  color: #6b7280;
-  font-size: 0.8rem;
-  margin: 0.25rem 0 0;
-}
-
-.btn-back {
-  padding: 0.5rem 1rem;
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  color: #374151;
-  transition: all 0.2s;
-}
-
-.btn-back:hover {
-  background: #f3f4f6;
-  border-color: #9ca3af;
-}
-
-/* Loading State */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  gap: 1rem;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e5e7eb;
-  border-top-color: #667eea;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Layout Container */
-.cabinet-layout {
-  display: flex;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 1rem;
-  width: 100%;
-  gap: 1rem;
-  flex: 1;
-}
-
-/* Sidebar */
-.sidebar {
-  width: 250px;
+  font-size: 1.4rem;
+  font-weight: 800;
   flex-shrink: 0;
 }
 
-.sidebar-nav {
+/* Sidebar Nav */
+.cabinet-nav {
   display: flex;
   flex-direction: column;
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  border: 1px solid #e5e7eb;
 }
 
-.nav-item {
-  text-align: left;
-  padding: 0.75rem 1rem;
-  background: transparent;
+.cabinet-nav-item {
+  display: flex;
+  align-items: center;
+  padding: 0.9rem 1.2rem;
   border: none;
-  font-size: 0.95rem;
+  background: transparent;
+  text-align: left;
+  font-size: 0.9rem;
   font-weight: 500;
-  color: #4b5563;
+  color: #495057;
   cursor: pointer;
-  transition: all 0.2s;
-  border-left: 4px solid transparent;
+  transition: all 0.15s ease;
+  border-left: 3px solid transparent;
+  width: 100%;
 }
 
-.nav-item:hover {
-  background: #f9fafb;
-  color: #111827;
+.cabinet-nav-item:hover {
+  background: #f8f9fa;
+  color: #0d6efd;
 }
 
-.nav-item.active {
-  background: #eff6ff;
-  color: #2563eb;
-  border-left-color: #2563eb;
+.cabinet-nav-item.active {
+  background: #eef4ff;
+  color: #0d6efd;
+  border-left-color: #0d6efd;
   font-weight: 600;
-}
-
-/* Main Content */
-.main-content {
-  flex: 1;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  padding: 1rem;
-  min-height: 500px;
-}
-
-.content-pane {
-  height: 100%;
 }
 
 /* Transitions */
-.fade-enter-active,
-.fade-leave-active {
+.fade-enter-active, .fade-leave-active {
   transition: opacity 0.2s ease;
 }
-
-.fade-enter-from,
-.fade-leave-to {
+.fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
 
-/* Alert Box */
-.alert-box {
-  padding: 1.5rem;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
-  border-radius: 8px;
-  color: #92400e;
-  font-weight: 600;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-@media (max-width: 768px) {
-  .cabinet-layout {
-    flex-direction: column;
-    padding: 1rem;
-  }
-  
-  .sidebar {
-    width: 100%;
-  }
-  
-  .sidebar-nav {
+@media (max-width: 991px) {
+  .cabinet-nav {
     flex-direction: row;
     overflow-x: auto;
   }
-  
-  .nav-item {
-    padding: 0.75rem 1rem;
+  .cabinet-nav-item {
     white-space: nowrap;
     border-left: none;
     border-bottom: 3px solid transparent;
+    padding: 0.75rem 1rem;
   }
-  
-  .nav-item.active {
+  .cabinet-nav-item.active {
     border-left: none;
-    border-bottom-color: #2563eb;
+    border-bottom-color: #0d6efd;
   }
 }
 </style>

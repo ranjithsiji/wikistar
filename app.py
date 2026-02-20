@@ -18,24 +18,21 @@ def create_app(config_class=Config):
     cors.init_app(app, supports_credentials=True)
     oauth.init_app(app)
 
-    # Register MediaWiki OAuth client
-    if app.config.get('OAUTH_ENABLED'):
-        oauth.register(
-            name='mediawiki',
-            client_id=app.config.get('MW_CLIENT_ID'),
-            client_secret=app.config.get('MW_CLIENT_SECRET'),
-            authorize_url='https://meta.wikimedia.org/w/rest.php/oauth2/authorize',
-            access_token_url='https://meta.wikimedia.org/w/rest.php/oauth2/access_token',
-            client_kwargs={
-                'scope': 'openid profile',
-                'headers': {
-                    'User-Agent': 'Wikistar Tool/1.0 (https://gitlab.wikimedia.org/toolforge-repos/wikistar)'
-                }
-            },
-        )
-        print("✅ OAuth 2.0 (Authlib) enabled")
-    else:
-        print("⚠️ OAuth 2.0 disabled for development.")
+    # Register MediaWiki OAuth 2.0 client
+    oauth.register(
+        name='mediawiki',
+        client_id=app.config.get('MW_CLIENT_ID'),
+        client_secret=app.config.get('MW_CLIENT_SECRET'),
+        authorize_url='https://meta.wikimedia.org/w/rest.php/oauth2/authorize',
+        access_token_url='https://meta.wikimedia.org/w/rest.php/oauth2/access_token',
+        client_kwargs={
+            'scope': 'openid profile',
+            'headers': {
+                'User-Agent': 'WikiSTAR/1.0 (https://github.com/alphaf42/Starkforge_reviewtool; alphaf42@example.org)'
+            }
+        },
+    )
+    print("✅ MediaWiki OAuth 2.0 enabled")
 
     # Register blueprints
     app.register_blueprint(main_bp)
@@ -44,7 +41,7 @@ def create_app(config_class=Config):
     app.register_blueprint(articles_bp)
     app.register_blueprint(users_bp)
 
-    # Database initialization and testing
+    # Database initialization
     test_connection(app)
     create_tables(app)
     auto_import_data(app)
