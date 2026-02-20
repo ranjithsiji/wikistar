@@ -10,6 +10,18 @@
         <router-link v-if="!isCurrentUserJury && !isEditathonFinished" :to="`/editathon/${editathonId}/submit`" class="btn btn-submit">Submit Article</router-link>
         <router-link v-if="isCurrentUserJury" :to="`/editathon/${editathonId}/review`" class="btn btn-judge">Judge</router-link>
         <router-link v-if="isCoordinator || isGlobalAdmin" :to="`/editathon/${editathonId}/edit`" class="btn btn-secondary">Edit Campaign</router-link>
+        <!-- Approval actions: shown to sysops of the project and global admins -->
+        <template v-if="editathon.status === 'draft' && canApproveCampaign">
+          <button @click="approveCampaign" class="btn btn-approve-wiki" :disabled="approvalLoading">
+            <span v-if="approvalLoading">Checking...</span>
+            <span v-else>✓ Approve Campaign</span>
+          </button>
+          <button @click="rejectCampaign" class="btn btn-reject-wiki" :disabled="approvalLoading">✕ Reject</button>
+        </template>
+        <!-- Pending badge shown to coordinator when their campaign is in draft -->
+        <span v-if="editathon.status === 'draft' && (isCoordinator || isGlobalAdmin) && !canApproveCampaign" class="btn btn-pending">
+          ⏳ Pending Approval
+        </span>
       </div>
     </div>
 
@@ -359,6 +371,57 @@ const isCoordinator = computed(() => {
   return store.user.role === 'coordinator' || store.user.username === editathon.value?.created_by
 })
 
+// Approval rights state (checked via API)
+const canApproveCampaign = ref(false)
+const approvalRightsInfo = ref(null)
+const approvalLoading = ref(false)
+
+async function checkApprovalRights() {
+  if (!store.user || !editathonId.value) return
+  try {
+    approvalLoading.value = true
+    const { data } = await import('axios').then(m => m.default.get(`/api/editathon/${editathonId.value}/check-approval-rights`))
+    canApproveCampaign.value = data.can_approve || false
+    approvalRightsInfo.value = data
+  } catch (e) {
+    canApproveCampaign.value = false
+  } finally {
+    approvalLoading.value = false
+  }
+}
+
+async function approveCampaign() {
+  if (!confirm(`Approve the campaign "${editathon.value.name}"?`)) return
+  try {
+    const axios = (await import('axios')).default
+    const res = await axios.post(`/api/editathon/${editathonId.value}/approve`)
+    if (res.data.success) {
+      editathon.value.status = 'active'
+      canApproveCampaign.value = false
+      alert(`✅ Campaign approved successfully!`)
+    }
+  } catch (err) {
+    const msg = err.response?.data?.error || 'Failed to approve campaign'
+    alert(`❌ ${msg}`)
+  }
+}
+
+async function rejectCampaign() {
+  const reason = prompt(`Rejection reason for "${editathon.value.name}":`)
+  if (reason === null) return
+  try {
+    const axios = (await import('axios')).default
+    const res = await axios.post(`/api/editathon/${editathonId.value}/reject`, { reason })
+    if (res.data.success) {
+      editathon.value.status = 'rejected'
+      canApproveCampaign.value = false
+      alert(`Campaign rejected.`)
+    }
+  } catch (err) {
+    alert('Failed to reject campaign')
+  }
+}
+
 // Check if editathon has finished
 const isEditathonFinished = computed(() => {
   if (!editathon.value) return false
@@ -656,24 +719,10 @@ onMounted(async () => {
     unreviewedArticles.value = data.unreviewed_articles
   } catch (error) {
     console.error('Error loading editathon:', error)
-    // Keep the default mock data if API fails
   }
 
-  // Initialize Chart.js chart (commented out - statsChart ref not found)
-  // if (statsChart.value) {
-  //   new Chart(statsChart.value, {
-  //     type: 'bar',
-  //     data: chartData.value,
-  //     options: {
-  //       responsive: true,
-  //       plugins: {
-  //         legend: {
-  //           position: 'top',
-  //         }
-  //       }
-  //     }
-  //   })
-  // }
+  // Check if current user has sysop rights to approve this campaign
+  await checkApprovalRights()
 })
 </script>
 
@@ -753,6 +802,35 @@ onMounted(async () => {
   background-color: #f8f9fa; 
   border: 1px solid #c8c8c8; 
   color: #333; 
+}
+
+.btn-approve-wiki {
+  background-color: #1a7f37;
+  color: white;
+  border: none;
+  font-weight: 600;
+}
+
+.btn-approve-wiki:hover:not(:disabled) {
+  background-color: #155c28;
+}
+
+.btn-reject-wiki {
+  background-color: #b91c1c;
+  color: white;
+  border: none;
+}
+
+.btn-reject-wiki:hover:not(:disabled) {
+  background-color: #991b1b;
+}
+
+.btn-pending {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  cursor: default;
+  font-size: 0.85rem;
 }
 
 .btn-yes { 

@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from extensions import db
 from models import User, Project, Editathon, EditathonJury, EditathonStat, Mark, Article, EditathonRule, Rule
 from utils import format_project_label
@@ -407,17 +407,62 @@ def get_pending_editathons():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@editathons_bp.route('/api/editathon/<int:editathon_id>/check-approval-rights', methods=['GET'])
+def check_approval_rights(editathon_id):
+    """Returns whether the current logged-in user can approve this editathon."""
+    try:
+        editathon = Editathon.query.get(editathon_id)
+        if not editathon:
+            return jsonify({"error": "Editathon not found"}), 404
+
+        user_data = session.get('user')
+        if not user_data:
+            return jsonify({"can_approve": False, "reason": "not_logged_in"})
+
+        user = User.query.get(user_data['id'])
+        if not user:
+            return jsonify({"can_approve": False, "reason": "user_not_found"})
+
+        from wiki_rights import can_approve_campaign, get_wiki_domain
+        allowed, reason = can_approve_campaign(user, editathon)
+        wiki_domain = get_wiki_domain(editathon)
+        return jsonify({
+            "can_approve": allowed,
+            "reason": reason,
+            "wiki_domain": wiki_domain,
+            "user_role": user.role
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @editathons_bp.route('/api/editathon/<editathon_id>/approve', methods=['POST'])
 def approve_editathon(editathon_id):
     try:
         editathon = Editathon.query.get(editathon_id)
         if not editathon: return jsonify({"error": "Editathon not found"}), 404
-        editathon.status = 'active'; editathon.is_published = True
+
+        user_data = session.get('user')
+        if not user_data:
+            return jsonify({"error": "Authentication required"}), 401
+
+        user = User.query.get(user_data['id'])
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        from wiki_rights import can_approve_campaign
+        allowed, reason = can_approve_campaign(user, editathon)
+        if not allowed:
+            wiki_domain = editathon.wiki_domain or f"{editathon.language}.wikipedia.org"
+            return jsonify({
+                "error": f"Permission denied. You must be a sysop on {wiki_domain} to approve this campaign.",
+                "wiki_domain": wiki_domain
+            }), 403
+
+        editathon.status = 'active'
+        editathon.is_published = True
         db.session.commit()
         from logger import log_activity
-        from flask import session
-        user_id = session.get('user', {}).get('id')
-        if user_id: log_activity(user_id, 'approve', 'editathon', editathon.id, {'title': editathon.name})
+        log_activity(user.id, 'approve', 'editathon', editathon.id, {'title': editathon.name, 'approved_by_right': reason})
         return jsonify({"success": True, "message": f"Editathon '{editathon.name}' approved successfully", "status": "active"})
     except Exception as e:
         db.session.rollback(); return jsonify({"error": str(e)}), 500
