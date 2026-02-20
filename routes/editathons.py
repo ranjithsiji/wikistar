@@ -11,7 +11,7 @@ editathons_bp = Blueprint('editathons', __name__)
 @editathons_bp.route('/api/editathons', methods=['GET'])
 def get_all_editathons():
     try:
-        editathons = Editathon.query.all()
+        editathons = Editathon.query.order_by(Editathon.id.desc()).all()
         result = []
         for editathon in editathons:
             stats = EditathonStat.query.get(editathon.id)
@@ -28,6 +28,10 @@ def get_all_editathons():
                         'username': user.username,
                         'role': assignment.role
                     })
+
+            # Calculate marks for this editathon
+            from models import Mark, Article
+            marks_count = db.session.query(Mark).join(Article).filter(Article.editathon_id == editathon.id).count()
             
             result.append({
                 'id': editathon.id,
@@ -42,6 +46,7 @@ def get_all_editathons():
                 'project_domain': project_obj.name if project_obj else None,
                 'article_count': stats.total_articles if stats else 0,
                 'user_count': stats.total_participants if stats else 0,
+                'marks_count': marks_count,
                 'juries': juries
             })
         return jsonify(result)

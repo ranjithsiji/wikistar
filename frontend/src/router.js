@@ -9,6 +9,7 @@ const JuryArticlesFullScreen = () => import('./views/JuryArticlesFullScreen.vue'
 const ArticleReviewFullScreen = () => import('./views/ArticleReviewFullScreen.vue')
 const SubmitArticle = () => import('./views/SubmitArticle.vue')
 const EditEditathon = () => import('./views/EditEditathon.vue')
+const EventsList = () => import('./views/EventsList.vue')
 import { store, fetchCurrentUser } from './store'
 
 const routes = [
@@ -16,6 +17,11 @@ const routes = [
     path: '/',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/events',
+    name: 'EventsList',
+    component: EventsList
   },
   {
     path: '/create',
