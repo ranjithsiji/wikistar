@@ -166,6 +166,8 @@ def create_new_editathon():
         ))
         
         db.session.commit()
+        from logger import log_activity
+        log_activity(creator.id, 'create', 'editathon', editathon.id, {'name': editathon.name, 'code': editathon.code})
         return jsonify({
             "success": True,
             "message": "Editathon created successfully",
@@ -357,6 +359,10 @@ def update_editathon(editathon_id):
                 db.session.add(EditathonRule(editathon_id=editathon.id, rule_id=rule.id, is_active=True))
 
         db.session.commit()
+        from logger import log_activity
+        from flask import session
+        user_id = session.get('user', {}).get('id')
+        if user_id: log_activity(user_id, 'update', 'editathon', editathon.id, {'name': editathon.name})
         return jsonify({"success": True, "id": editathon.id, "status": editathon.status})
     except Exception as e:
         db.session.rollback(); return jsonify({"error": str(e)}), 500
@@ -372,6 +378,10 @@ def delete_editathon(editathon_id):
         EditathonRule.query.filter_by(editathon_id=editathon_id).delete()
         EditathonStat.query.filter_by(editathon_id=editathon_id).delete()
         db.session.delete(editathon); db.session.commit()
+        from logger import log_activity
+        from flask import session
+        user_id = session.get('user', {}).get('id')
+        if user_id: log_activity(user_id, 'delete', 'editathon', editathon_id, {'title': editathon.name})
         return jsonify({"success": True, "message": f"Editathon {editathon_id} deleted"})
     except Exception as e:
         db.session.rollback(); return jsonify({"error": str(e)}), 500
@@ -404,6 +414,10 @@ def approve_editathon(editathon_id):
         if not editathon: return jsonify({"error": "Editathon not found"}), 404
         editathon.status = 'active'; editathon.is_published = True
         db.session.commit()
+        from logger import log_activity
+        from flask import session
+        user_id = session.get('user', {}).get('id')
+        if user_id: log_activity(user_id, 'approve', 'editathon', editathon.id, {'title': editathon.name})
         return jsonify({"success": True, "message": f"Editathon '{editathon.name}' approved successfully", "status": "active"})
     except Exception as e:
         db.session.rollback(); return jsonify({"error": str(e)}), 500
@@ -416,6 +430,10 @@ def reject_editathon(editathon_id):
         editathon = Editathon.query.get(editathon_id)
         if not editathon: return jsonify({"error": "Editathon not found"}), 404
         editathon.status = 'rejected'; db.session.commit()
+        from logger import log_activity
+        from flask import session
+        user_id = session.get('user', {}).get('id')
+        if user_id: log_activity(user_id, 'reject', 'editathon', editathon.id, {'title': editathon.name, 'reason': reason})
         return jsonify({"success": True, "message": f"Editathon '{editathon.name}' rejected. Reason: {reason}", "status": "rejected"})
     except Exception as e:
         db.session.rollback(); return jsonify({"error": str(e)}), 500

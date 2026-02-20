@@ -76,6 +76,12 @@ const routes = [
     name: 'PersonalCabinet',
     component: PersonalCabinet,
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin',
+    name: 'AdminDashboard',
+    component: () => import('./views/AdminDashboard.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

@@ -50,6 +50,9 @@ def callback():
             'role': user.role
         }
 
+        from logger import log_activity
+        log_activity(user.id, 'login', 'user', user.id, {'username': user.username})
+
         return redirect('/')
     except Exception as e:
         import traceback

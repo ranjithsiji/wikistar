@@ -55,6 +55,11 @@
                   <i class="bi bi-person-circle me-2"></i>Personal Cabinet
                 </router-link>
               </li>
+              <li v-if="store.user.role === 'admin'">
+                <router-link class="dropdown-item" to="/admin" @click="isOpen = false">
+                  <i class="bi bi-shield-lock me-2"></i>Admin Center
+                </router-link>
+              </li>
               <li v-if="store.user.role === 'admin' || store.user.role === 'jury'">
                 <router-link class="dropdown-item" to="/personal-cabinet" @click="isOpen = false">
                   <i class="bi bi-check2-square me-2"></i>Approval Queue

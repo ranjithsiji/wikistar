@@ -36,6 +36,8 @@ def update_user_role(user_id):
             
         user.role = new_role
         db.session.commit()
+        from logger import log_activity
+        log_activity(session['user']['id'], 'update_role', 'user', user.id, {'new_role': new_role})
         return jsonify({"success": True, "message": f"User {user.username} role updated to {new_role}"})
     except Exception as e:
         db.session.rollback()

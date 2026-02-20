@@ -28,6 +28,8 @@ def submit_article(editathon_id):
             wikipedia_url=data.get('wikipedia_url'), submitted_by=user.id, status='pending'
         )
         db.session.add(article); db.session.commit()
+        from logger import log_activity
+        log_activity(user.id, 'submit', 'article', article.id, {'title': article.title, 'editathon_id': editathon.id})
         return jsonify({"message": f"Article '{article.title}' submitted successfully", "article_id": article.id, "success": True})
     except Exception as e:
         db.session.rollback(); return jsonify({"error": str(e)}), 500
@@ -81,6 +83,8 @@ def judge_article(editathon_id):
         article.points = points
         article.status = 'accepted' if decision == 'accepted' else 'rejected'
         db.session.commit()
+        from logger import log_activity
+        log_activity(jury_user.id, 'judge', 'article', article.id, {'points': points, 'decision': decision, 'editathon_id': editathon_id})
         return jsonify({"message": f"Article '{article.title}' judged with {points} points", "success": True})
     except Exception as e:
         db.session.rollback(); return jsonify({"error": str(e)}), 500

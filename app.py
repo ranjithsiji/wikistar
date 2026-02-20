@@ -6,6 +6,7 @@ from routes.auth import auth_bp
 from routes.editathons import editathons_bp
 from routes.articles import articles_bp
 from routes.users import users_bp
+from routes.admin import admin_bp
 from initialization import create_tables, auto_import_data, test_connection
 
 
@@ -47,6 +48,7 @@ def create_app(config_class=Config):
     app.register_blueprint(editathons_bp)
     app.register_blueprint(articles_bp)
     app.register_blueprint(users_bp)
+    app.register_blueprint(admin_bp)
 
     # Database initialisation (errors are non-fatal on startup)
     test_connection(app)
