@@ -4,6 +4,7 @@ import axios from 'axios'
 import ParticipatedEditathons from '../components/PersonalCabinet/ParticipatedEditathons.vue'
 import CreatedEditathons from '../components/PersonalCabinet/CreatedEditathons.vue'
 import ApprovalQueue from '../components/PersonalCabinet/ApprovalQueue.vue'
+import UserManagement from '../components/PersonalCabinet/UserManagement.vue'
 import MyArticles from '../components/PersonalCabinet/MyArticles.vue'
 import { store } from '../store'
 
@@ -12,6 +13,10 @@ const currentUser = ref(null)
 const userData = ref(null)
 const loading = ref(true)
 const error = ref(null)
+
+const isTrueAdmin = computed(() => {
+  return store.user && store.user.role === 'admin'
+})
 
 const isAdmin = computed(() => {
   return store.user && (store.user.role === 'admin' || store.user.role === 'jury')
@@ -25,6 +30,9 @@ const tabs = computed(() => {
   ]
   if (isAdmin.value) {
     base.push({ id: 'approval', label: 'Approval Queue', icon: 'bi-check2-circle' })
+  }
+  if (isTrueAdmin.value) {
+    base.push({ id: 'users', label: 'User Management', icon: 'bi-people' })
   }
   return base
 })
@@ -147,6 +155,10 @@ onMounted(() => {
                   <ApprovalQueue v-if="activeTab === 'approval' && isAdmin" />
                   <div v-if="activeTab === 'approval' && !isAdmin" class="alert alert-warning">
                     <strong>Access denied.</strong> You need admin or jury privileges to view the approval queue.
+                  </div>
+                  <UserManagement v-if="activeTab === 'users' && isTrueAdmin" />
+                  <div v-if="activeTab === 'users' && !isTrueAdmin" class="alert alert-warning">
+                    <strong>Access denied.</strong> You need admin privileges to manage users.
                   </div>
                 </div>
               </transition>

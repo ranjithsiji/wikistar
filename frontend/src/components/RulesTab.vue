@@ -108,6 +108,7 @@ function getDefaultConfig(type) {
         notAfter: toDatetimeLocalEnd(props.editathon?.endDate)
       }
     case 'created_by_submitter':
+    case 'prevent_judge_submission':
       return { required: true }
     case 'submitter_registration':
       return { notBefore: '', notAfter: '' }

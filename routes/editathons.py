@@ -285,7 +285,8 @@ def get_editathon_dashboard(editathon_id):
                 'project': project_label, 'project_domain': project_obj.name if project_obj else None,
                 'start_date': editathon.start_date.isoformat() if editathon.start_date else None,
                 'end_date': editathon.end_date.isoformat() if editathon.end_date else None,
-                'marks_config': editathon.marks_config, 'rules': rules
+                'marks_config': editathon.marks_config, 'rules': rules,
+                'created_by': User.query.get(editathon.created_by).username if User.query.get(editathon.created_by) else 'Unknown'
             },
             'stats': {
                 'users': len(users), 'articles': total_articles,

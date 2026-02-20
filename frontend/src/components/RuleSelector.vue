@@ -9,6 +9,7 @@
         <option value="creation_date">Article creation date</option>
         <option value="created_by_submitter">Created by submitter</option>
         <option value="submitter_registration">Submitter registration date</option>
+        <option value="prevent_judge_submission">Prevent judges from submitting</option>
       </select>
     </div>
   </div>

@@ -9,6 +9,7 @@
       <div class="action-buttons" v-if="store.user">
         <router-link v-if="!isCurrentUserJury && !isEditathonFinished" :to="`/editathon/${editathonId}/submit`" class="btn btn-submit">Submit Article</router-link>
         <router-link v-if="isCurrentUserJury" :to="`/editathon/${editathonId}/review`" class="btn btn-judge">Judge</router-link>
+        <router-link v-if="isCoordinator || isGlobalAdmin" :to="`/editathon/${editathonId}/edit`" class="btn btn-secondary">Edit Campaign</router-link>
       </div>
     </div>
 
@@ -347,6 +348,15 @@ const isCurrentUserJury = computed(() => {
     return false
   }
   return juries.value.some(jury => jury.username === store.user.username)
+})
+
+const isGlobalAdmin = computed(() => {
+  return store.user && store.user.role === 'admin'
+})
+
+const isCoordinator = computed(() => {
+  if (!store.user) return false
+  return store.user.role === 'coordinator' || store.user.username === editathon.value?.created_by
 })
 
 // Check if editathon has finished

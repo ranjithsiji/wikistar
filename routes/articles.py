@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from extensions import db
-from models import User, Editathon, Article, Mark, EditathonJury
+from models import User, Editathon, Article, Mark, EditathonJury, Rule, EditathonRule
 
 articles_bp = Blueprint('articles', __name__)
 
@@ -12,6 +12,16 @@ def submit_article(editathon_id):
         if not user: return jsonify({"error": "User not found"}), 404
         editathon = Editathon.query.get(editathon_id)
         if not editathon: return jsonify({"error": "Editathon not found"}), 404
+        
+        is_jury = EditathonJury.query.filter_by(editathon_id=editathon_id, user_id=user.id).first() is not None
+        if is_jury:
+            prevent_rule = db.session.query(Rule).join(EditathonRule).filter(
+                EditathonRule.editathon_id == editathon_id,
+                EditathonRule.is_active == True,
+                Rule.rule_type == 'prevent_judge_submission'
+            ).first()
+            if prevent_rule:
+                return jsonify({"error": "Jury members cannot submit articles for this editathon"}), 403
         
         article = Article(
             editathon_id=editathon.id, title=data['article_title'],

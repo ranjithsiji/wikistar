@@ -453,8 +453,10 @@ onMounted(async () => {
     // Check if current user is a jury member
     const juries = data.juries || []
     const isJury = store.user && juries.some(jury => jury.username === store.user.username)
-    if (isJury) {
-      alert('Access denied: Jury members cannot submit articles')
+    const preventJuryRule = data.editathon?.rules?.some(r => r.type === 'prevent_judge_submission') || false;
+    
+    if (isJury && preventJuryRule) {
+      alert('Access denied: Jury members cannot submit articles for this editathon')
       router.push(`/editathon/${editathonId.value}`)
       return
     }

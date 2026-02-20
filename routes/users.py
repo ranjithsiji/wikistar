@@ -1,10 +1,45 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request, session
 from extensions import db
 from models import User, Article, Editathon, Project, EditathonJury
 from utils import format_project_label
 from sqlalchemy import func
 
 users_bp = Blueprint('users', __name__)
+
+def is_admin():
+    user_data = session.get('user')
+    return user_data and user_data.get('role') == 'admin'
+
+@users_bp.route('/api/users', methods=['GET'])
+def get_all_users():
+    if not is_admin():
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        users = User.query.all()
+        return jsonify([{'id': u.id, 'username': u.username, 'email': u.email, 'role': u.role} for u in users])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@users_bp.route('/api/users/<int:user_id>/role', methods=['PUT'])
+def update_user_role(user_id):
+    if not is_admin():
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        data = request.json
+        new_role = data.get('role')
+        if new_role not in ['admin', 'coordinator', 'jury', 'user', 'participant']:
+            return jsonify({"error": "Invalid role"}), 400
+        
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+            
+        user.role = new_role
+        db.session.commit()
+        return jsonify({"success": True, "message": f"User {user.username} role updated to {new_role}"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 @users_bp.route('/api/personal-cabinet/<username>', methods=['GET'])
 def get_personal_cabinet(username):

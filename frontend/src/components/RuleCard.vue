@@ -76,6 +76,10 @@
         <p class="rule-description">Only the creator can submit the article</p>
       </div>
 
+      <div v-if="rule.type === 'prevent_judge_submission'">
+        <p class="rule-description">Jury members are not allowed to submit articles for this editathon</p>
+      </div>
+
       <div v-if="rule.type === 'submitter_registration'">
         <div class="form-row">
           <label>not before</label>
@@ -104,6 +108,7 @@ const titles = {
   size:'Article size', 
   creation_date:'Article creation date', 
   created_by_submitter:'Created by submitter', 
+  prevent_judge_submission:'Prevent judges from submitting articles',
   submitter_registration:'Submitter registration date' 
 }
 const title = titles[rule.type] || rule.type
@@ -128,6 +133,8 @@ const getSavedPreview = computed(() => {
       return 'Only the creator can submit the article'
     case 'submitter_registration':
       return `User registered between ${rule.config.notBefore || 'any time'} and ${rule.config.notAfter || 'any time'}`
+    case 'prevent_judge_submission':
+      return 'Jury members cannot submit articles'
     default:
       return 'Rule saved'
   }
