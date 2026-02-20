@@ -27,15 +27,28 @@ def update_user_role(user_id):
     try:
         data = request.json
         new_role = data.get('role')
-        if new_role not in ['admin', 'coordinator', 'jury', 'user', 'participant']:
-            return jsonify({"error": "Invalid role"}), 400
+        allowed = ['admin', 'coordinator', 'jury', 'user', 'participant']
+        if new_role not in allowed:
+            return jsonify({"error": f"Invalid role. Must be one of: {', '.join(allowed)}"}), 400
         
         user = User.query.get(user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
             
+        # Try to update; if 'user' or 'coordinator' ENUM hasn't been added to DB yet,
+        # catch the DataError and return a clear message to run migrate_role_enum.py
         user.role = new_role
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as db_err:
+            db.session.rollback()
+            if '1265' in str(db_err) or 'truncated' in str(db_err).lower():
+                return jsonify({
+                    "error": f"Role '{new_role}' is not yet supported by the database. "
+                             f"Please run: python migrate_role_enum.py on the Toolforge server first."
+                }), 500
+            raise
+
         from logger import log_activity
         log_activity(session['user']['id'], 'update_role', 'user', user.id, {'new_role': new_role})
         return jsonify({"success": True, "message": f"User {user.username} role updated to {new_role}"})

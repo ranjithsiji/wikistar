@@ -39,7 +39,7 @@ def callback():
                 username=username,
                 email=f"{username.replace(' ', '_')}@wikipedia.org",
                 password_hash="oauth_user",
-                role='user'
+                role='participant'
             )
             db.session.add(user)
             db.session.commit()
