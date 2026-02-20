@@ -1,29 +1,47 @@
 <template>
   <div class="lookup-page">
 
-    <!-- ── Search Bar ── -->
-    <div class="search-bar-wrap">
-      <div class="search-bar">
-        <div class="search-field">
-          <label>Wiki Username</label>
-          <input v-model="username" placeholder="e.g. Ranjithsiji" @keyup.enter="lookup" />
-        </div>
-
-        <div class="search-divider"></div>
-
-        <div class="search-field project-field">
-          <label>Project</label>
-          <input v-model="project" placeholder="e.g. ml.wikipedia.org" @keyup.enter="lookup" />
-          <div class="presets">
-            <button v-for="p in presets" :key="p" @click="project = p">{{ p }}</button>
-          </div>
-        </div>
-
-        <button class="lookup-btn" @click="lookup" :disabled="loading">
-          <span v-if="loading" class="spinner"></span>
-          <span v-else>🔍 Lookup</span>
-        </button>
+    <!-- ── Search Form (Vertical) ── -->
+    <div class="search-card">
+      <h2 class="search-title">Lookup User Contributions</h2>
+      <div class="form-group relative">
+        <label>Project</label>
+        <input 
+          v-model="project" 
+          @input="onProjectInput"
+          placeholder="e.g. ml.wikipedia.org" 
+          class="v-input"
+          @focus="onProjectInput"
+          @blur="closeProjectSuggestions"
+        />
+        <ul v-if="projectSuggestions.length" class="autocomplete-dropdown">
+          <li v-for="p in projectSuggestions" :key="p" @mousedown.prevent="selectProject(p)">
+            {{ p }}
+          </li>
+        </ul>
       </div>
+
+      <div class="form-group relative">
+        <label>Wiki Username</label>
+        <input 
+          v-model="username" 
+          @input="onUserSearch"
+          placeholder="e.g. Ranjithsiji" 
+          class="v-input"
+          @keyup.enter="lookup"
+          @blur="closeUserSuggestions"
+        />
+        <ul v-if="userSuggestions.length" class="autocomplete-dropdown">
+          <li v-for="u in userSuggestions" :key="u" @mousedown.prevent="selectUser(u)">
+            {{ u }}
+          </li>
+        </ul>
+      </div>
+
+      <button class="v-lookup-btn" @click="lookup" :disabled="loading">
+        <span v-if="loading" class="spinner"></span>
+        <span v-else>🔍 Lookup</span>
+      </button>
     </div>
 
     <!-- ── Error ── -->
@@ -153,11 +171,63 @@ const loading = ref(false)
 const error = ref('')
 const result = ref(null)
 
-const presets = [
+// Autocomplete state
+const projectSuggestions = ref([])
+const userSuggestions = ref([])
+let searchTimeout = null
+
+const ALL_PROJECTS = [
   'en.wikipedia.org', 'ml.wikipedia.org', 'hi.wikipedia.org',
   'ta.wikipedia.org', 'te.wikipedia.org', 'bn.wikipedia.org',
-  'commons.wikimedia.org'
+  'commons.wikimedia.org', 'wikidata.org', 'meta.wikimedia.org',
+  'fr.wikipedia.org', 'de.wikipedia.org', 'es.wikipedia.org', 'ru.wikipedia.org'
 ]
+
+function onProjectInput() {
+  const q = project.value.toLowerCase().trim()
+  if (!q) {
+    projectSuggestions.value = ALL_PROJECTS.slice(0, 5)
+    return
+  }
+  projectSuggestions.value = ALL_PROJECTS.filter(p => p.includes(q) && p !== q)
+}
+
+function selectProject(p) {
+  project.value = p
+  projectSuggestions.value = []
+}
+
+function closeProjectSuggestions() {
+  projectSuggestions.value = []
+}
+
+function onUserSearch() {
+  const q = username.value.trim()
+  userSuggestions.value = []
+  if (!q || q.length < 2) return
+
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(async () => {
+    try {
+      const proj = project.value.trim() || 'en.wikipedia.org'
+      const url = `https://${proj}/w/api.php?action=query&list=allusers&auprefix=${encodeURIComponent(q)}&format=json&origin=*`
+      const res = await axios.get(url)
+      const users = res.data?.query?.allusers || []
+      userSuggestions.value = users.map(u => u.name)
+    } catch(e) {
+      console.error('User autocomplete failed:', e)
+    }
+  }, 300)
+}
+
+function selectUser(u) {
+  username.value = u
+  userSuggestions.value = []
+}
+
+function closeUserSuggestions() {
+  userSuggestions.value = []
+}
 
 const isPrivileged = computed(() =>
   store.user && ['admin', 'coordinator', 'jury'].includes(store.user.role)
@@ -279,103 +349,103 @@ function groupClass(g) {
   padding-bottom: 60px;
 }
 
-/* ── Search bar ── */
-.search-bar-wrap {
+/* ── Search Form (Vertical) ── */
+.search-card {
   background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 20px 32px;
-}
-
-.search-bar {
-  display: flex;
-  align-items: flex-end;
-  gap: 0;
-  max-width: 900px;
-  background: #fff;
-  border: 1.5px solid #d1d5db;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
-  overflow: visible;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  padding: 30px;
+  max-width: 500px;
+  margin: 40px auto;
+  box-shadow: 0 4px 6px rgba(0,0,0,.04);
 }
 
-.search-field {
-  flex: 1;
-  padding: 10px 16px;
-  position: relative;
-}
-
-.search-field label {
-  display: block;
-  font-size: 0.7rem;
+.search-title {
+  font-size: 1.25rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .6px;
-  color: #6b7280;
-  margin-bottom: 4px;
-}
-
-.search-field input {
-  width: 100%;
-  border: none;
-  outline: none;
-  font-size: 0.96rem;
   color: #111827;
-  background: transparent;
-  padding: 0;
+  margin-top: 0;
+  margin-bottom: 24px;
+  text-align: center;
 }
 
-.search-field input::placeholder { color: #adb5bd; }
-
-.search-divider {
-  width: 1px;
-  height: 44px;
-  background: #e5e7eb;
-  align-self: center;
-  flex-shrink: 0;
+.form-group {
+  margin-bottom: 20px;
 }
 
-/* Project presets */
-.project-field { flex: 1.4; }
-.presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
+.form-group label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
-.presets button {
-  padding: 2px 8px;
+
+.v-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 1rem;
   border: 1px solid #d1d5db;
-  border-radius: 20px;
-  background: #f3f4f6;
-  font-size: 0.71rem;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #111827;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.v-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Autocomplete drops */
+.relative { position: relative; }
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%; left: 0; right: 0;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  margin: 4px 0 0; padding: 0;
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15);
+}
+.autocomplete-dropdown li {
+  padding: 10px 14px;
+  font-size: 0.95rem;
   color: #374151;
   cursor: pointer;
-  transition: background .15s;
-  white-space: nowrap;
+  border-bottom: 1px solid #f3f4f6;
 }
-.presets button:hover { background: #e5e7eb; }
+.autocomplete-dropdown li:last-child { border-bottom: none; }
+.autocomplete-dropdown li:hover { background: #f3f4f6; color: #111827; }
 
-/* Lookup button */
-.lookup-btn {
-  padding: 0 28px;
-  height: 100%;
-  min-height: 64px;
+/* Vert Lookup btn */
+.v-lookup-btn {
+  width: 100%;
+  padding: 14px;
   background: #2563eb;
   color: #fff;
   border: none;
-  border-radius: 0 10px 10px 0;
-  font-size: 0.95rem;
+  border-radius: 8px;
+  font-size: 1.05rem;
   font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   transition: background .15s;
-  white-space: nowrap;
-  flex-shrink: 0;
+  margin-top: 10px;
 }
-.lookup-btn:hover:not(:disabled) { background: #1d4ed8; }
-.lookup-btn:disabled { background: #93c5fd; cursor: default; }
+.v-lookup-btn:hover:not(:disabled) { background: #1d4ed8; }
+.v-lookup-btn:disabled { background: #93c5fd; cursor: default; }
 
 .spinner {
   width: 18px; height: 18px;
@@ -389,13 +459,15 @@ function groupClass(g) {
 
 /* ── Error / Access denied ── */
 .error-banner {
-  margin: 16px 32px 0;
+  max-width: 500px;
+  margin: -20px auto 20px;
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #dc2626;
   border-radius: 8px;
   padding: 10px 16px;
   font-size: .9rem;
+  text-align: center;
 }
 .access-denied {
   text-align: center;
@@ -575,8 +647,5 @@ function groupClass(g) {
 
 @media (max-width: 768px) {
   .results-grid { grid-template-columns: 1fr; }
-  .search-bar { flex-direction: column; border-radius: 12px; }
-  .lookup-btn { border-radius: 0 0 10px 10px; width: 100%; justify-content: center; }
-  .search-divider { width: 100%; height: 1px; }
 }
 </style>
