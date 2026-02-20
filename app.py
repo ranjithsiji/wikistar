@@ -16,7 +16,7 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
     
     # Trust reverse proxy headers (Toolforge router)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
     # Initialize extensions
     db.init_app(app)

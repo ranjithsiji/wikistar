@@ -17,8 +17,8 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Session
-    SESSION_COOKIE_SAMESITE = 'Lax'
-    SESSION_COOKIE_SECURE = _cfg.get('SESSION_COOKIE_SECURE', False)
+    SESSION_COOKIE_SAMESITE = 'None'
+    SESSION_COOKIE_SECURE = True
 
     # MediaWiki OAuth 2.0  (variable names match Toolforge conventions)
     CONSUMER_KEY    = _cfg.get('CONSUMER_KEY')
