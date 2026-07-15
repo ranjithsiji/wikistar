@@ -7,6 +7,8 @@ SECRET_KEY = "replace-with-a-long-random-secret-key"
 
 # Database — use the Toolforge replica DB URL in production
 # Example for Toolforge: "mysql+pymysql://s12345:password@tools.db.svc.wikimedia.cloud/s12345__wikistar"
+# DATABASE_USER=s12345
+# DATABASE_PASSWORD=the-password
 DATABASE_URL = "mysql+pymysql://root:21it@localhost/wikifountain"
 
 # MediaWiki OAuth 2.0 credentials
