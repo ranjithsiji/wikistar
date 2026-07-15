@@ -14,9 +14,9 @@ from authlib.integrations.starlette_client import OAuth
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from backend.config import settings
-from backend.db import get_db
-from backend.models import Campaign, CampaignMember, MemberRole, User
+from config import settings
+from db import get_db
+from models import Campaign, CampaignMember, MemberRole, User
 
 USER_AGENT = "WikiSTAR/2.0 (https://wikistar.toolforge.org)"
 

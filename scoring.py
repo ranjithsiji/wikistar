@@ -33,7 +33,7 @@ eligibility     documentation of topical constraints shown to
 """
 from dataclasses import dataclass, field
 
-from backend.models import (
+from models import (
     Claim,
     ClaimStatus,
     ReviewDecision,

@@ -10,7 +10,7 @@ from datetime import date, datetime, time, timezone
 
 import httpx
 
-from backend.auth import USER_AGENT
+from auth import USER_AGENT
 
 TIMEOUT = 15.0
 

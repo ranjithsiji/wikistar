@@ -12,10 +12,10 @@ members add/remove   organizer or admin
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.auth import require_user
-from backend.db import get_db
-from backend.models import Campaign, User
-from backend.schemas import CampaignDetail, CampaignIn, CampaignSummary, LeaderboardRow
+from auth import require_user
+from db import get_db
+from models import Campaign, User
+from schemas import CampaignDetail, CampaignIn, CampaignSummary, LeaderboardRow
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 
@@ -72,5 +72,5 @@ def reject_campaign(slug: str, db: Session = Depends(get_db),
 
 @router.get("/{slug}/leaderboard", response_model=list[LeaderboardRow])
 def leaderboard(slug: str, db: Session = Depends(get_db)):
-    """Ranking computed live via backend.scoring.compute_breakdown."""
+    """Ranking computed live via scoring.compute_breakdown."""
     raise HTTPException(501, "Phase 2")

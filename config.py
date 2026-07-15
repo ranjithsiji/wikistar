@@ -1,14 +1,13 @@
 """Application configuration.
 
-Values are read from config.toml (sitting in the repo root, next to
-pyproject.toml) and can be overridden by environment variables of the
-same name.
+Values are read from config.toml (next to this file) and can be
+overridden by environment variables of the same name.
 """
 import os
 import tomllib
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = ROOT_DIR / "config.toml"
 
 _DEFAULTS = {

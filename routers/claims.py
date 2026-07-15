@@ -2,16 +2,16 @@
 
 Participants claim points on their own submissions under the campaign's
 scoring rules; points are always recomputed server-side from the rule and
-quantity (backend.scoring.claim_points). Organizers verify, adjust or
+quantity (scoring.claim_points). Organizers verify, adjust or
 reject each claim — their decision (points_final) wins.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.auth import require_user
-from backend.db import get_db
-from backend.models import User
-from backend.schemas import ClaimIn, ClaimModeration, ClaimOut, SubmissionOut
+from auth import require_user
+from db import get_db
+from models import User
+from schemas import ClaimIn, ClaimModeration, ClaimOut, SubmissionOut
 
 router = APIRouter(prefix="/api", tags=["claims"])
 

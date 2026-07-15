@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from backend.auth import fetch_profile, get_current_user, oauth, upsert_user
-from backend.config import settings
-from backend.db import get_db
-from backend.models import User
+from auth import fetch_profile, get_current_user, oauth, upsert_user
+from config import settings
+from db import get_db
+from models import User
 
 router = APIRouter(tags=["auth"])
 

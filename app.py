@@ -1,18 +1,22 @@
 """WikiSTAR v2 application entry point.
 
-Run locally:   uv run uvicorn backend.main:app --reload
+Run locally:   uv run uvicorn app:app --reload
 API docs:      http://localhost:8000/docs
-"""
-from pathlib import Path
 
+Toolforge (classic python webservice, ~/www/python/src): uwsgi speaks
+WSGI only, so point it at the `application` callable below
+(uwsgi.ini: callable = application). With the build service or any
+ASGI server, use `app` directly.
+"""
+from a2wsgi import ASGIMiddleware
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from backend.config import ROOT_DIR, settings
-from backend.db import Base, engine
-from backend.routers import admin, auth, campaigns, claims, reviews, submissions
+from config import ROOT_DIR, settings
+from db import Base, engine
+from routers import admin, auth, campaigns, claims, reviews, submissions
 
 app = FastAPI(title="WikiSTAR", version="2.0.0")
 
@@ -49,3 +53,7 @@ if DIST.exists():
         if path and candidate.is_file() and candidate.is_relative_to(DIST):
             return FileResponse(candidate)
         return FileResponse(DIST / "index.html")
+
+
+# WSGI entry point for Toolforge's uwsgi-based python webservice.
+application = ASGIMiddleware(app)

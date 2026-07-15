@@ -151,25 +151,29 @@ documentation (4,100-byte translation → 4 pts; 3,900 bytes + improvement
 
 ## Backend layout
 
+Python files live at the repository root because Toolforge's classic
+python webservice serves directly from `~/www/python/src` and expects
+`app.py` there. `app.py` exposes both the ASGI app (`app`, for
+uvicorn/build service) and a WSGI adapter (`application`, for uwsgi).
+
 ```
-backend/
-  main.py        app assembly, session middleware, SPA static serving
-  config.py      config.toml + env vars
-  db.py          engine / session / Base
-  models.py      the schema above (SQLAlchemy 2.0 typed mappings)
-  schemas.py     pydantic request/response models (API contract)
-  auth.py        OAuth 2.0 flow + require_user/require_admin/
-                 require_organizer/require_jury dependencies
-  scoring.py     rule engine + default preset
-  mediawiki.py   read-only MW API client (page info, byte deltas,
-                 new-page detection)
-  routers/
-    auth.py         /api/login /oauth-callback /api/logout /api/me   [done]
-    campaigns.py    CRUD, approve/reject, leaderboard                [phase 2]
-    submissions.py  submit, list, refresh metadata, moderate         [phase 2]
-    reviews.py      single upsert write path for jury reviews        [phase 2]
-    claims.py       claim upsert + organizer moderation              [phase 2]
-    admin.py        stats, audit log, user admin                     [phase 2]
+app.py         entry point: app assembly, session middleware, SPA serving
+config.py      config.toml + env vars
+db.py          engine / session / Base
+models.py      the schema above (SQLAlchemy 2.0 typed mappings)
+schemas.py     pydantic request/response models (API contract)
+auth.py        OAuth 2.0 flow + require_user/require_admin/
+               require_organizer/require_jury dependencies
+scoring.py     rule engine + default preset
+mediawiki.py   read-only MW API client (page info, byte deltas,
+               new-page detection)
+routers/
+  auth.py         /api/login /oauth-callback /api/logout /api/me   [done]
+  campaigns.py    CRUD, approve/reject, leaderboard                [phase 2]
+  submissions.py  submit, list, refresh metadata, moderate         [phase 2]
+  reviews.py      single upsert write path for jury reviews        [phase 2]
+  claims.py       claim upsert + organizer moderation              [phase 2]
+  admin.py        stats, audit log, user admin                     [phase 2]
 ```
 
 ## API surface
@@ -181,7 +185,7 @@ the session cookie; role checks are enforced per campaign.
 
 ```bash
 uv sync
-uv run uvicorn backend.main:app --reload   # http://localhost:8000
+uv run uvicorn app:app --reload            # http://localhost:8000
 cd frontend && pnpm install && pnpm dev    # http://localhost:5173 (proxies /api)
 uv run pytest                              # scoring engine tests
 ```

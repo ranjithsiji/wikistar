@@ -42,7 +42,7 @@ FastAPI · SQLAlchemy 2.0 · MariaDB (SQLite in dev) · MediaWiki OAuth 2.0
 # backend (Python 3.12, uv)
 cp config.toml.example config.toml   # fill in OAuth credentials
 uv sync
-uv run uvicorn backend.main:app --reload   # http://localhost:8000, docs at /docs
+uv run uvicorn app:app --reload      # http://localhost:8000, docs at /docs
 
 # frontend
 cd frontend
@@ -55,8 +55,16 @@ uv run pytest
 
 ## Deployment (Toolforge)
 
-Build the frontend (`pnpm build`) — FastAPI serves `frontend/dist` —
-and run the ASGI app with uvicorn. OAuth consumer registration:
+The repository root is the webservice source directory
+(`/data/project/wikistar/www/python/src`); FastAPI serves the built
+frontend from `frontend/dist` (`pnpm build`).
+
+* **Classic python webservice (uwsgi, WSGI):** point uwsgi at the
+  `application` callable in `app.py` (`callable = application` in
+  `~/www/python/uwsgi.ini`).
+* **Build service / any ASGI server:** run `uvicorn app:app`.
+
+OAuth consumer registration:
 <https://meta.wikimedia.org/wiki/Special:OAuthConsumerRegistration>
 (see [MEDIAWIKI_OAUTH_GUIDE.md](MEDIAWIKI_OAUTH_GUIDE.md)).
 

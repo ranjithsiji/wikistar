@@ -10,7 +10,7 @@ Design notes
   The single exception is submissions.points_override — the organizers'
   documented "final say".
 * Scoring is configurable per campaign through scoring_rules rows
-  (see backend/scoring.py for rule semantics).
+  (see scoring.py for rule semantics).
 """
 import enum
 from datetime import date, datetime, timezone
@@ -31,7 +31,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.db import Base
+from db import Base
 
 
 def utcnow() -> datetime:
@@ -188,7 +188,7 @@ class CampaignMember(Base):
 class ScoringRule(Base):
     """One configurable scoring rule of a campaign.
 
-    Interpretation by rule_type (see backend/scoring.py):
+    Interpretation by rule_type (see scoring.py):
       per_unit       — `points` per `unit_size` of `metric`
                        (metrics: bytes_added [auto], statements,
                         labels_descriptions_aliases, references [claimed])

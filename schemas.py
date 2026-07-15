@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.models import (
+from models import (
     CampaignStatus,
     ClaimStatus,
     MemberRole,

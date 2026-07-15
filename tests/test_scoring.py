@@ -1,6 +1,6 @@
 """The scoring engine must reproduce every worked example from the
 self-assessment rule documentation."""
-from backend.models import (
+from models import (
     Claim,
     ClaimStatus,
     ScoringMode,
@@ -8,7 +8,7 @@ from backend.models import (
     Submission,
     SubmissionKind,
 )
-from backend.scoring import compute_breakdown, default_self_assessment_rules
+from scoring import compute_breakdown, default_self_assessment_rules
 
 
 def make_rules() -> list[ScoringRule]:
@@ -40,7 +40,7 @@ def make_submission(kind=SubmissionKind.article, **kw) -> Submission:
 def claim(sub: Submission, label: str, quantity: int = 1,
           status=ClaimStatus.claimed) -> None:
     rule = rule_by_label(label)
-    from backend.scoring import claim_points
+    from scoring import claim_points
     sub.claims.append(Claim(submission_id=sub.id, rule_id=rule.id,
                             rule=rule, quantity=quantity, status=status,
                             points_claimed=claim_points(rule, quantity)))

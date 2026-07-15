@@ -7,10 +7,10 @@ review per submission and can revise it until the campaign is archived.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.auth import require_user
-from backend.db import get_db
-from backend.models import User
-from backend.schemas import ReviewIn, ReviewOut
+from auth import require_user
+from db import get_db
+from models import User
+from schemas import ReviewIn, ReviewOut
 
 router = APIRouter(prefix="/api", tags=["reviews"])
 
