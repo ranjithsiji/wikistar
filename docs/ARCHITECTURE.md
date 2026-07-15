@@ -8,9 +8,9 @@ branch.
 | Layer     | Technology |
 |-----------|------------|
 | Backend   | FastAPI + SQLAlchemy 2.0 (Python 3.12, managed with `uv`) |
-| Database  | MariaDB/MySQL (SQLite for local dev) |
+| Database  | MariaDB/MySQL (SQLite for local dev/tests) |
 | Auth      | MediaWiki OAuth 2.0 via Authlib (Starlette client), signed session cookie |
-| Frontend  | Vue 3 + Vite + Pinia + Bootstrap 5 |
+| Frontend  | Vue 3 + Vite + Pinia + Tailwind CSS 4 |
 
 ## Design principles (fixes for v1's flaws)
 
@@ -118,7 +118,29 @@ erDiagram
     }
 ```
 
-Plus `audit_logs` (user_id, action, entity_type, entity_id, details JSON).
+Plus `campaign_settings` (campaign_id, key, value JSON — one row per
+overridden setting; unique on campaign+key) and `audit_logs` (user_id,
+action, entity_type, entity_id, details JSON).
+
+## Campaign settings
+
+Every configurable knob a campaign carries is declared in
+`settings_registry.SETTING_DEFS` with its type, default, label, category
+and help text. The `campaign_settings` table stores only overrides;
+`Campaign.effective_settings` merges them over the defaults, the frontend
+renders the settings form from `GET /api/meta`, and
+`settings_registry.validate_overrides` type-checks writes. Adding a new
+setting is one dict entry.
+
+Current registry (Fountain-equivalent flags marked):
+
+| Category | Settings |
+|---|---|
+| participation | jury_can_submit, max_submissions_per_user, allow_articles, allow_wikidata_items, allow_submissions_after_end |
+| eligibility | require_page_created_during_campaign *(articleCreated)*, min_article_bytes *(articleSize)*, submitter_registered_after *(submitterRegistered)*, submitter_must_be_creator *(submitterIsCreator)* |
+| jury | min_reviews_per_submission *(MinMarks)*, consensual_vote *(ConsensualVote)*, anonymous_reviews *(HiddenMarks)*, jury_criteria *(marks config: radio/check/int parts; review totals are computed server-side)* |
+| self_assessment | unverified_claims_count, claims_editable_after_end |
+| display | show_leaderboard, show_points_during_campaign |
 
 ## Scoring modes
 
@@ -167,14 +189,27 @@ auth.py        OAuth 2.0 flow + require_user/require_admin/
 scoring.py     rule engine + default preset
 mediawiki.py   read-only MW API client (page info, byte deltas,
                new-page detection)
+settings_registry.py  typed per-campaign settings registry
 routers/
-  auth.py         /api/login /oauth-callback /api/logout /api/me   [done]
-  campaigns.py    CRUD, approve/reject, leaderboard                [phase 2]
-  submissions.py  submit, list, refresh metadata, moderate         [phase 2]
-  reviews.py      single upsert write path for jury reviews        [phase 2]
-  claims.py       claim upsert + organizer moderation              [phase 2]
-  admin.py        stats, audit log, user admin                     [phase 2]
+  auth.py         /api/login /oauth-callback /api/logout /api/me
+  campaigns.py    /api/meta, CRUD, join, approve/reject, lifecycle,
+                  leaderboard (tied ranks), /stats per campaign
+  submissions.py  submit (auto-join + MW metadata + eligibility checks),
+                  list (hidden-marks redaction), refresh, moderate
+  reviews.py      single upsert write path; totals from marks config
+  claims.py       claim upsert + verification/adjustment
+  admin.py        stats, audit log, user admin
+  common.py       serializers, leaderboard, audit helper
 ```
+
+## Fountain parity
+
+Ported from the original Fountain tool (analysed from source):
+eligibility rules (article created during campaign, min size, submitter
+registration date, submitter-is-creator), marks config with radio/check/
+int parts and server-computed totals, MinMarks gate, consensual vote,
+hidden marks, tied ranking. Not yet ported: adding a wiki template to
+submitted articles (needs OAuth write scope), multi-language UI.
 
 ## API surface
 
@@ -186,6 +221,6 @@ the session cookie; role checks are enforced per campaign.
 ```bash
 uv sync
 uv run uvicorn app:app --reload            # http://localhost:8000
-cd frontend && pnpm install && pnpm dev    # http://localhost:5173 (proxies /api)
-uv run pytest                              # scoring engine tests
+cd frontend && npm install && npm run dev  # http://localhost:5173 (proxies /api)
+uv run pytest                              # scoring + API integration tests
 ```

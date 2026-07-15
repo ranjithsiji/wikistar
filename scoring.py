@@ -116,12 +116,16 @@ def compute_breakdown(
     rules: list[ScoringRule],
     suggested_titles: set[str],
     scoring_mode: ScoringMode,
+    settings: dict | None = None,
 ) -> Breakdown:
     """Full point breakdown for one submission.
 
     suggested_titles: lowercase titles of the campaign's suggested pages
     matching this submission's kind.
+    settings: the campaign's effective settings; honours
+    min_reviews_per_submission (jury) and unverified_claims_count (self).
     """
+    settings = settings or {}
     bd = Breakdown()
 
     if submission.points_override is not None:
@@ -132,8 +136,12 @@ def compute_breakdown(
     if scoring_mode == ScoringMode.jury:
         accepted = [r for r in submission.reviews
                     if r.decision == ReviewDecision.accept]
-        if accepted:
-            avg = round(sum(float(r.total) for r in accepted) / len(accepted), 2)
+        needed = int(settings.get("min_reviews_per_submission", 1) or 1)
+        if accepted and len(accepted) >= needed:
+            totals = [float(r.total) for r in accepted]
+            if settings.get("consensual_vote") and len(set(totals)) > 1:
+                return bd  # Fountain's ConsensualVote: no agreement, no points
+            avg = round(sum(totals) / len(totals), 2)
             bd.add(PointLine(None, f"Jury average ({len(accepted)} review(s))",
                              "jury", len(accepted), avg))
         return bd
@@ -163,16 +171,42 @@ def compute_breakdown(
             continue
 
         claim = claims_by_rule.get(rule.id)
-        if claim is None or claim.status == ClaimStatus.rejected:
-            if claim is not None:
-                bd.add(PointLine(rule.id, rule.label, "claimed", claim.quantity,
-                                 0.0, status=claim.status.value))
+        if claim is None:
             continue
+        unverified_ok = bool(settings.get("unverified_claims_count", True))
+        counts = (claim.status != ClaimStatus.rejected
+                  and (unverified_ok or claim.status != ClaimStatus.claimed))
         if rule.rule_type in (RuleType.per_unit, RuleType.flat_bonus):
             bd.add(PointLine(rule.id, rule.label, "claimed", claim.quantity,
-                             claim.effective_points, status=claim.status.value))
+                             claim.effective_points if counts else 0.0,
+                             status=claim.status.value))
 
     return bd
+
+
+def review_total(criteria: list[dict], scores: dict) -> float:
+    """Server-side total of a jury mark against the campaign's review
+    criteria (Fountain-style parts: radio / check / int)."""
+    total = 0.0
+    for part in criteria or []:
+        key = part.get("key") or part.get("title")
+        value = (scores or {}).get(key)
+        if value is None:
+            continue
+        kind = part.get("type", "int")
+        if kind == "radio":
+            options = part.get("values", [])
+            if isinstance(value, bool):  # backwards compat, like Fountain
+                value = 1 if value else 0
+            if isinstance(value, int) and 0 <= value < len(options):
+                total += float(options[value].get("value", 0))
+        elif kind == "check":
+            if value is True:
+                total += float(part.get("value", 0))
+        elif kind == "int":
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                total += float(value)
+    return round(total, 2)
 
 
 # --------------------------------------------------------------------------

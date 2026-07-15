@@ -8,6 +8,8 @@ WSGI only, so point it at the `application` callable below
 (uwsgi.ini: callable = application). With the build service or any
 ASGI server, use `app` directly.
 """
+from contextlib import asynccontextmanager
+
 from a2wsgi import ASGIMiddleware
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -18,7 +20,14 @@ from config import ROOT_DIR, settings
 from db import Base, engine
 from routers import admin, auth, campaigns, claims, reviews, submissions
 
-app = FastAPI(title="WikiSTAR", version="2.0.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Dev convenience; production schema changes go through Alembic.
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
+app = FastAPI(title="WikiSTAR", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     SessionMiddleware,
@@ -34,12 +43,6 @@ for router_module in (auth, campaigns, submissions, reviews, claims, admin):
 @app.get("/api/health")
 def health():
     return {"status": "ok", "version": app.version}
-
-
-@app.on_event("startup")
-def init_db() -> None:
-    # Dev convenience; production schema changes go through Alembic.
-    Base.metadata.create_all(bind=engine)
 
 
 # ---- serve the built SPA ---------------------------------------------------

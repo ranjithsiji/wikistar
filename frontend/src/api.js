@@ -1,13 +1,20 @@
-// The single API client of the app (v1 had two competing layers).
+// The single API client of the app.
 import axios from 'axios'
 
 const http = axios.create({ baseURL: '/', withCredentials: true })
+
+export function errorMessage (err) {
+  return err?.response?.data?.detail || err?.message || 'Something went wrong'
+}
 
 export default {
   // auth
   me: () => http.get('/api/me'),
   loginUrl: '/api/login',
   logoutUrl: '/api/logout',
+
+  // metadata for forms (settings registry, default rule presets)
+  meta: () => http.get('/api/meta'),
 
   // campaigns
   listCampaigns: () => http.get('/api/campaigns'),
@@ -16,8 +23,10 @@ export default {
   updateCampaign: (slug, data) => http.put(`/api/campaigns/${slug}`, data),
   deleteCampaign: (slug) => http.delete(`/api/campaigns/${slug}`),
   approveCampaign: (slug) => http.post(`/api/campaigns/${slug}/approve`),
-  rejectCampaign: (slug) => http.post(`/api/campaigns/${slug}/reject`),
+  rejectCampaign: (slug, reason) => http.post(`/api/campaigns/${slug}/reject`, { reason }),
+  joinCampaign: (slug) => http.post(`/api/campaigns/${slug}/join`),
   leaderboard: (slug) => http.get(`/api/campaigns/${slug}/leaderboard`),
+  campaignStats: (slug) => http.get(`/api/campaigns/${slug}/stats`),
 
   // submissions
   listSubmissions: (slug) => http.get(`/api/campaigns/${slug}/submissions`),
@@ -37,5 +46,6 @@ export default {
   // admin
   adminStats: () => http.get('/api/admin/stats'),
   adminLogs: (params) => http.get('/api/admin/logs', { params }),
-  adminUsers: () => http.get('/api/admin/users')
+  adminUsers: () => http.get('/api/admin/users'),
+  setAdmin: (userId, isAdmin) => http.post(`/api/admin/users/${userId}/set-admin?is_admin=${isAdmin}`)
 }

@@ -31,6 +31,7 @@ class UserOut(ORMModel):
 # ---- scoring rules ---------------------------------------------------------
 
 class RuleIn(BaseModel):
+    id: int | None = None  # present on update: keep/refresh an existing rule
     rule_type: RuleType
     applies_to: RuleApplies = RuleApplies.any
     label: str = Field(min_length=1, max_length=255)
@@ -60,8 +61,8 @@ class CampaignIn(BaseModel):
     start_date: date
     end_date: date
     scoring_mode: ScoringMode = ScoringMode.jury
-    jury_can_submit: bool = False
-    settings: dict | None = None
+    status: CampaignStatus | None = None  # organizer lifecycle changes on update
+    settings: dict = {}  # validated against settings_registry
     rules: list[RuleIn] = []
     jury_usernames: list[str] = []
     suggested_articles: list[str] = []
@@ -91,8 +92,7 @@ class CampaignSummary(ORMModel):
 
 
 class CampaignDetail(CampaignSummary):
-    jury_can_submit: bool
-    settings: dict | None
+    settings: dict = {}  # effective (defaults + overrides)
     created_by_username: str | None = None
     rules: list[RuleOut] = []
     members: list[MemberOut] = []
@@ -180,10 +180,32 @@ class ClaimModeration(BaseModel):
     note: str | None = None
 
 
-# ---- leaderboard -----------------------------------------------------------
+class SubmissionModerationIn(BaseModel):
+    status: SubmissionStatus | None = None
+    points_override: float | None = None
+    clear_override: bool = False
+
+
+# ---- leaderboard / statistics ----------------------------------------------
 
 class LeaderboardRow(BaseModel):
     rank: int
     user: UserOut
     submission_count: int
     points: float
+
+
+class CampaignStats(BaseModel):
+    submissions: int
+    participants: int
+    reviews: int
+    claims: int
+    pending_claims: int
+    unreviewed_submissions: int
+    total_points: float
+    total_bytes_added: int
+    new_pages: int
+    by_kind: dict[str, int]
+    by_status: dict[str, int]
+    timeline: list[dict]        # [{date, submissions}]
+    top_contributors: list[LeaderboardRow]

@@ -34,7 +34,7 @@ campaign and fully editable; a default preset ships with the tool.
 ## Stack
 
 FastAPI · SQLAlchemy 2.0 · MariaDB (SQLite in dev) · MediaWiki OAuth 2.0
-(Authlib) · Vue 3 · Vite · Pinia · Bootstrap 5
+(Authlib) · Vue 3 · Vite · Pinia · Tailwind CSS 4
 
 ## Development
 
@@ -46,8 +46,8 @@ uv run uvicorn app:app --reload      # http://localhost:8000, docs at /docs
 
 # frontend
 cd frontend
-pnpm install
-pnpm dev                                   # http://localhost:5173, proxies /api
+npm install
+npm run dev                                   # http://localhost:5173, proxies /api
 
 # tests
 uv run pytest
@@ -57,7 +57,7 @@ uv run pytest
 
 The repository root is the webservice source directory
 (`/data/project/wikistar/www/python/src`); FastAPI serves the built
-frontend from `frontend/dist` (`pnpm build`).
+frontend from `frontend/dist` (`npm run build`).
 
 * **Classic python webservice (uwsgi, WSGI):** point uwsgi at the
   `application` callable in `app.py` (`callable = application` in

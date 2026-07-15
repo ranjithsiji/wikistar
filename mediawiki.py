@@ -37,6 +37,23 @@ class PageMetadata:
     base_rev_id: int | None = None
     bytes_added: int = 0
     is_new_page: bool = False
+    creator: str | None = None
+    created_at: datetime | None = None
+
+
+def fetch_user_registration(domain: str, username: str) -> datetime | None:
+    """Account registration timestamp on the given wiki, or None."""
+    with _client() as client:
+        data = client.get(api_url(domain), params={
+            "action": "query", "format": "json", "formatversion": 2,
+            "list": "users", "ususers": username, "usprop": "registration",
+        }).json()
+        users = data.get("query", {}).get("users", [])
+        reg = users[0].get("registration") if users else None
+        if not reg:
+            return None
+        return datetime.strptime(reg, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc)
 
 
 def fetch_page_metadata(
@@ -83,6 +100,28 @@ def fetch_page_metadata(
                 break
             params.update(cont)
 
+        # First revision ever: creator + creation date (Fountain's
+        # submitterIsCreator / articleCreated rules need these).
+        first = client.get(api_url(domain), params={
+            "action": "query", "format": "json", "formatversion": 2,
+            "prop": "revisions", "pageids": meta.page_id,
+            "rvprop": "timestamp|user", "rvdir": "newer", "rvlimit": 1,
+        }).json()
+        first_pages = first.get("query", {}).get("pages", [])
+        if first_pages and first_pages[0].get("revisions"):
+            rev0 = first_pages[0]["revisions"][0]
+            meta.creator = rev0.get("user")
+            ts = rev0.get("timestamp")
+            if ts:
+                meta.created_at = datetime.strptime(
+                    ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        meta.is_new_page = (
+            meta.creator == username
+            and meta.created_at is not None
+            and _iso(start) <= meta.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+            <= _iso(end, end=True)
+        )
+
         base_size = 0
         if revs:
             meta.base_rev_id = revs[0].get("parentid") or None
@@ -95,8 +134,6 @@ def fetch_page_metadata(
                 base_pages = base.get("query", {}).get("pages", [])
                 if base_pages and base_pages[0].get("revisions"):
                     base_size = base_pages[0]["revisions"][0].get("size", 0)
-            else:
-                meta.is_new_page = revs[0].get("user") == username
 
         prev_size = base_size
         added = 0

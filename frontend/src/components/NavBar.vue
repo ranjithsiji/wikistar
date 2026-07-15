@@ -6,18 +6,21 @@ const auth = useAuthStore()
 </script>
 
 <template>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container">
-      <router-link class="navbar-brand fw-bold" to="/">WikiSTAR</router-link>
-      <div class="navbar-nav ms-auto align-items-center">
-        <router-link class="nav-link" to="/campaigns/new" v-if="auth.isLoggedIn">
-          Create campaign
-        </router-link>
-        <router-link class="nav-link" to="/admin" v-if="auth.isAdmin">Admin</router-link>
-        <span class="navbar-text me-2" v-if="auth.isLoggedIn">{{ auth.user.username }}</span>
-        <a class="btn btn-outline-light btn-sm" :href="api.logoutUrl" v-if="auth.isLoggedIn">Logout</a>
-        <a class="btn btn-light btn-sm" :href="api.loginUrl" v-else>Login with Wikimedia</a>
-      </div>
+  <nav class="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center gap-4">
+      <router-link to="/" class="font-bold text-lg tracking-tight">
+        Wiki<span class="text-blue-600 dark:text-blue-400">STAR</span>
+      </router-link>
+      <div class="flex-1"></div>
+      <router-link v-if="auth.isLoggedIn" to="/campaigns/new" class="btn">
+        + New campaign
+      </router-link>
+      <router-link v-if="auth.isAdmin" to="/admin" class="btn">Admin</router-link>
+      <template v-if="auth.isLoggedIn">
+        <span class="text-sm text-neutral-500 dark:text-neutral-400">{{ auth.user.username }}</span>
+        <a class="btn" :href="api.logoutUrl">Logout</a>
+      </template>
+      <a v-else class="btn-primary" :href="api.loginUrl">Login with Wikimedia</a>
     </div>
   </nav>
 </template>

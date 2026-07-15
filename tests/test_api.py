@@ -1,0 +1,275 @@
+"""End-to-end API tests over the real app with a SQLite database.
+
+Auth is simulated by overriding the get_current_user dependency;
+MediaWiki lookups are monkeypatched.
+"""
+from datetime import date, timedelta
+
+import pytest
+from starlette.testclient import TestClient
+
+import auth as auth_module
+import mediawiki
+from app import app
+from db import Base, SessionLocal, engine
+from mediawiki import PageMetadata
+from models import User
+
+TODAY = date.today()
+
+_current: dict = {"user_id": None}
+
+
+def _fake_current_user():
+    if _current["user_id"] is None:
+        return None
+    db = SessionLocal()
+    try:
+        return db.get(User, _current["user_id"])
+    finally:
+        db.close()
+
+
+app.dependency_overrides[auth_module.get_current_user] = _fake_current_user
+
+
+@pytest.fixture(scope="module")
+def client(module_mocker=None):
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.pop(auth_module.get_current_user, None)
+    app.dependency_overrides[auth_module.get_current_user] = _fake_current_user
+
+
+@pytest.fixture(autouse=True)
+def fake_mediawiki(monkeypatch):
+    def fake_fetch(domain, title, username, start, end):
+        if title == "Kathakali":
+            return PageMetadata(exists=True, page_id=11, page_len=20000,
+                                current_rev_id=2, base_rev_id=1,
+                                bytes_added=5000, is_new_page=False)
+        return PageMetadata(exists=True, page_id=12, page_len=4100,
+                            current_rev_id=4, base_rev_id=None,
+                            bytes_added=4100, is_new_page=True)
+    monkeypatch.setattr(mediawiki, "fetch_page_metadata", fake_fetch)
+
+
+def login(username: str, is_admin: bool = False) -> int:
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter_by(username=username).first()
+        if user is None:
+            user = User(username=username)
+            db.add(user)
+        user.is_admin = is_admin
+        db.commit()
+        _current["user_id"] = user.id
+        return user.id
+    finally:
+        db.close()
+
+
+def logout():
+    _current["user_id"] = None
+
+
+def make_campaign_payload(client, mode="self", **extra):
+    meta = client.get("/api/meta").json()
+    payload = {
+        "name": "Kerala Culture Contest",
+        "description": "Improve Kerala culture coverage",
+        "language": "ml",
+        "start_date": (TODAY - timedelta(days=5)).isoformat(),
+        "end_date": (TODAY + timedelta(days=25)).isoformat(),
+        "scoring_mode": mode,
+        "settings": {"allow_wikidata_items": True},
+        "rules": meta["default_rules"]["self"],
+        "jury_usernames": ["JuryBob"],
+        "suggested_articles": ["Kathakali", "Theyyam"],
+        "suggested_items": ["Q126"],
+    }
+    payload.update(extra)
+    return payload
+
+
+def test_full_self_assessment_flow(client):
+    # --- create (organizer) -------------------------------------------------
+    logout()
+    r = client.post("/api/campaigns", json=make_campaign_payload(client))
+    assert r.status_code == 401
+
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(client))
+    assert r.status_code == 201, r.text
+    camp = r.json()
+    slug = camp["slug"]
+    assert camp["status"] == "draft"
+    assert "organizer" in camp["my_roles"]
+    assert camp["settings"]["allow_wikidata_items"] is True
+    assert camp["settings"]["show_leaderboard"] is True  # default merged in
+    assert len(camp["rules"]) == 11
+
+    # Draft hidden from strangers, visible to organizer
+    logout()
+    assert slug not in [c["slug"] for c in client.get("/api/campaigns").json()]
+    assert client.get(f"/api/campaigns/{slug}").status_code == 404
+    login("Alice")
+    assert slug in [c["slug"] for c in client.get("/api/campaigns").json()]
+
+    # --- approval (admin only) ----------------------------------------------
+    login("Carol")
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 403
+    login("Root", is_admin=True)
+    r = client.post(f"/api/campaigns/{slug}/approve")
+    assert r.status_code == 200 and r.json()["status"] == "active"
+
+    # --- participation ------------------------------------------------------
+    login("Carol")
+    r = client.post(f"/api/campaigns/{slug}/join")
+    assert r.status_code == 200
+    assert "participant" in r.json()["my_roles"]
+
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Kathakali", "kind": "article"})
+    assert r.status_code == 201, r.text
+    sub = r.json()
+    assert sub["bytes_added"] == 5000
+    # 5 pts bytes (nearest) + 10 pts suggested list
+    assert sub["points"] == 15
+
+    # duplicate blocked
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Kathakali", "kind": "article"})
+    assert r.status_code == 409
+
+    # jury member blocked from submitting (jury_can_submit off)
+    login("JuryBob")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Theyyam", "kind": "article"})
+    assert r.status_code == 403
+
+    # --- claims ---------------------------------------------------------
+    login("Carol")
+    detail = client.get(f"/api/campaigns/{slug}").json()
+    improvement = next(r for r in detail["rules"]
+                       if r["label"] == "Substantial improvement")
+    ga = next(r for r in detail["rules"] if r["label"] == "Good Article")
+    bytes_rule = next(r for r in detail["rules"]
+                      if r["label"] == "Content added")
+
+    r = client.put(f"/api/submissions/{sub['id']}/claims",
+                   json=[{"rule_id": improvement["id"], "quantity": 1}])
+    assert r.status_code == 200
+    assert r.json()["points"] == 17  # 5 + 10 + 2
+
+    # auto rules are not claimable
+    r = client.put(f"/api/submissions/{sub['id']}/claims",
+                   json=[{"rule_id": bytes_rule["id"], "quantity": 99}])
+    assert r.status_code == 400
+
+    # someone else cannot claim on Carol's submission
+    login("Alice")
+    r = client.put(f"/api/submissions/{sub['id']}/claims",
+                   json=[{"rule_id": ga["id"], "quantity": 1}])
+    assert r.status_code == 403
+
+    # --- moderation -----------------------------------------------------
+    submissions = client.get(f"/api/campaigns/{slug}/submissions").json()
+    claim_id = submissions[0]["claims"][0]["id"]
+    r = client.post(f"/api/claims/{claim_id}/moderate",
+                    json={"status": "adjusted", "points_final": 1})
+    assert r.status_code == 200
+    submissions = client.get(f"/api/campaigns/{slug}/submissions").json()
+    assert submissions[0]["points"] == 16  # 5 + 10 + adjusted 1
+
+    r = client.post(f"/api/submissions/{sub['id']}/moderate",
+                    json={"points_override": 3})
+    assert r.status_code == 200 and r.json()["points"] == 3
+    r = client.post(f"/api/submissions/{sub['id']}/moderate",
+                    json={"clear_override": True})
+    assert r.json()["points"] == 16
+
+    # --- leaderboard & stats ---------------------------------------------
+    logout()
+    board = client.get(f"/api/campaigns/{slug}/leaderboard").json()
+    assert board[0]["user"]["username"] == "Carol"
+    assert board[0]["points"] == 16
+
+    stats = client.get(f"/api/campaigns/{slug}/stats").json()
+    assert stats["submissions"] == 1
+    assert stats["participants"] == 1
+    assert stats["total_points"] == 16
+    assert stats["by_kind"] == {"article": 1}
+    assert stats["top_contributors"][0]["user"]["username"] == "Carol"
+    assert len(stats["timeline"]) == 1
+
+
+def test_jury_mode_flow(client):
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, mode="jury", name="Jury Contest", rules=[],
+        settings={"jury_criteria": [
+            {"key": "quality", "title": "Quality", "type": "int"}]}))
+    assert r.status_code == 201, r.text
+    slug = r.json()["slug"]
+    login("Root", is_admin=True)
+    client.post(f"/api/campaigns/{slug}/approve")
+
+    login("Dave")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Onam", "kind": "article"})
+    assert r.status_code == 201
+    sub = r.json()
+    assert sub["points"] == 0  # no reviews yet
+
+    # non-jury cannot review
+    login("Carol")
+    r = client.put(f"/api/submissions/{sub['id']}/review",
+                   json={"total": 8, "decision": "accept"})
+    assert r.status_code == 403
+
+    # juror reviews
+    login("JuryBob")
+    # total is computed server-side from the marks config, not trusted
+    r = client.put(f"/api/submissions/{sub['id']}/review",
+                   json={"total": 999, "decision": "accept",
+                         "scores": {"quality": 8}, "comment": "solid"})
+    assert r.status_code == 200
+    assert r.json()["total"] == 8
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json()
+    assert subs[0]["points"] == 8
+
+    # upsert: revising replaces, not duplicates
+    r = client.put(f"/api/submissions/{sub['id']}/review",
+                   json={"total": 6, "decision": "accept"})
+    assert r.status_code == 200
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json()
+    assert subs[0]["points"] == 6
+    assert len(subs[0]["reviews"]) == 1
+
+    # claims are rejected in jury mode
+    login("Dave")
+    r = client.put(f"/api/submissions/{sub['id']}/claims", json=[])
+    assert r.status_code == 400
+
+
+def test_settings_validation_and_admin(client):
+    login("Alice")
+    bad = make_campaign_payload(client, name="Bad settings",
+                                settings={"nonsense": True})
+    assert client.post("/api/campaigns", json=bad).status_code == 400
+    bad = make_campaign_payload(client, name="Bad type",
+                                settings={"jury_can_submit": "yes"})
+    assert client.post("/api/campaigns", json=bad).status_code == 400
+
+    # admin endpoints gated and functional
+    assert client.get("/api/admin/stats").status_code == 403
+    login("Root", is_admin=True)
+    stats = client.get("/api/admin/stats").json()
+    assert stats["campaigns"] >= 2 and stats["users"] >= 4
+    logs = client.get("/api/admin/logs").json()
+    assert logs["total"] > 0
+    users = client.get("/api/admin/users").json()
+    assert any(u["username"] == "Carol" for u in users)

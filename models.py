@@ -138,10 +138,6 @@ class Campaign(Base):
     scoring_mode: Mapped[ScoringMode] = mapped_column(
         Enum(ScoringMode), default=ScoringMode.jury
     )
-    jury_can_submit: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Free-form per-campaign settings: jury marks criteria, min marks per
-    # article, hidden marks, etc. Never queried by SQL — display/logic only.
-    settings: Mapped[dict | None] = mapped_column(JSON)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
@@ -161,6 +157,44 @@ class Campaign(Base):
     suggested_pages: Mapped[list["SuggestedPage"]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
     )
+    settings_rows: Mapped[list["CampaignSetting"]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan"
+    )
+
+    @property
+    def effective_settings(self) -> dict:
+        """Registry defaults merged with this campaign's overrides."""
+        from settings_registry import defaults
+
+        merged = defaults()
+        for row in self.settings_rows:
+            merged[row.key] = row.value
+        return merged
+
+    def set_settings(self, overrides: dict) -> None:
+        """Replace the stored overrides (already validated)."""
+        self.settings_rows = [
+            CampaignSetting(key=k, value=v) for k, v in overrides.items()
+        ]
+
+
+class CampaignSetting(Base):
+    """One overridden setting of a campaign. Known keys, types and
+    defaults are declared in settings_registry.SETTING_DEFS."""
+
+    __tablename__ = "campaign_settings"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "key", name="uq_campaign_setting"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(80))
+    value: Mapped[dict | list | str | int | bool | None] = mapped_column(JSON)
+
+    campaign: Mapped[Campaign] = relationship(back_populates="settings_rows")
 
 
 class CampaignMember(Base):
