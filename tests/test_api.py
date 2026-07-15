@@ -43,8 +43,14 @@ def client(module_mocker=None):
     app.dependency_overrides[auth_module.get_current_user] = _fake_current_user
 
 
+SYSOP_WIKIS: dict[str, set] = {}
+
+
 @pytest.fixture(autouse=True)
 def fake_mediawiki(monkeypatch):
+    monkeypatch.setattr(mediawiki, "fetch_sysop_wikis",
+                        lambda username: SYSOP_WIKIS.get(username, set()))
+
     def fake_fetch(domain, title, username, start, end):
         if title == "Kathakali":
             return PageMetadata(exists=True, page_id=11, page_len=20000,
@@ -253,6 +259,52 @@ def test_jury_mode_flow(client):
     login("Dave")
     r = client.put(f"/api/submissions/{sub['id']}/claims", json=[])
     assert r.status_code == 400
+
+
+def test_wiki_admin_approval_rules(client):
+    """Fountain model: jury mode needs a sysop on the target wiki;
+    self-assessment needs a sysop on any Wikipedia project."""
+    SYSOP_WIKIS.clear()
+    SYSOP_WIKIS["MlAdmin"] = {"ml.wikipedia.org"}
+    SYSOP_WIKIS["CommonsAdmin"] = {"commons.wikimedia.org"}
+
+    # jury campaign on ml.wikipedia.org created by its sysop -> auto-active
+    login("MlAdmin")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, mode="jury", name="ML Jury Contest", rules=[], language="ml"))
+    assert r.status_code == 201 and r.json()["status"] == "active"
+
+    # ordinary creator stays draft; ml sysop can approve a jury campaign
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, mode="jury", name="ML Jury Draft", rules=[], language="ml"))
+    slug = r.json()["slug"]
+    assert r.json()["status"] == "draft"
+    login("CommonsAdmin")  # sysop, but not on a Wikipedia -> no jury rights
+    rights = client.get(f"/api/campaigns/{slug}/approval-rights").json()
+    assert rights["can_approve"] is False
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 403
+    login("MlAdmin")
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # self-assessment: any Wikipedia sysop may approve, Commons may not
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, mode="self", name="Self Draft", language="ta"))
+    slug = r.json()["slug"]
+    assert r.json()["status"] == "draft"
+    login("CommonsAdmin")
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 403
+    login("MlAdmin")  # sysop on ml.wikipedia.org (not the target wiki) is fine
+    r = client.post(f"/api/campaigns/{slug}/approve")
+    assert r.status_code == 200 and r.json()["status"] == "active"
+
+    # a self campaign created by a Wikipedia sysop goes live immediately
+    login("MlAdmin")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, mode="self", name="Self by sysop", language="ta"))
+    assert r.json()["status"] == "active"
+    SYSOP_WIKIS.clear()
 
 
 def test_settings_validation_and_admin(client):

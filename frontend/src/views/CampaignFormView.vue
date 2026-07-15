@@ -90,7 +90,10 @@ async function save () {
   <div v-if="meta">
     <h1 class="text-2xl font-bold mb-1">{{ slug ? 'Edit campaign' : 'Create campaign' }}</h1>
     <p v-if="!slug" class="text-sm text-neutral-500 mb-4">
-      New campaigns start as drafts and go live once an administrator approves them.
+      New campaigns start as drafts. They go live immediately if you hold
+      admin (sysop) rights on the target wiki (jury mode) or on any
+      Wikipedia project (self-assessment); otherwise a wiki admin must
+      approve the campaign.
     </p>
 
     <div class="flex gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-4 overflow-x-auto">

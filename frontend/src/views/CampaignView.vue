@@ -42,10 +42,19 @@ const tabs = computed(() => {
   return t
 })
 
+const canApprove = ref(false)
+
 async function load () {
   try {
     campaign.value = (await api.getCampaign(props.slug)).data
     submissions.value = (await api.listSubmissions(props.slug)).data
+    // Fountain model: approval needs on-wiki admin rights (jury: sysop on
+    // the target wiki; self: sysop on any Wikipedia), or site admin.
+    if (campaign.value.status === 'draft' && auth.isLoggedIn) {
+      canApprove.value = (await api.approvalRights(props.slug)).data.can_approve
+    } else {
+      canApprove.value = false
+    }
   } catch (e) {
     error.value = errorMessage(e)
   }
@@ -147,8 +156,8 @@ function ruleLabel (id) {
         <button v-if="auth.isLoggedIn && campaign.status === 'active' && !isParticipant"
                 class="btn-primary" @click="join">Join campaign</button>
         <router-link v-if="isOrganizer" class="btn" :to="`/campaigns/${slug}/edit`">Edit</router-link>
-        <button v-if="auth.isAdmin && campaign.status === 'draft'" class="btn-primary" @click="approve">Approve</button>
-        <button v-if="auth.isAdmin && campaign.status === 'draft'" class="btn-danger" @click="reject">Reject</button>
+        <button v-if="canApprove && campaign.status === 'draft'" class="btn-primary" @click="approve">Approve</button>
+        <button v-if="canApprove && campaign.status === 'draft'" class="btn-danger" @click="reject">Reject</button>
         <button v-if="isOrganizer && (campaign.status === 'draft' || auth.isAdmin)"
                 class="btn-danger" @click="remove">Delete</button>
       </div>

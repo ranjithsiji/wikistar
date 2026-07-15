@@ -41,6 +41,39 @@ class PageMetadata:
     created_at: datetime | None = None
 
 
+_SYSOP_CACHE: dict[str, tuple[float, set[str]]] = {}
+_SYSOP_CACHE_TTL = 300.0  # seconds
+
+
+def fetch_sysop_wikis(username: str) -> set[str]:
+    """Domains where the user holds local sysop rights, resolved through
+    CentralAuth (meta.wikimedia.org globaluserinfo), exactly like
+    Fountain's GetSysopWikis. Global sysops and stewards yield "*".
+    Results are cached briefly; failures raise httpx.HTTPError."""
+    import time
+
+    cached = _SYSOP_CACHE.get(username)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+
+    with _client() as client:
+        data = client.get(api_url("meta.wikimedia.org"), params={
+            "action": "query", "format": "json", "formatversion": 2,
+            "meta": "globaluserinfo", "guiuser": username,
+            "guiprop": "merged|groups",
+        }).json()
+    info = data.get("query", {}).get("globaluserinfo", {})
+    domains: set[str] = set()
+    for wiki in info.get("merged", []):
+        if "sysop" in (wiki.get("groups") or []):
+            url = wiki.get("url", "")
+            domains.add(url.removeprefix("https://").removeprefix("http://"))
+    if {"global-sysop", "steward"} & set(info.get("groups") or []):
+        domains.add("*")
+    _SYSOP_CACHE[username] = (time.monotonic() + _SYSOP_CACHE_TTL, domains)
+    return domains
+
+
 def fetch_user_registration(domain: str, username: str) -> datetime | None:
     """Account registration timestamp on the given wiki, or None."""
     with _client() as client:

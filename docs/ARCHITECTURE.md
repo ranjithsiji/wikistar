@@ -202,6 +202,21 @@ routers/
   common.py       serializers, leaderboard, audit helper
 ```
 
+## Approval model (Fountain)
+
+Campaign approval follows Fountain: rights are resolved through
+CentralAuth (`globaluserinfo`, cached 5 min) in `wiki_rights.py`.
+
+| Scoring mode | Who can approve / auto-publish on create |
+|---|---|
+| jury | a sysop on the campaign's target wiki |
+| self / hybrid | a sysop on **any** Wikipedia project |
+| any | WikiSTAR site admins, global sysops, stewards |
+
+Creators holding the right publish instantly; everyone else's campaign
+stays a draft until an eligible admin approves it
+(`GET /api/campaigns/{slug}/approval-rights` powers the UI button).
+
 ## Fountain parity
 
 Ported from the original Fountain tool (analysed from source):

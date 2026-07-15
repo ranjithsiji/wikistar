@@ -16,10 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 import settings_registry
+import wiki_rights
 from auth import (
     campaign_roles,
     get_current_user,
-    require_admin,
     require_organizer,
     require_user,
 )
@@ -29,6 +29,7 @@ from models import (
     CampaignMember,
     CampaignStatus,
     MemberRole,
+    ScoringMode,
     ScoringRule,
     SubmissionKind,
     SuggestedPage,
@@ -156,6 +157,12 @@ def create_campaign(payload: CampaignIn, db: Session = Depends(get_db),
     campaign = Campaign(slug=slug, status=CampaignStatus.draft,
                         created_by=user.id)
     _apply_scalar_fields(campaign, payload)
+    # Fountain model: creators holding the required on-wiki admin right
+    # publish immediately (jury: sysop on the target wiki; self/hybrid:
+    # sysop on any Wikipedia project); everyone else starts as a draft.
+    auto_ok, auto_reason = wiki_rights.can_approve_campaign(user, campaign)
+    if auto_ok:
+        campaign.status = CampaignStatus.active
     db.add(campaign)
     db.flush()
     campaign.set_settings(overrides)
@@ -165,7 +172,8 @@ def create_campaign(payload: CampaignIn, db: Session = Depends(get_db),
     _replace_suggested(campaign, payload)
     _replace_rules(db, campaign, payload)
     audit(db, user, "create", "campaign", campaign.id,
-          {"slug": slug, "name": campaign.name})
+          {"slug": slug, "name": campaign.name,
+           "auto_approved": auto_ok and auto_reason or False})
     db.commit()
     db.refresh(campaign)
     return campaign_detail_out(db, campaign, user)
@@ -254,14 +262,40 @@ def join_campaign(slug: str, db: Session = Depends(get_db),
     return campaign_detail_out(db, campaign, user)
 
 
+@router.get("/campaigns/{slug}/approval-rights")
+def approval_rights(slug: str, db: Session = Depends(get_db),
+                    user: User | None = Depends(get_current_user)):
+    """Whether the current user may approve this campaign, and why (not)."""
+    campaign = get_campaign_or_404(db, slug)
+    if user is None:
+        return {"can_approve": False, "reason": "not_logged_in"}
+    allowed, reason = wiki_rights.can_approve_campaign(user, campaign)
+    return {"can_approve": allowed, "reason": reason,
+            "wiki_domain": campaign.wiki_domain,
+            "scoring_mode": campaign.scoring_mode.value}
+
+
+def _require_approval_rights(campaign: Campaign, user: User) -> str:
+    allowed, reason = wiki_rights.can_approve_campaign(user, campaign)
+    if not allowed:
+        need = (f"an admin (sysop) on {campaign.wiki_domain}"
+                if campaign.scoring_mode == ScoringMode.jury
+                else "an admin (sysop) on any Wikipedia project")
+        raise HTTPException(
+            403, f"Approving this campaign requires {need} ({reason})")
+    return reason
+
+
 @router.post("/campaigns/{slug}/approve", response_model=CampaignDetail)
 def approve_campaign(slug: str, db: Session = Depends(get_db),
-                     user: User = Depends(require_admin)):
+                     user: User = Depends(require_user)):
     campaign = get_campaign_or_404(db, slug)
+    reason = _require_approval_rights(campaign, user)
     if campaign.status not in (CampaignStatus.draft, CampaignStatus.rejected):
         raise HTTPException(400, f"Campaign is already {campaign.status.value}")
     campaign.status = CampaignStatus.active
-    audit(db, user, "approve", "campaign", campaign.id, {"slug": slug})
+    audit(db, user, "approve", "campaign", campaign.id,
+          {"slug": slug, "approved_by_right": reason})
     db.commit()
     db.refresh(campaign)
     return campaign_detail_out(db, campaign, user)
@@ -270,8 +304,9 @@ def approve_campaign(slug: str, db: Session = Depends(get_db),
 @router.post("/campaigns/{slug}/reject", response_model=CampaignDetail)
 def reject_campaign(slug: str, payload: dict | None = None,
                     db: Session = Depends(get_db),
-                    user: User = Depends(require_admin)):
+                    user: User = Depends(require_user)):
     campaign = get_campaign_or_404(db, slug)
+    _require_approval_rights(campaign, user)
     reason = (payload or {}).get("reason", "")
     campaign.status = CampaignStatus.rejected
     audit(db, user, "reject", "campaign", campaign.id,
