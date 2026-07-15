@@ -49,3 +49,4 @@ Thumbs.db
 var/
 .vscode/
 wheels/
+.env
