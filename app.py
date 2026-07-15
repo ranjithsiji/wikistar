@@ -8,10 +8,12 @@ WSGI only, so point it at the `application` callable below
 (uwsgi.ini: callable = application). With the build service or any
 ASGI server, use `app` directly.
 """
+import httpx
+
 from contextlib import asynccontextmanager
 
 from a2wsgi import ASGIMiddleware
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
