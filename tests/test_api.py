@@ -387,6 +387,49 @@ def test_preferences_and_suggested_links(client, monkeypatch):
     assert data["languages"] == ["en"]
 
 
+def test_multi_language_submissions(client):
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Multi Language Contest",
+        settings={"multi_language": True}))
+    assert r.status_code == 201, r.text
+    slug = r.json["slug"]
+    login("Root", is_admin=True)
+    client.post(f"/api/campaigns/{slug}/approve")
+
+    # participants pick the wiki per submission
+    login("Eve")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Onam", "kind": "article", "language": "ta"})
+    assert r.status_code == 201, r.text
+    assert r.json["wiki_domain"] == "ta.wikipedia.org"
+
+    # the same title on another wiki is a separate submission
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Onam", "kind": "article", "language": "hi"})
+    assert r.status_code == 201
+    assert r.json["wiki_domain"] == "hi.wikipedia.org"
+
+    # duplicate on the same wiki is still blocked
+    assert client.post(
+        f"/api/campaigns/{slug}/submissions",
+        json={"title": "Onam", "kind": "article", "language": "ta"}
+    ).status_code == 409
+
+    # a single-language campaign ignores the language field
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Single Language Contest"))
+    slug2 = r.json["slug"]
+    login("Root", is_admin=True)
+    client.post(f"/api/campaigns/{slug2}/approve")
+    login("Eve")
+    r = client.post(f"/api/campaigns/{slug2}/submissions",
+                    json={"title": "Onam", "kind": "article", "language": "ta"})
+    assert r.status_code == 201
+    assert r.json["wiki_domain"] == "ml.wikipedia.org"
+
+
 def test_member_management_and_admin_campaigns(client):
     login("Alice")
     r = client.post("/api/campaigns", json=make_campaign_payload(

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import api, { errorMessage } from '../api'
 import { useAuthStore } from '../store'
 import ClaimEditor from '../components/ClaimEditor.vue'
+import LanguageSelect from '../components/LanguageSelect.vue'
 import ReviewForm from '../components/ReviewForm.vue'
 import StatsTab from '../components/StatsTab.vue'
 
@@ -21,6 +22,7 @@ const onlyMine = ref(false)
 const expanded = ref(null)
 const newTitle = ref('')
 const newKind = ref('article')
+const newLanguage = ref('')
 
 const isOrganizer = computed(() =>
   auth.isAdmin || campaign.value?.my_roles.includes('organizer'))
@@ -49,6 +51,7 @@ async function load () {
   try {
     campaign.value = (await api.getCampaign(props.slug)).data
     submissions.value = (await api.listSubmissions(props.slug)).data
+    if (!newLanguage.value) newLanguage.value = campaign.value.language
     // Fountain model: approval needs on-wiki admin rights (jury: sysop on
     // the target wiki; self: sysop on any Wikipedia), or site admin.
     if (campaign.value.status === 'draft' && auth.isLoggedIn) {
@@ -102,7 +105,11 @@ const remove = async () => {
   } catch (e) { error.value = errorMessage(e) }
 }
 const submit = () => run(async () => {
-  await api.createSubmission(props.slug, { title: newTitle.value, kind: newKind.value })
+  const payload = { title: newTitle.value, kind: newKind.value }
+  if (campaign.value.settings.multi_language && newKind.value === 'article') {
+    payload.language = newLanguage.value || campaign.value.language
+  }
+  await api.createSubmission(props.slug, payload)
   newTitle.value = ''
 }, 'Submission added.')
 const withdraw = (s) => {
@@ -274,6 +281,10 @@ function ruleLabel (id) {
             <input v-model="newTitle" class="input" required
                    :placeholder="newKind === 'article' ? 'Article title' : 'Q…'" />
           </div>
+          <div v-if="campaign.settings.multi_language && newKind === 'article'" class="w-56">
+            <label class="label">Language</label>
+            <LanguageSelect v-model="newLanguage" />
+          </div>
           <div v-if="campaign.settings.allow_wikidata_items">
             <label class="label">Type</label>
             <select v-model="newKind" class="input">
@@ -302,6 +313,9 @@ function ruleLabel (id) {
                @click.stop>{{ s.title }}</a>
             <div class="text-xs text-neutral-500 mt-0.5">
               by {{ s.user.username }} · {{ new Date(s.submitted_at).toLocaleDateString() }}
+              <template v-if="campaign.settings.multi_language && s.kind === 'article'">
+                · {{ s.wiki_domain.split('.')[0] }}
+              </template>
               <template v-if="s.kind === 'wikidata_item'"> · Wikidata</template>
               <template v-if="s.is_new_page"> · new page</template>
               <template v-if="s.bytes_added"> · +{{ s.bytes_added.toLocaleString() }} bytes</template>

@@ -111,6 +111,9 @@ class CampaignDetail(CampaignSummary):
 class SubmissionIn(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     kind: SubmissionKind = SubmissionKind.article
+    # Wiki language of the article; honoured only in multi-language
+    # campaigns (otherwise the campaign's wiki always applies).
+    language: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]{1,11}$")
 
 
 class PointLineOut(BaseModel):

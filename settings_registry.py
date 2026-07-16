@@ -21,6 +21,12 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
     "allow_articles": dict(
         type="bool", default=True, category="participation",
         label="Accept Wikipedia articles"),
+    "multi_language": dict(
+        type="bool", default=False, category="participation",
+        label="Multi-language campaign",
+        help="Participants may submit articles from any language "
+             "Wikipedia, choosing the language per submission. Off: only "
+             "the campaign's wiki is accepted."),
     "allow_wikidata_items": dict(
         type="bool", default=False, category="participation",
         label="Accept Wikidata items"),

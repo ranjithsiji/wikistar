@@ -268,7 +268,10 @@ class ScoringRule(Base):
 class Submission(Base):
     __tablename__ = "submissions"
     __table_args__ = (
-        UniqueConstraint("campaign_id", "user_id", "title", name="uq_submission"),
+        # wiki_domain included: multi-language campaigns accept the same
+        # title from different language Wikipedias.
+        UniqueConstraint("campaign_id", "user_id", "wiki_domain", "title",
+                         name="uq_submission"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

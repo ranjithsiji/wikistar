@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import api, { errorMessage } from '../api'
+import LanguageSelect from '../components/LanguageSelect.vue'
 import { useAuthStore } from '../store'
 
 const auth = useAuthStore()
@@ -19,12 +20,8 @@ onMounted(async () => {
 })
 
 function add () {
-  const code = input.value.trim().toLowerCase()
+  const code = input.value
   if (!code) return
-  if (!/^[a-z][a-z0-9-]{1,11}$/.test(code)) {
-    error.value = `"${code}" does not look like a wiki language code`
-    return
-  }
   error.value = ''
   if (!languages.value.includes(code) && languages.value.length < 10) {
     languages.value.push(code)
@@ -97,9 +94,9 @@ async function save () {
           No languages yet — campaign pages will fall back to the campaign's own language.
         </p>
         <form class="flex gap-2" @submit.prevent="add">
-          <input v-model="input" class="input !w-40" placeholder="e.g. ml"
-                 maxlength="12" :disabled="languages.length >= 10" />
-          <button class="btn" :disabled="!input.trim() || languages.length >= 10">Add</button>
+          <LanguageSelect v-model="input" class="!w-64"
+                          placeholder="Add a language…" />
+          <button class="btn" :disabled="!input || languages.length >= 10">Add</button>
           <span class="flex-1"></span>
           <button type="button" class="btn-primary" :disabled="saving" @click="save">
             {{ saving ? 'Saving…' : 'Save' }}

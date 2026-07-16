@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api, { errorMessage } from '../api'
+import LanguageSelect from '../components/LanguageSelect.vue'
 import MarksEditor from '../components/MarksEditor.vue'
 import RuleEditor from '../components/RuleEditor.vue'
 import SettingsEditor from '../components/SettingsEditor.vue'
@@ -234,13 +235,20 @@ async function save () {
             </div>
           </div>
           <div>
-            <label class="label">Wiki language code</label>
-            <input v-model="form.language" class="input" placeholder="en" />
+            <label class="label">Wiki language {{ !isJuryFlow && form.settings.multi_language ? '(default)' : '' }}</label>
+            <LanguageSelect v-model="form.language" />
+            <p v-if="!isJuryFlow" class="text-xs text-neutral-400 mt-1">
+              Multi-language submissions can be enabled under Settings →
+              Participation.
+            </p>
           </div>
           <div>
             <label class="label">Wiki domain</label>
             <input v-model="form.wiki_domain" class="input"
                    :placeholder="`${form.language || 'en'}.wikipedia.org`" />
+            <p class="text-xs text-neutral-400 mt-1">
+              Leave empty for {{ form.language || 'en' }}.wikipedia.org.
+            </p>
           </div>
           <div class="sm:col-span-2">
             <label class="label">Description</label>

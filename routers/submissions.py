@@ -156,8 +156,16 @@ def create_submission(slug: str):
         raise HTTPException(403, "Jury members cannot submit to this campaign")
 
     title = payload.title.strip()
+    if payload.kind == SubmissionKind.wikidata_item:
+        wiki_domain = WIKIDATA_DOMAIN
+    elif payload.language and settings.get("multi_language"):
+        # Multi-language campaign: the participant picks the wiki.
+        wiki_domain = f"{payload.language}.wikipedia.org"
+    else:
+        wiki_domain = campaign.wiki_domain
     existing = db.query(Submission).filter_by(
-        campaign_id=campaign.id, user_id=user.id, title=title).first()
+        campaign_id=campaign.id, user_id=user.id, title=title,
+        wiki_domain=wiki_domain).first()
     if existing:
         raise HTTPException(409, "You already submitted this page")
 
@@ -171,10 +179,7 @@ def create_submission(slug: str):
 
     sub = Submission(
         campaign_id=campaign.id, user_id=user.id, kind=payload.kind,
-        title=title,
-        wiki_domain=(WIKIDATA_DOMAIN
-                     if payload.kind == SubmissionKind.wikidata_item
-                     else campaign.wiki_domain),
+        title=title, wiki_domain=wiki_domain,
     )
     meta = _fetch_metadata(sub, campaign, user.username)
     _check_eligibility(sub, campaign, user, settings, meta)
