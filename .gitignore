@@ -51,4 +51,4 @@ var/
 wheels/
 .env.venv/
 venv/
-uwsgi.loguwsgi.log
+uwsgi.log
