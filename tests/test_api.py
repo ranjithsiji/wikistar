@@ -835,3 +835,37 @@ def test_oauth_callback_rejection_redirects_home(client):
     r = client.get("/oauth-callback?code=abc&state=forged")
     assert r.status_code == 302
     assert r.headers["Location"].endswith("?login=failed")
+
+
+def test_sysop_sees_and_approves_project_drafts(client):
+    """A project sysop can view a draft jury campaign on their wiki and
+    approve it; any sysop can approve a multi-language campaign."""
+    SYSOP_WIKIS.clear()
+    SYSOP_WIKIS["MlAdmin"] = {"ml.wikipedia.org"}
+    SYSOP_WIKIS["TaAdmin"] = {"ta.wikipedia.org"}
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, mode="jury", name="Sysop View Draft", rules=[],
+        language="ml")).json["slug"]
+
+    # the target wiki's sysop sees the draft (list + detail)
+    login("MlAdmin")
+    assert client.get(f"/api/campaigns/{slug}").status_code == 200
+    assert slug in [c["slug"] for c in client.get("/api/campaigns").json]
+    # a sysop of another project does not
+    login("TaAdmin")
+    assert client.get(f"/api/campaigns/{slug}").status_code == 404
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 403
+    login("MlAdmin")
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # multi-language jury campaign: any sysop may view and approve
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, mode="jury", name="Multi Jury Draft", rules=[],
+        language="ml", settings={"multi_language": True})).json["slug"]
+    login("TaAdmin")  # not a sysop on the campaign's own wiki
+    assert client.get(f"/api/campaigns/{slug}").status_code == 200
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+    SYSOP_WIKIS.clear()

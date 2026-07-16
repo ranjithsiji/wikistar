@@ -143,7 +143,15 @@ def can_see_campaign(db: Session, campaign: Campaign, user: User | None) -> bool
         return True
     from auth import campaign_roles
 
-    return MemberRole.organizer in campaign_roles(db, campaign, user)
+    if MemberRole.organizer in campaign_roles(db, campaign, user):
+        return True
+    # Drafts awaiting approval are visible to whoever could approve them
+    # (jury: the target wiki's sysops; multi-language/self: any sysop).
+    if campaign.status == CampaignStatus.draft:
+        import wiki_rights
+
+        return wiki_rights.can_approve_campaign(user, campaign)[0]
+    return False
 
 
 def compute_leaderboard(db: Session, campaign: Campaign) -> list[LeaderboardRow]:

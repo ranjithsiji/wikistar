@@ -3,7 +3,10 @@
 Who may approve (publish) a campaign:
   * a WikiSTAR site admin — always;
   * a global sysop / steward — always;
-  * jury mode      — a sysop on the campaign's target wiki;
+  * jury mode      — a sysop on the campaign's target wiki
+                     (that sysop can also see the draft);
+  * multi-language — a sysop on ANY project (submissions come from
+                     every wiki, so no single target wiki exists);
   * self / hybrid  — a sysop on ANY Wikipedia project.
 
 Creators who hold the required right get their campaign approved
@@ -23,6 +26,13 @@ def can_approve_campaign(user: User, campaign: Campaign) -> tuple[bool, str]:
         return False, "rights_check_failed"
     if "*" in domains:
         return True, "global_sysop_or_steward"
+
+    # Multi-language campaigns have no single target wiki: any sysop may
+    # approve, regardless of scoring mode.
+    if campaign.effective_settings.get("multi_language"):
+        if domains:
+            return True, f"sysop_on_{sorted(domains)[0]}"
+        return False, "requires_sysop_on_any_project"
 
     if campaign.scoring_mode == ScoringMode.jury:
         if campaign.wiki_domain in domains:
