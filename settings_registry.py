@@ -108,6 +108,24 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         label="Claims stay editable after the end date",
         help="Until the campaign is archived."),
 
+    # -- template ------------------------------------------------------------
+    "auto_add_template": dict(
+        type="bool", default=False, category="template",
+        label="Automatically add template",
+        help="On every article submission, write the campaign template to "
+             "the wiki with the submitter's account. Off: nothing is "
+             "written. Needs an OAuth consumer with edit rights."),
+    "template_name": dict(
+        type="str", default="", category="template",
+        label="Template name",
+        help='Without braces, e.g. "Wiki Asian Month 2025 talk".'),
+    "template_placement": dict(
+        type="str", default="talk", choices=["talk", "article"],
+        category="template",
+        label="Template placement",
+        help="talk: on the article's talk page (default); "
+             "article: at the top of the article itself."),
+
     # -- display -------------------------------------------------------------
     "logo": dict(
         type="str", default="", category="display",
@@ -149,6 +167,10 @@ def validate_overrides(overrides: dict[str, Any]) -> dict[str, Any]:
         elif kind == "str":
             if not isinstance(value, str):
                 raise ValueError(f"Setting {key} must be a string")
+            choices = spec.get("choices")
+            if choices and value not in choices:
+                raise ValueError(
+                    f"Setting {key} must be one of: {', '.join(choices)}")
         elif kind == "json":
             if not isinstance(value, (list, dict)):
                 raise ValueError(f"Setting {key} must be a JSON list/object")

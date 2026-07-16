@@ -282,6 +282,11 @@ function ruleLabel (id) {
       <div class="flex gap-2 flex-wrap">
         <button v-if="auth.isLoggedIn && campaign.status === 'active' && !isParticipant"
                 class="btn-primary" @click="join">Join campaign</button>
+        <router-link v-if="isJury && campaign.scoring_mode !== 'self'
+                            && ['active', 'finished'].includes(campaign.status)"
+                     class="btn-primary" :to="`/campaigns/${slug}/judge`">
+          ⚖ Judge
+        </router-link>
         <router-link v-if="isOrganizer" class="btn" :to="`/campaigns/${slug}/edit`">Edit</router-link>
         <button v-if="canApprove && campaign.status === 'draft'" class="btn-primary" @click="approve">Approve</button>
         <button v-if="canApprove && campaign.status === 'draft'" class="btn-danger" @click="reject">Reject</button>

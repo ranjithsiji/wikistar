@@ -38,7 +38,15 @@ def fetch_profile() -> dict:
     token = oauth.mediawiki.authorize_access_token()
     resp = oauth.mediawiki.get("oauth2/resource/profile", token=token)
     resp.raise_for_status()
+    # Keep the access token in the (signed) session: campaign templates
+    # are written to the wiki with the submitter's own account.
+    session["oauth_token"] = token.get("access_token")
     return resp.json()
+
+
+def get_session_oauth_token() -> str | None:
+    """The logged-in user's MediaWiki access token, if still in session."""
+    return session.get("oauth_token")
 
 
 def upsert_user(db: Session, profile: dict) -> User:

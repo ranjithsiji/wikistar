@@ -14,6 +14,7 @@ import mediawiki
 from auth import (
     campaign_roles,
     get_current_user,
+    get_session_oauth_token,
     require_organizer,
     require_user,
 )
@@ -308,6 +309,24 @@ def create_submission(slug: str):
     details = {"campaign": slug, "title": title}
     if participant.id != user.id:
         details["on_behalf_of"] = participant.username
+
+    # Optional campaign template, written to the wiki with the submitting
+    # account's OAuth token (best-effort — never blocks the submission).
+    template = (settings.get("template_name") or "").strip()
+    if (settings.get("auto_add_template") and template
+            and payload.kind == SubmissionKind.article):
+        token = get_session_oauth_token()
+        added = False
+        if token:
+            try:
+                added = mediawiki.add_page_template(
+                    wiki_domain, title, template,
+                    settings.get("template_placement", "talk") != "article",
+                    token)
+            except Exception:
+                added = False
+        details["template_added"] = added
+
     audit(db, user, "submit", "submission", None, details)
     db.commit()
     db.refresh(sub)

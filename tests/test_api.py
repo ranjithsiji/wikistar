@@ -869,3 +869,67 @@ def test_sysop_sees_and_approves_project_drafts(client):
     assert client.get(f"/api/campaigns/{slug}").status_code == 200
     assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
     SYSOP_WIKIS.clear()
+
+
+def test_template_written_on_submission(client, monkeypatch):
+    calls = []
+    def fake_add(domain, title, template, on_talk, token):
+        calls.append((domain, title, template, on_talk, token))
+        return True
+    monkeypatch.setattr(mediawiki, "add_page_template", fake_add)
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Template Contest",
+        settings={"auto_add_template": True,
+                  "template_name": "Wiki Asian Month 2025 talk",
+                  "allow_wikidata_items": True})).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # submitter logged in with an OAuth token in the session
+    login("Dana")
+    with _client.session_transaction() as s:
+        s["oauth_token"] = "tok-123"
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Kathakali", "kind": "article"})
+    assert r.status_code == 201, r.text
+    assert calls == [("ml.wikipedia.org", "Kathakali",
+                      "Wiki Asian Month 2025 talk", True, "tok-123")]
+
+    # non-article kinds never get the template
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Q126", "kind": "wikidata_item"})
+    assert r.status_code == 201 and len(calls) == 1
+
+    # a failing write never blocks the submission
+    monkeypatch.setattr(mediawiki, "add_page_template",
+                        lambda *a: (_ for _ in ()).throw(RuntimeError()))
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Theyyam", "kind": "article"})
+    assert r.status_code == 201
+
+    # placement=article and disabled toggle both respected
+    login("Alice")
+    slug2 = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Template In Article",
+        settings={"auto_add_template": True, "template_name": "WAM",
+                  "template_placement": "article"})).json["slug"]
+    login("Root", is_admin=True)
+    client.post(f"/api/campaigns/{slug2}/approve")
+    calls.clear()
+    monkeypatch.setattr(mediawiki, "add_page_template", fake_add)
+    login("Dana")
+    with _client.session_transaction() as s:
+        s["oauth_token"] = "tok-123"
+    client.post(f"/api/campaigns/{slug2}/submissions",
+                json={"title": "Kathakali", "kind": "article"})
+    assert calls[0][3] is False  # on_talk
+
+    # bad placement value rejected by settings validation
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Bad Placement",
+        settings={"template_placement": "sidebar"}))
+    assert r.status_code == 400

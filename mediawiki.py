@@ -147,6 +147,35 @@ def _first_revision(client: httpx.Client, domain: str, page_id: int) -> dict:
     return {}
 
 
+def add_page_template(domain: str, title: str, template: str,
+                      on_talk: bool, access_token: str) -> bool:
+    """Prepend {{template}} to the article (or its talk page) with the
+    user's own OAuth token. Returns True on success; never raises for
+    API-level failures — callers treat the write as best-effort."""
+    target = f"Talk:{title}" if on_talk else title
+    wikitext = f"{{{{{template}}}}}\n"
+    headers = {"User-Agent": USER_AGENT,
+               "Authorization": f"Bearer {access_token}"}
+    with httpx.Client(headers=headers, timeout=TIMEOUT) as client:
+        data = client.get(api_url(domain), params={
+            "action": "query", "format": "json", "meta": "tokens",
+            "type": "csrf",
+        }).json()
+        csrf = data.get("query", {}).get("tokens", {}).get("csrftoken", "")
+        if not csrf or csrf == "+\\":  # anonymous: the token was not accepted
+            return False
+        payload = {
+            "action": "edit", "format": "json", "title": target,
+            "prependtext": wikitext, "token": csrf,
+            "summary": f"Adding {{{{{template}}}}} "
+                       "([[wikitech:Tool:WikiSTAR|WikiSTAR]])",
+        }
+        if not on_talk:
+            payload["nocreate"] = "1"  # never create the article itself
+        result = client.post(api_url(domain), data=payload).json()
+    return result.get("edit", {}).get("result") == "Success"
+
+
 def fetch_user_contribs(domain: str, username: str, start: date, end: date,
                         namespace: int = 0,
                         limit: int | None = None) -> list[dict]:

@@ -40,6 +40,7 @@ def oauth_callback():
 @bp.get("/api/logout")
 def logout():
     session.pop("user_id", None)
+    session.pop("oauth_token", None)
     return redirect(settings.frontend_url)
 
 

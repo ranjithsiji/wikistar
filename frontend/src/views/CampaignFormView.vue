@@ -414,7 +414,7 @@ async function save () {
 
           <div v-show="section === 'display'">
             <SettingsEditor v-model="form.settings" :registry="meta.settings_registry"
-                            :categories="['display']" />
+                            :categories="['template', 'display']" />
           </div>
         </template>
 
@@ -479,7 +479,7 @@ async function save () {
 
           <div v-show="section === 'settings'">
             <SettingsEditor v-model="form.settings" :registry="meta.settings_registry"
-                            :categories="['participation', 'eligibility', 'display']" />
+                            :categories="['participation', 'eligibility', 'template', 'display']" />
           </div>
         </template>
 

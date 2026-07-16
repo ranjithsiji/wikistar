@@ -30,6 +30,10 @@ const CATEGORY_META = {
     label: 'Claims',
     desc: 'How participants claim and edit their points.'
   },
+  template: {
+    label: 'Template',
+    desc: 'Optionally write the campaign template to the wiki on every article submission.'
+  },
   display: {
     label: 'Display',
     desc: 'What participants and the public can see.'
@@ -70,6 +74,9 @@ const groups = computed(() => {
           <ToggleSwitch v-if="item.type === 'bool'" v-model="values[item.key]" />
           <input v-else-if="item.type === 'int'" type="number"
                  v-model.number="values[item.key]" class="input !w-24 text-right" />
+          <select v-else-if="item.choices" v-model="values[item.key]" class="input !w-52">
+            <option v-for="c in item.choices" :key="c" :value="c">{{ c }}</option>
+          </select>
           <input v-else type="text" v-model="values[item.key]" class="input !w-52" />
         </div>
       </div>
