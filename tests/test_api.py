@@ -348,3 +348,53 @@ def test_personal_dashboard(client):
     login("Root", is_admin=True)
     approvals = client.get("/api/me/approval").json
     assert all(c["status"] == "draft" for c in approvals)
+
+
+def test_member_management_and_admin_campaigns(client):
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Member Management Contest"))
+    assert r.status_code == 201, r.text
+    slug = r.json["slug"]
+
+    # organizer adds a jury member (user created on the fly)
+    r = client.post(f"/api/campaigns/{slug}/members",
+                    json={"username": "NewJuror", "role": "jury"})
+    assert r.status_code == 201
+    assert any(m["user"]["username"] == "NewJuror" and m["role"] == "jury"
+               for m in r.json["members"])
+
+    # duplicate role rejected; unknown role rejected
+    assert client.post(f"/api/campaigns/{slug}/members",
+                       json={"username": "NewJuror", "role": "jury"}
+                       ).status_code == 409
+    assert client.post(f"/api/campaigns/{slug}/members",
+                       json={"username": "X", "role": "boss"}
+                       ).status_code == 422
+
+    # non-organizer cannot manage members
+    login("Carol")
+    assert client.post(f"/api/campaigns/{slug}/members",
+                       json={"username": "Y", "role": "jury"}
+                       ).status_code == 403
+
+    # remove the juror; the last organizer is protected
+    login("Alice")
+    detail = client.get(f"/api/campaigns/{slug}").json
+    juror = next(m for m in detail["members"]
+                 if m["user"]["username"] == "NewJuror" and m["role"] == "jury")
+    organizer = next(m for m in detail["members"] if m["role"] == "organizer")
+    assert client.delete(
+        f"/api/campaigns/{slug}/members/{organizer['id']}").status_code == 400
+    r = client.delete(f"/api/campaigns/{slug}/members/{juror['id']}")
+    assert r.status_code == 200
+    assert not any(m["user"]["username"] == "NewJuror" and m["role"] == "jury"
+                   for m in r.json["members"])
+
+    # the admin editathon list shows every campaign with its creator
+    assert client.get("/api/admin/campaigns").status_code == 403
+    login("Root", is_admin=True)
+    rows = client.get("/api/admin/campaigns").json
+    row = next(c for c in rows if c["slug"] == slug)
+    assert row["created_by_username"] == "Alice"
+    assert row["status"] == "draft"

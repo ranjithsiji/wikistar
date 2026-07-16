@@ -5,8 +5,8 @@ from sqlalchemy import desc, func
 from auth import require_admin
 from db import get_db
 from models import AuditLog, Campaign, CampaignStatus, Submission, User
-from routers.common import audit
-from webutil import HTTPException, respond
+from routers.common import audit, campaign_summary
+from webutil import HTTPException, jsonable, respond
 
 bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -14,6 +14,19 @@ bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 @bp.before_request
 def _gate():
     require_admin()
+
+
+@bp.get("/campaigns")
+def campaigns():
+    """Every campaign regardless of status, for the admin editathon list."""
+    db = get_db()
+    rows = db.query(Campaign).order_by(Campaign.start_date.desc()).all()
+    out = []
+    for c in rows:
+        summary = jsonable(campaign_summary(c))
+        summary["created_by_username"] = c.creator.username if c.creator else None
+        out.append(summary)
+    return respond(out)
 
 
 @bp.get("/stats")

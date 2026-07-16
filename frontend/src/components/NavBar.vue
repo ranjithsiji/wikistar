@@ -1,9 +1,12 @@
 <script setup>
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '../api'
 import { useAuthStore } from '../store'
 import { useTheme } from '../theme'
 
 const auth = useAuthStore()
+const router = useRouter()
 const { theme, cycleTheme } = useTheme()
 
 const themeTitles = {
@@ -11,6 +14,16 @@ const themeTitles = {
   dark: 'Theme: dark — click to follow system',
   system: 'Theme: system — click for light',
 }
+
+const menuOpen = ref(false)
+const menuRoot = ref(null)
+
+function onDocumentClick (e) {
+  if (menuRoot.value && !menuRoot.value.contains(e.target)) menuOpen.value = false
+}
+onMounted(() => document.addEventListener('click', onDocumentClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
+router.afterEach(() => { menuOpen.value = false })
 </script>
 
 <template>
@@ -43,15 +56,33 @@ const themeTitles = {
       <router-link v-if="auth.isLoggedIn" to="/campaigns/new" class="btn">
         + New campaign
       </router-link>
-      <router-link v-if="auth.isAdmin" to="/admin" class="btn">Admin</router-link>
-      <template v-if="auth.isLoggedIn">
-        <router-link to="/dashboard" title="Personal cabinet"
-                     class="text-sm text-neutral-500 dark:text-neutral-400
-                            hover:text-neutral-900 dark:hover:text-neutral-100">
+
+      <div v-if="auth.isLoggedIn" ref="menuRoot" class="relative">
+        <button class="btn" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
           {{ auth.user.username }}
-        </router-link>
-        <a class="btn" :href="api.logoutUrl">Logout</a>
-      </template>
+          <svg class="w-3.5 h-3.5 transition-transform" :class="menuOpen && 'rotate-180'"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+        <div v-if="menuOpen"
+             class="absolute right-0 mt-1.5 w-44 card shadow-lg py-1 z-20">
+          <router-link to="/dashboard"
+                       class="block px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800">
+            Dashboard
+          </router-link>
+          <router-link v-if="auth.isAdmin" to="/admin"
+                       class="block px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800">
+            Administration
+          </router-link>
+          <div class="my-1 border-t border-neutral-200 dark:border-neutral-800"></div>
+          <a :href="api.logoutUrl"
+             class="block px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800">
+            Logout
+          </a>
+        </div>
+      </div>
       <a v-else class="btn-primary" :href="api.loginUrl">Login with Wikimedia</a>
     </div>
   </nav>

@@ -75,6 +75,11 @@ class MemberOut(ORMModel):
     user: UserOut
 
 
+class MemberAddIn(BaseModel):
+    username: str = Field(min_length=1, max_length=255)
+    role: MemberRole
+
+
 class CampaignSummary(ORMModel):
     id: int
     slug: str

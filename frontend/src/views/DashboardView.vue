@@ -56,7 +56,7 @@ const STATUS_BADGE = {
 
 <template>
   <div>
-    <h1 class="text-2xl font-bold tracking-tight mb-4">Personal Cabinet</h1>
+    <h1 class="text-2xl font-bold tracking-tight mb-4">Dashboard</h1>
 
     <p v-if="auth.loaded && !auth.isLoggedIn" class="text-neutral-500 dark:text-neutral-400">
       Please <a class="text-blue-600 dark:text-blue-400 hover:underline"

@@ -32,6 +32,8 @@ export default {
   approveCampaign: (slug) => http.post(`/api/campaigns/${slug}/approve`),
   rejectCampaign: (slug, reason) => http.post(`/api/campaigns/${slug}/reject`, { reason }),
   joinCampaign: (slug) => http.post(`/api/campaigns/${slug}/join`),
+  addMember: (slug, data) => http.post(`/api/campaigns/${slug}/members`, data),
+  removeMember: (slug, memberId) => http.delete(`/api/campaigns/${slug}/members/${memberId}`),
   leaderboard: (slug) => http.get(`/api/campaigns/${slug}/leaderboard`),
   campaignStats: (slug) => http.get(`/api/campaigns/${slug}/stats`),
 
@@ -52,6 +54,7 @@ export default {
 
   // admin
   adminStats: () => http.get('/api/admin/stats'),
+  adminCampaigns: () => http.get('/api/admin/campaigns'),
   adminLogs: (params) => http.get('/api/admin/logs', { params }),
   adminUsers: () => http.get('/api/admin/users'),
   setAdmin: (userId, isAdmin) => http.post(`/api/admin/users/${userId}/set-admin?is_admin=${isAdmin}`)

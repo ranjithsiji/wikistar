@@ -48,7 +48,7 @@ from routers.common import (
     suggested_titles,
     unique_slug,
 )
-from schemas import CampaignIn, CampaignStats
+from schemas import CampaignIn, CampaignStats, MemberAddIn
 from scoring import compute_breakdown, default_self_assessment_rules
 from webutil import HTTPException, parse, respond
 
@@ -256,6 +256,55 @@ def join_campaign(slug: str):
         audit(db, user, "join", "campaign", campaign.id, {"slug": slug})
         db.commit()
         db.refresh(campaign)
+    return respond(campaign_detail_out(db, campaign, user))
+
+
+@bp.post("/campaigns/<slug>/members")
+def add_member(slug: str):
+    """Organizer/admin: add a user to the campaign with a role
+    (participant, jury or organizer). Creates the user if needed."""
+    db, user = get_db(), require_user()
+    payload = parse(MemberAddIn)
+    campaign = get_campaign_or_404(db, slug)
+    require_organizer(db, campaign, user)
+    member_user = get_or_create_user(db, payload.username)
+    exists = db.query(CampaignMember).filter_by(
+        campaign_id=campaign.id, user_id=member_user.id,
+        role=payload.role).first()
+    if exists:
+        raise HTTPException(
+            409, f"{member_user.username} already has the "
+                 f"{payload.role.value} role in this campaign")
+    db.add(CampaignMember(campaign_id=campaign.id, user_id=member_user.id,
+                          role=payload.role, added_by=user.id))
+    audit(db, user, "add_member", "campaign", campaign.id,
+          {"slug": slug, "username": member_user.username,
+           "role": payload.role.value})
+    db.commit()
+    db.refresh(campaign)
+    return respond(campaign_detail_out(db, campaign, user), 201)
+
+
+@bp.delete("/campaigns/<slug>/members/<int:member_id>")
+def remove_member(slug: str, member_id: int):
+    """Organizer/admin: remove a role from a campaign member."""
+    db, user = get_db(), require_user()
+    campaign = get_campaign_or_404(db, slug)
+    require_organizer(db, campaign, user)
+    member = db.get(CampaignMember, member_id)
+    if member is None or member.campaign_id != campaign.id:
+        raise HTTPException(404, "Member not found")
+    if member.role == MemberRole.organizer:
+        organizers = [m for m in campaign.members
+                      if m.role == MemberRole.organizer]
+        if len(organizers) <= 1:
+            raise HTTPException(400, "A campaign needs at least one organizer")
+    audit(db, user, "remove_member", "campaign", campaign.id,
+          {"slug": slug, "username": member.user.username,
+           "role": member.role.value})
+    db.delete(member)
+    db.commit()
+    db.refresh(campaign)
     return respond(campaign_detail_out(db, campaign, user))
 
 
