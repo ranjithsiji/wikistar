@@ -74,6 +74,7 @@ webservice python3.13 shell
 rm -rf ~/www/python/venv && python3 -m venv ~/www/python/venv
 cd ~/www/python/src
 uv pip install --python ~/www/python/venv/bin/python -r pyproject.toml
+cp ~/www/python/src/uwsgi.ini ~/www/python/uwsgi.ini   # larger buffer for OAuth callbacks
 exit
 webservice python3.13 restart
 ```
