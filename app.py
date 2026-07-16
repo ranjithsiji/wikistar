@@ -12,7 +12,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from auth import oauth
 from config import ROOT_DIR, settings
 from db import Base, db_session, engine
-from routers import admin, auth as auth_routes, campaigns, claims, reviews, submissions
+from routers import (admin, auth as auth_routes, campaigns, claims, dashboard,
+                     reviews, submissions)
 from webutil import register_errors
 
 app = Flask(__name__)
@@ -29,7 +30,8 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 oauth.init_app(app)
 register_errors(app)
 
-for module in (auth_routes, campaigns, submissions, reviews, claims, admin):
+for module in (auth_routes, campaigns, submissions, reviews, claims, admin,
+               dashboard):
     app.register_blueprint(module.bp)
 
 # Dev convenience; production schema changes go through Alembic.

@@ -315,3 +315,36 @@ def test_settings_validation_and_admin(client):
     assert logs["total"] > 0
     users = client.get("/api/admin/users").json
     assert any(u["username"] == "Carol" for u in users)
+
+
+def test_personal_dashboard(client):
+    logout()
+    assert client.get("/api/me/participation").status_code == 401
+
+    # Carol submitted to the self-assessment campaign (first test)
+    login("Carol")
+    part = client.get("/api/me/participation").json
+    assert len(part) >= 1
+    rows = part[0]["rows"]
+    me_rows = [r for r in rows if r["me"]]
+    assert len(me_rows) == 1 and me_rows[0]["username"] == "Carol"
+    assert me_rows[0]["points"] > 0
+
+    # JuryBob is on the jury of both campaigns; the jury-mode one has
+    # Dave's submission which JuryBob already reviewed -> missing == 0,
+    # while Carol's self campaign submission is unreviewed -> missing == 1
+    login("JuryBob")
+    ev = client.get("/api/me/evaluation").json
+    assert len(ev) >= 2
+    assert {c["missing"] for c in ev} >= {0, 1}
+
+    # Alice created the campaigns
+    login("Alice")
+    created = client.get("/api/me/created").json
+    assert any(c["name"] == "Kerala Culture Contest" for c in created)
+
+    # Approval: drafts visible to a site admin, none for a plain user
+    assert client.get("/api/me/approval").json == []
+    login("Root", is_admin=True)
+    approvals = client.get("/api/me/approval").json
+    assert all(c["status"] == "draft" for c in approvals)

@@ -45,7 +45,11 @@ const themeTitles = {
       </router-link>
       <router-link v-if="auth.isAdmin" to="/admin" class="btn">Admin</router-link>
       <template v-if="auth.isLoggedIn">
-        <span class="text-sm text-neutral-500 dark:text-neutral-400">{{ auth.user.username }}</span>
+        <router-link to="/dashboard" title="Personal cabinet"
+                     class="text-sm text-neutral-500 dark:text-neutral-400
+                            hover:text-neutral-900 dark:hover:text-neutral-100">
+          {{ auth.user.username }}
+        </router-link>
         <a class="btn" :href="api.logoutUrl">Logout</a>
       </template>
       <a v-else class="btn-primary" :href="api.loginUrl">Login with Wikimedia</a>

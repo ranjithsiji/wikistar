@@ -13,6 +13,12 @@ export default {
   loginUrl: '/api/login',
   logoutUrl: '/api/logout',
 
+  // personal dashboard
+  myParticipation: () => http.get('/api/me/participation'),
+  myEvaluation: () => http.get('/api/me/evaluation'),
+  myCreated: () => http.get('/api/me/created'),
+  myApproval: () => http.get('/api/me/approval'),
+
   // metadata for forms (settings registry, default rule presets)
   meta: () => http.get('/api/meta'),
 
