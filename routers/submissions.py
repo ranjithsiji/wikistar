@@ -31,6 +31,7 @@ from models import (
 from routers.common import (
     audit,
     get_campaign_or_404,
+    get_or_create_user,
     load_submissions,
     submission_out,
 )
@@ -156,7 +157,14 @@ def create_submission(slug: str):
         raise HTTPException(400,
                             "This campaign does not accept Commons files")
 
-    roles = campaign_roles(db, campaign, user)
+    # Coordinators (organizers) may submit on behalf of another user.
+    participant = user
+    username = (payload.username or "").strip()
+    if username and username != user.username:
+        require_organizer(db, campaign, user)
+        participant = get_or_create_user(db, username)
+
+    roles = campaign_roles(db, campaign, participant)
     if MemberRole.jury in roles and not settings.get("jury_can_submit"):
         raise HTTPException(403, "Jury members cannot submit to this campaign")
 
@@ -171,32 +179,35 @@ def create_submission(slug: str):
     else:
         wiki_domain = campaign.wiki_domain
     existing = db.query(Submission).filter_by(
-        campaign_id=campaign.id, user_id=user.id, title=title,
+        campaign_id=campaign.id, user_id=participant.id, title=title,
         wiki_domain=wiki_domain).first()
     if existing:
-        raise HTTPException(409, "You already submitted this page")
+        raise HTTPException(409, "This page was already submitted for "
+                                 "this participant")
 
     max_subs = int(settings.get("max_submissions_per_user", 0) or 0)
     if max_subs:
         count = db.query(Submission).filter_by(
-            campaign_id=campaign.id, user_id=user.id).count()
+            campaign_id=campaign.id, user_id=participant.id).count()
         if count >= max_subs:
             raise HTTPException(
                 400, f"Submission limit of {max_subs} reached")
 
     sub = Submission(
-        campaign_id=campaign.id, user_id=user.id, kind=payload.kind,
+        campaign_id=campaign.id, user_id=participant.id, kind=payload.kind,
         title=title, wiki_domain=wiki_domain,
     )
-    meta = _fetch_metadata(sub, campaign, user.username)
-    _check_eligibility(sub, campaign, user, settings, meta)
+    meta = _fetch_metadata(sub, campaign, participant.username)
+    _check_eligibility(sub, campaign, participant, settings, meta)
     db.add(sub)
 
     if MemberRole.participant not in roles:
-        db.add(CampaignMember(campaign_id=campaign.id, user_id=user.id,
+        db.add(CampaignMember(campaign_id=campaign.id, user_id=participant.id,
                               role=MemberRole.participant, added_by=user.id))
-    audit(db, user, "submit", "submission", None,
-          {"campaign": slug, "title": title})
+    details = {"campaign": slug, "title": title}
+    if participant.id != user.id:
+        details["on_behalf_of"] = participant.username
+    audit(db, user, "submit", "submission", None, details)
     db.commit()
     db.refresh(sub)
     return respond(submission_out(campaign, sub, settings), 201)

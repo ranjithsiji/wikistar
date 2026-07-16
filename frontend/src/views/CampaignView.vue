@@ -26,6 +26,7 @@ const expanded = ref(null)
 const newTitle = ref('')
 const newKind = ref('article')
 const newLanguage = ref('')
+const newUsername = ref('')   // coordinators: who the submission is for
 
 const isOrganizer = computed(() =>
   auth.isAdmin || campaign.value?.my_roles.includes('organizer'))
@@ -139,6 +140,7 @@ const submit = () => run(async () => {
   if (campaign.value.settings.multi_language && newKind.value === 'article') {
     payload.language = newLanguage.value || campaign.value.language
   }
+  if (isOrganizer.value) payload.username = newUsername.value.trim()
   await api.createSubmission(props.slug, payload)
   newTitle.value = ''
 }, 'Submission added.')
@@ -235,6 +237,12 @@ function ruleLabel (id) {
     <template v-if="tab === 'overview' || tab === 'submissions'">
       <div v-if="auth.isLoggedIn && campaign.status === 'active'" class="card p-4 mb-4">
         <form class="flex flex-wrap gap-2 items-end" @submit.prevent="submit">
+          <!-- coordinators submit on behalf of a participant -->
+          <div v-if="isOrganizer" class="w-52">
+            <label class="label">Username</label>
+            <input v-model="newUsername" class="input" required
+                   placeholder="Wikimedia username" title="Coordinators submit on behalf of this participant" />
+          </div>
           <div class="flex-1 min-w-48">
             <label class="label">{{ { article: 'Article title', wikidata_item: 'Item QID', commons_file: 'File name' }[newKind] }}</label>
             <input v-model="newTitle" class="input" required

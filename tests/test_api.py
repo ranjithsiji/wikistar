@@ -624,3 +624,44 @@ def test_participant_details_popup(client, monkeypatch):
     article = next(r for r in rows if r["kind"] == "article")
     assert article["fetch_failed"] is True
     assert article["details"] is None
+
+
+def test_coordinator_submits_on_behalf(client):
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="On Behalf Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # a regular user cannot submit for someone else
+    login("Mallory")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Kathakali", "kind": "article",
+                          "username": "Victim"})
+    assert r.status_code == 403
+
+    # a coordinator (organizer) can; the participant is auto-joined
+    login("Alice")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Kathakali", "kind": "article",
+                          "username": "NewComer"})
+    assert r.status_code == 201, r.text
+    assert r.json["user"]["username"] == "NewComer"
+    detail = client.get(f"/api/campaigns/{slug}").json
+    assert any(m["user"]["username"] == "NewComer"
+               and m["role"] == "participant" for m in detail["members"])
+
+    # duplicate guard applies to the participant, not the coordinator
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Kathakali", "kind": "article",
+                          "username": "NewComer"})
+    assert r.status_code == 409
+
+    # naming yourself is always allowed
+    login("Mallory")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Stub", "kind": "article",
+                          "username": "Mallory"})
+    assert r.status_code == 201
+    assert r.json["user"]["username"] == "Mallory"

@@ -115,6 +115,9 @@ class SubmissionIn(BaseModel):
     # Wiki language of the article; honoured only in multi-language
     # campaigns (otherwise the campaign's wiki always applies).
     language: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]{1,11}$")
+    # Coordinators may submit on behalf of a participant; ignored when it
+    # names the submitter themselves, forbidden for everyone else.
+    username: str | None = Field(default=None, max_length=255)
 
 
 class PointLineOut(BaseModel):

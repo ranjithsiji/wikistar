@@ -5,9 +5,11 @@ submission the engine produces a breakdown of point lines from three
 sources:
 
   auto    — computed from wiki metadata stored on the submission
-            (bytes_added, is_new_page, suggested list membership)
-  claimed — entered by the participant as Claim rows (self-assessment)
-  jury    — Review rows (jury mode); averaged per submission
+            (bytes_added, is_new_page, suggested list membership);
+            applies in every scoring mode
+  claimed — entered by the participant as Claim rows (self / hybrid)
+  jury    — Review rows (jury / hybrid); averaged per submission and
+            added on top of the rule-based points
 
 `submission.points_override`, when set by an organizer, replaces the
 computed total — the organizers always have the final say.
@@ -133,20 +135,9 @@ def compute_breakdown(
                          float(submission.points_override)))
         return bd
 
-    if scoring_mode == ScoringMode.jury:
-        accepted = [r for r in submission.reviews
-                    if r.decision == ReviewDecision.accept]
-        needed = int(settings.get("min_reviews_per_submission", 1) or 1)
-        if accepted and len(accepted) >= needed:
-            totals = [float(r.total) for r in accepted]
-            if settings.get("consensual_vote") and len(set(totals)) > 1:
-                return bd  # Fountain's ConsensualVote: no agreement, no points
-            avg = round(sum(totals) / len(totals), 2)
-            bd.add(PointLine(None, f"Jury average ({len(accepted)} review(s))",
-                             "jury", len(accepted), avg))
-        return bd
-
-    # self / hybrid ---------------------------------------------------------
+    # ---- rule-based points: every scoring mode ----------------------------
+    # The campaign's score sheet always applies; the modes only differ in
+    # who enters the human-judged part (claims vs jury marks).
     applicable = [r for r in rules if rule_applies(r, submission)]
     min_new_bytes = _min_new_article_bytes(applicable)
     claims_by_rule: dict[int, Claim] = {c.rule_id: c for c in submission.claims}
@@ -170,6 +161,10 @@ def compute_breakdown(
                 bd.add(PointLine(rule.id, rule.label, "auto", 1, float(rule.points)))
             continue
 
+        # Claims exist only in self/hybrid mode; never count them in jury
+        # mode even if stale rows linger from a scoring-mode change.
+        if scoring_mode == ScoringMode.jury:
+            continue
         claim = claims_by_rule.get(rule.id)
         if claim is None:
             continue
@@ -180,6 +175,20 @@ def compute_breakdown(
             bd.add(PointLine(rule.id, rule.label, "claimed", claim.quantity,
                              claim.effective_points if counts else 0.0,
                              status=claim.status.value))
+
+    # ---- jury average: jury and hybrid modes -------------------------------
+    if scoring_mode in (ScoringMode.jury, ScoringMode.hybrid):
+        accepted = [r for r in submission.reviews
+                    if r.decision == ReviewDecision.accept]
+        needed = int(settings.get("min_reviews_per_submission", 1) or 1)
+        if accepted and len(accepted) >= needed:
+            totals = [float(r.total) for r in accepted]
+            if settings.get("consensual_vote") and len(set(totals)) > 1:
+                # Fountain's ConsensualVote: no agreement, no jury points.
+                return bd
+            avg = round(sum(totals) / len(totals), 2)
+            bd.add(PointLine(None, f"Jury average ({len(accepted)} review(s))",
+                             "jury", len(accepted), avg))
 
     return bd
 

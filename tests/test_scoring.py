@@ -123,3 +123,34 @@ def test_organizer_override_wins():
     sub = make_submission(bytes_added=9000, page_len=15000)
     sub.points_override = 0
     assert total(sub) == 0
+
+
+# ---- rule-based points in jury / hybrid modes ------------------------------
+
+def _accept_review(sub: Submission, total: float, reviewer_id: int = 10) -> None:
+    from models import Review, ReviewDecision
+    sub.reviews.append(Review(submission_id=sub.id, reviewer_id=reviewer_id,
+                              total=total, decision=ReviewDecision.accept))
+
+
+def test_jury_mode_counts_campaign_rules_plus_jury_average():
+    sub = make_submission(bytes_added=5000, page_len=20000)
+    _accept_review(sub, 7)
+    bd = compute_breakdown(sub, RULES, {"example"}, ScoringMode.jury)
+    # 5 (bytes, nearest) + 10 (suggested list) + 7 (jury average)
+    assert bd.total == 22
+    assert {l.source for l in bd.lines} == {"auto", "jury"}
+
+
+def test_jury_mode_ignores_claims():
+    sub = make_submission(bytes_added=0, page_len=9000)
+    claim(sub, "Good Article")
+    assert compute_breakdown(sub, RULES, set(), ScoringMode.jury).total == 0
+
+
+def test_hybrid_mode_combines_claims_and_jury_average():
+    sub = make_submission(bytes_added=2000, page_len=15000)
+    claim(sub, "Substantial improvement")
+    _accept_review(sub, 3)
+    bd = compute_breakdown(sub, RULES, set(), ScoringMode.hybrid)
+    assert bd.total == 7  # 2 (bytes) + 2 (claim) + 3 (jury)
