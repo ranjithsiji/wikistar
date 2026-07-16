@@ -6,6 +6,20 @@ defineProps({ defaultRules: { type: Array, default: () => [] } })
 const RULE_TYPES = ['per_unit', 'flat_bonus', 'suggested_list', 'threshold', 'eligibility']
 const APPLIES = ['any', 'article', 'wikidata_item', 'commons_file']
 
+// Known claim/auto metrics. bytes_added is computed from the wiki
+// automatically; the others are claimed by participants and verified.
+const METRICS = [
+  ['bytes_added', 'Bytes added (auto, from wiki history)'],
+  ['substantial_improvement', 'Substantial improvement'],
+  ['good_article', 'Good Article'],
+  ['image_added', 'Image added'],
+  ['reference_added', 'Reference added'],
+  ['item_created', 'Wikidata item created'],
+  ['statements', 'Wikidata statements added'],
+  ['labels_descriptions_aliases', 'Labels / descriptions / aliases'],
+  ['depicts_added', 'Depicts added (Commons)'],
+]
+
 // Optional minimum byte delta a claim must reach (params.min_bytes),
 // e.g. "substantial improvement" needs at least 500 added bytes.
 function setMinBytes (r, raw) {
@@ -63,7 +77,13 @@ const hasPoints = (r) => ['per_unit', 'flat_bonus', 'suggested_list'].includes(r
       </div>
       <div class="sm:col-span-2" v-if="r.rule_type === 'per_unit' || r.rule_type === 'flat_bonus'">
         <label class="label">Metric</label>
-        <input v-model="r.metric" class="input" placeholder="bytes_added" />
+        <select v-model="r.metric" class="input"
+                @change="r.is_auto = r.metric === 'bytes_added'">
+          <option value="">—</option>
+          <option v-for="[value, label] in METRICS" :key="value" :value="value">
+            {{ label }}
+          </option>
+        </select>
       </div>
       <div class="sm:col-span-1" v-if="r.rule_type === 'per_unit'">
         <label class="label">Per</label>
