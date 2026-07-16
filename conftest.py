@@ -26,7 +26,7 @@ os.environ["DATABASE_URL"] = f"{_server}/{TEST_DB_NAME}"
 
 from sqlalchemy import create_engine, text  # noqa: E402
 
-_engine = create_engine(f"{_server}/mysql")
+_engine = create_engine(f"{_server}/")
 with _engine.begin() as conn:
     conn.execute(text(
         f"CREATE DATABASE IF NOT EXISTS {TEST_DB_NAME} CHARACTER SET utf8mb4"))

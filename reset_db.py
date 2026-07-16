@@ -24,7 +24,9 @@ def main() -> None:
             print("Aborted.")
             sys.exit(1)
 
-    server = create_engine(f"{server_url}/mysql")
+    # Connect with no default database selected: ToolsDB accounts have no
+    # access to the `mysql` system schema, only to their own databases.
+    server = create_engine(f"{server_url}/")
     with server.begin() as conn:
         conn.execute(text(f"DROP DATABASE IF EXISTS `{db_name}`"))
         conn.execute(text(f"CREATE DATABASE `{db_name}` CHARACTER SET utf8mb4"))
