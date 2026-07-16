@@ -34,6 +34,7 @@ export default {
   deleteCampaign: (slug) => http.delete(`/api/campaigns/${slug}`),
   approvalRights: (slug) => http.get(`/api/campaigns/${slug}/approval-rights`),
   approveCampaign: (slug) => http.post(`/api/campaigns/${slug}/approve`),
+  deactivateCampaign: (slug) => http.post(`/api/campaigns/${slug}/deactivate`),
   rejectCampaign: (slug, reason) => http.post(`/api/campaigns/${slug}/reject`, { reason }),
   joinCampaign: (slug) => http.post(`/api/campaigns/${slug}/join`),
   addMember: (slug, data) => http.post(`/api/campaigns/${slug}/members`, data),

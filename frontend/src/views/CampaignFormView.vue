@@ -14,8 +14,17 @@ const router = useRouter()
 
 const meta = ref(null)
 const error = ref('')
+const notice = ref('')
 const saving = ref(false)
 const section = ref('general')
+const formEl = ref(null)
+
+// Creation is a wizard: every Next saves the campaign (created as a
+// draft on the first step), the last step activates it. `createdSlug`
+// tracks the draft once it exists.
+const createdSlug = ref(props.slug)
+const isWizard = computed(() => !props.slug)
+const canActivate = ref(false)
 
 // The first question: jury-controlled or self-assessed. Everything that
 // follows — tabs, rules, settings — depends on it, and the two flows
@@ -61,6 +70,13 @@ const sections = computed(() => isJuryFlow.value
 watch(sections, (list) => {
   if (!list.some(([key]) => key === section.value)) section.value = 'general'
 })
+
+const stepIndex = computed(() =>
+  sections.value.findIndex(([key]) => key === section.value))
+const isLastStep = computed(() =>
+  stepIndex.value === sections.value.length - 1)
+const maxVisited = ref(0)
+watch(stepIndex, (i) => { maxVisited.value = Math.max(maxVisited.value, i) })
 
 function chooseMode (mode) {
   form.scoring_mode = mode
@@ -121,9 +137,7 @@ function splitLines (text) {
   return text.split('\n').map(s => s.trim()).filter(Boolean)
 }
 
-async function save () {
-  saving.value = true
-  error.value = ''
+function buildPayload () {
   const payload = {
     ...form,
     slug: form.slug || null,
@@ -142,11 +156,78 @@ async function save () {
     payload.settings = { ...form.settings, jury_criteria: [] }
     if (!isHybrid.value) payload.jury_usernames = []
   }
+  return payload
+}
+
+// Create the draft on the first Next, update it afterwards.
+async function persist () {
+  const payload = buildPayload()
+  const { data } = createdSlug.value
+    ? await api.updateCampaign(createdSlug.value, payload)
+    : await api.createCampaign(payload)
+  if (!createdSlug.value) {
+    createdSlug.value = data.slug
+    form.slug = data.slug
+    canActivate.value = data.status === 'draft'
+      ? (await api.approvalRights(data.slug)).data.can_approve
+      : false
+  }
+  form.status = data.status
+  form.rules = data.rules.map(r => ({ ...r }))
+  return data
+}
+
+// HTML5-validate only the controls of the visible step.
+function validateVisible () {
+  for (const el of formEl.value.querySelectorAll('input, select, textarea')) {
+    if (el.offsetParent === null) continue
+    if (!el.reportValidity()) return false
+  }
+  return true
+}
+
+async function nextStep () {
+  if (!validateVisible()) return
+  saving.value = true
+  error.value = ''
+  notice.value = ''
   try {
-    const { data } = props.slug
-      ? await api.updateCampaign(props.slug, payload)
-      : await api.createCampaign(payload)
-    router.push(`/campaigns/${data.slug}`)
+    const data = await persist()
+    if (isLastStep.value) {
+      if (data.status === 'draft' && canActivate.value) {
+        await api.approveCampaign(createdSlug.value)
+      }
+      router.push(`/campaigns/${createdSlug.value}`)
+    } else {
+      notice.value = 'Draft saved.'
+      section.value = sections.value[stepIndex.value + 1][0]
+    }
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    saving.value = false
+  }
+}
+
+function backStep () {
+  if (stepIndex.value > 0) {
+    section.value = sections.value[stepIndex.value - 1][0]
+  }
+}
+
+const finishLabel = computed(() => {
+  if (form.status === 'active') return 'Finish'
+  return canActivate.value ? 'Activate campaign' : 'Finish — awaits approval'
+})
+
+// Edit mode: single save button, no wizard.
+async function save () {
+  if (isWizard.value) return nextStep()
+  saving.value = true
+  error.value = ''
+  try {
+    await persist()
+    router.push(`/campaigns/${createdSlug.value}`)
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
@@ -214,10 +295,13 @@ async function save () {
                 : 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300'">
           {{ isJuryFlow ? 'Jury assessment' : (isHybrid ? 'Self-assessment + jury' : 'Self-assessment') }}
         </span>
-        <button v-if="!slug" type="button" class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+        <button v-if="!createdSlug" type="button" class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                 @click="modeChosen = false">
           change type
         </button>
+        <span v-if="isWizard" class="text-xs text-neutral-500 dark:text-neutral-400">
+          Step {{ stepIndex + 1 }} of {{ sections.length }}
+        </span>
       </div>
       <p v-if="!slug" class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
         New campaigns start as drafts. They go live immediately if you hold
@@ -226,13 +310,23 @@ async function save () {
       </p>
 
       <div class="flex gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-4 overflow-x-auto">
-        <button v-for="[key, label] in sections" :key="key" type="button" class="tab"
-                :class="{ 'tab-active': section === key }" @click="section = key">
+        <button v-for="([key, label], i) in sections" :key="key" type="button" class="tab"
+                :class="{ 'tab-active': section === key,
+                          'opacity-40 !cursor-default': isWizard && i > maxVisited }"
+                :disabled="isWizard && i > maxVisited"
+                @click="section = key">
+          <span v-if="isWizard"
+                class="inline-flex items-center justify-center w-4.5 h-4.5 mr-1 rounded-full text-[10px] font-bold"
+                :class="i < stepIndex ? 'bg-green-600 text-white'
+                  : section === key ? 'bg-blue-600 text-white'
+                  : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'">
+            {{ i < stepIndex ? '✓' : i + 1 }}
+          </span>
           {{ label }}
         </button>
       </div>
 
-      <form @submit.prevent="save">
+      <form ref="formEl" @submit.prevent="save">
         <!-- ============================ General ========================= -->
         <div v-show="section === 'general'" class="card p-4 grid gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2">
@@ -390,11 +484,28 @@ async function save () {
         </template>
 
         <p v-if="error" class="text-red-600 dark:text-red-400 text-sm mt-3">{{ error }}</p>
-        <div class="mt-4 flex gap-2">
+        <p v-else-if="notice" class="text-green-700 dark:text-green-400 text-sm mt-3">{{ notice }}</p>
+
+        <!-- wizard footer: every Next saves; the last step activates -->
+        <div v-if="isWizard" class="mt-4 flex items-center gap-2">
+          <button type="button" class="btn" :disabled="stepIndex === 0 || saving"
+                  @click="backStep">← Back</button>
+          <span class="flex-1"></span>
+          <router-link class="btn" :to="createdSlug ? `/campaigns/${createdSlug}` : '/'">
+            {{ createdSlug ? 'Finish later' : 'Cancel' }}
+          </router-link>
           <button type="submit" class="btn-primary" :disabled="saving">
-            {{ saving ? 'Saving…' : (slug ? 'Save changes' : 'Create campaign') }}
+            {{ saving ? 'Saving…'
+              : isLastStep ? finishLabel
+              : (createdSlug ? 'Save & Next →' : 'Create draft & Next →') }}
           </button>
-          <router-link class="btn" :to="slug ? `/campaigns/${slug}` : '/'">Cancel</router-link>
+        </div>
+        <!-- edit mode: plain save -->
+        <div v-else class="mt-4 flex gap-2">
+          <button type="submit" class="btn-primary" :disabled="saving">
+            {{ saving ? 'Saving…' : 'Save changes' }}
+          </button>
+          <router-link class="btn" :to="`/campaigns/${slug}`">Cancel</router-link>
         </div>
       </form>
     </template>

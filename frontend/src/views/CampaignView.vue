@@ -93,6 +93,10 @@ async function run (fn, successMsg = '') {
 
 const join = () => run(() => api.joinCampaign(props.slug), 'You joined the campaign.')
 const approve = () => run(() => api.approveCampaign(props.slug), 'Campaign approved.')
+const deactivate = () => {
+  if (!confirm('Deactivate this campaign? It goes back to draft, stops accepting submissions and is hidden from the public until approved again.')) return
+  return run(() => api.deactivateCampaign(props.slug), 'Campaign deactivated.')
+}
 const reject = () => {
   const reason = prompt('Reason for rejection?') || ''
   return run(() => api.rejectCampaign(props.slug, reason))
@@ -172,6 +176,8 @@ function ruleLabel (id) {
         <router-link v-if="isOrganizer" class="btn" :to="`/campaigns/${slug}/edit`">Edit</router-link>
         <button v-if="canApprove && campaign.status === 'draft'" class="btn-primary" @click="approve">Approve</button>
         <button v-if="canApprove && campaign.status === 'draft'" class="btn-danger" @click="reject">Reject</button>
+        <button v-if="isOrganizer && campaign.status === 'active'"
+                class="btn-danger" @click="deactivate">Deactivate</button>
         <button v-if="isOrganizer && (campaign.status === 'draft' || auth.isAdmin)"
                 class="btn-danger" @click="remove">Delete</button>
       </div>

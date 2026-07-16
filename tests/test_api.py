@@ -496,6 +496,29 @@ def test_coordinators(client):
     assert organizers == {"Alice"}
 
 
+def test_deactivate_campaign(client):
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Deactivate Me"))
+    slug = r.json["slug"]
+
+    # drafts cannot be deactivated
+    assert client.post(f"/api/campaigns/{slug}/deactivate").status_code == 400
+    login("Root", is_admin=True)
+    client.post(f"/api/campaigns/{slug}/approve")
+
+    # only organizers/admins may deactivate
+    login("Carol")
+    assert client.post(f"/api/campaigns/{slug}/deactivate").status_code == 403
+
+    login("Alice")
+    r = client.post(f"/api/campaigns/{slug}/deactivate")
+    assert r.status_code == 200 and r.json["status"] == "draft"
+    # hidden from the public again
+    logout()
+    assert client.get(f"/api/campaigns/{slug}").status_code == 404
+
+
 def test_member_management_and_admin_campaigns(client):
     login("Alice")
     r = client.post("/api/campaigns", json=make_campaign_payload(

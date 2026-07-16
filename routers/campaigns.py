@@ -421,6 +421,22 @@ def approve_campaign(slug: str):
     return respond(campaign_detail_out(db, campaign, user))
 
 
+@bp.post("/campaigns/<slug>/deactivate")
+def deactivate_campaign(slug: str):
+    """Organizer/admin: take an active campaign offline (back to draft).
+    Reactivating goes through the approval flow again."""
+    db, user = get_db(), require_user()
+    campaign = get_campaign_or_404(db, slug)
+    require_organizer(db, campaign, user)
+    if campaign.status != CampaignStatus.active:
+        raise HTTPException(400, "Only active campaigns can be deactivated")
+    campaign.status = CampaignStatus.draft
+    audit(db, user, "deactivate", "campaign", campaign.id, {"slug": slug})
+    db.commit()
+    db.refresh(campaign)
+    return respond(campaign_detail_out(db, campaign, user))
+
+
 @bp.post("/campaigns/<slug>/reject")
 def reject_campaign(slug: str):
     db, user = get_db(), require_user()
