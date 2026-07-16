@@ -819,3 +819,19 @@ def test_bulk_over_limit_needs_manual_scoring(client, monkeypatch):
     r = client.post(f"/api/submissions/{sub['id']}/moderate",
                     json={"points_override": 42})
     assert r.json["points"] == 42
+
+
+def test_oauth_callback_rejection_redirects_home(client):
+    # user rejected the request on meta
+    r = client.get("/oauth-callback?error=unauthorized_client"
+                   "&error_description=User+has+rejected+the+request")
+    assert r.status_code == 302
+    assert r.headers["Location"].endswith("?login=cancelled")
+    # callback reached without a code at all
+    r = client.get("/oauth-callback")
+    assert r.status_code == 302
+    assert r.headers["Location"].endswith("?login=cancelled")
+    # a broken token exchange (bad state) redirects instead of 500ing
+    r = client.get("/oauth-callback?code=abc&state=forged")
+    assert r.status_code == 302
+    assert r.headers["Location"].endswith("?login=failed")

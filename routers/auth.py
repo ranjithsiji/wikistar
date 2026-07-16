@@ -1,5 +1,5 @@
 """Login / logout / current user."""
-from flask import Blueprint, redirect, session, url_for
+from flask import Blueprint, redirect, request, session, url_for
 
 from auth import fetch_profile, get_current_user, oauth, upsert_user
 from config import settings
@@ -16,9 +16,22 @@ def login():
     return oauth.mediawiki.authorize_redirect(redirect_uri)
 
 
+def _login_notice(reason: str):
+    return redirect(f"{settings.frontend_url}?login={reason}")
+
+
 @bp.get("/oauth-callback")
 def oauth_callback():
-    profile = fetch_profile()
+    # The user may reject the request on meta — Wikimedia then calls back
+    # with error=... and no code. Bounce home with a notice, never a 500.
+    if request.args.get("error") or not request.args.get("code"):
+        return _login_notice("cancelled")
+    try:
+        profile = fetch_profile()
+    except Exception:
+        # Expired/forged state, network trouble with meta, … — anything
+        # that breaks the token exchange lands here.
+        return _login_notice("failed")
     user = upsert_user(get_db(), profile)
     session["user_id"] = user.id
     return redirect(settings.frontend_url)
