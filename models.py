@@ -177,10 +177,18 @@ class Campaign(Base):
         return merged
 
     def set_settings(self, overrides: dict) -> None:
-        """Replace the stored overrides (already validated)."""
-        self.settings_rows = [
-            CampaignSetting(key=k, value=v) for k, v in overrides.items()
-        ]
+        """Replace the stored overrides (already validated). Existing rows
+        are updated in place: wholesale replacement would flush the new
+        inserts before the deletes and trip uq_campaign_setting."""
+        existing = {row.key: row for row in self.settings_rows}
+        for key, value in overrides.items():
+            if key in existing:
+                existing[key].value = value
+            else:
+                self.settings_rows.append(CampaignSetting(key=key, value=value))
+        for key, row in existing.items():
+            if key not in overrides:
+                self.settings_rows.remove(row)
 
 
 class CampaignSetting(Base):
