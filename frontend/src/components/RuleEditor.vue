@@ -4,7 +4,17 @@ const rules = defineModel({ type: Array, required: true })
 defineProps({ defaultRules: { type: Array, default: () => [] } })
 
 const RULE_TYPES = ['per_unit', 'flat_bonus', 'suggested_list', 'threshold', 'eligibility']
-const APPLIES = ['any', 'article', 'wikidata_item']
+const APPLIES = ['any', 'article', 'wikidata_item', 'commons_file']
+
+// Optional minimum byte delta a claim must reach (params.min_bytes),
+// e.g. "substantial improvement" needs at least 500 added bytes.
+function setMinBytes (r, raw) {
+  const v = parseInt(raw, 10)
+  const params = { ...(r.params || {}) }
+  if (v > 0) params.min_bytes = v
+  else delete params.min_bytes
+  r.params = Object.keys(params).length ? params : null
+}
 
 function addRule () {
   rules.value.push({
@@ -62,6 +72,12 @@ const hasPoints = (r) => ['per_unit', 'flat_bonus', 'suggested_list'].includes(r
       <div class="sm:col-span-1" v-if="hasPoints(r)">
         <label class="label">Points</label>
         <input v-model.number="r.points" type="number" step="0.5" class="input" />
+      </div>
+      <div class="sm:col-span-1" v-if="r.rule_type === 'flat_bonus'">
+        <label class="label" title="Claim only counts when the submission added at least this many bytes">Min bytes</label>
+        <input type="number" min="0" class="input" placeholder="—"
+               :value="r.params?.min_bytes ?? ''"
+               @input="e => setMinBytes(r, e.target.value)" />
       </div>
       <div class="sm:col-span-1 flex justify-end">
         <button type="button" class="btn-danger" @click="rules.splice(i, 1)">✕</button>

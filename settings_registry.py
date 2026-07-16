@@ -30,6 +30,10 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
     "allow_wikidata_items": dict(
         type="bool", default=False, category="participation",
         label="Accept Wikidata items"),
+    "allow_commons_files": dict(
+        type="bool", default=False, category="participation",
+        label="Accept Wikimedia Commons files",
+        help="e.g. adding depicts statements to images."),
     "allow_submissions_after_end": dict(
         type="bool", default=False, category="participation",
         label="Accept submissions after the end date",

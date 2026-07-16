@@ -277,19 +277,20 @@ function ruleLabel (id) {
       <div v-if="auth.isLoggedIn && campaign.status === 'active'" class="card p-4 mb-4">
         <form class="flex flex-wrap gap-2 items-end" @submit.prevent="submit">
           <div class="flex-1 min-w-48">
-            <label class="label">Page title / QID</label>
+            <label class="label">{{ { article: 'Article title', wikidata_item: 'Item QID', commons_file: 'File name' }[newKind] }}</label>
             <input v-model="newTitle" class="input" required
-                   :placeholder="newKind === 'article' ? 'Article title' : 'Q…'" />
+                   :placeholder="{ article: 'Article title', wikidata_item: 'Q…', commons_file: 'File:Example.jpg' }[newKind]" />
           </div>
           <div v-if="campaign.settings.multi_language && newKind === 'article'" class="w-56">
             <label class="label">Language</label>
             <LanguageSelect v-model="newLanguage" />
           </div>
-          <div v-if="campaign.settings.allow_wikidata_items">
+          <div v-if="campaign.settings.allow_wikidata_items || campaign.settings.allow_commons_files">
             <label class="label">Type</label>
             <select v-model="newKind" class="input">
               <option value="article">Article</option>
-              <option value="wikidata_item">Wikidata item</option>
+              <option v-if="campaign.settings.allow_wikidata_items" value="wikidata_item">Wikidata item</option>
+              <option v-if="campaign.settings.allow_commons_files" value="commons_file">Commons file</option>
             </select>
           </div>
           <button class="btn-primary" type="submit">Submit contribution</button>
@@ -317,6 +318,7 @@ function ruleLabel (id) {
                 · {{ s.wiki_domain.split('.')[0] }}
               </template>
               <template v-if="s.kind === 'wikidata_item'"> · Wikidata</template>
+              <template v-if="s.kind === 'commons_file'"> · Commons</template>
               <template v-if="s.is_new_page"> · new page</template>
               <template v-if="s.bytes_added"> · +{{ s.bytes_added.toLocaleString() }} bytes</template>
             </div>

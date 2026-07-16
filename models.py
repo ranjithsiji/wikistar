@@ -65,6 +65,7 @@ class MemberRole(str, enum.Enum):
 class SubmissionKind(str, enum.Enum):
     article = "article"
     wikidata_item = "wikidata_item"
+    commons_file = "commons_file"    # Wikimedia Commons (e.g. depicts)
 
 
 class SubmissionStatus(str, enum.Enum):
@@ -84,6 +85,7 @@ class RuleType(str, enum.Enum):
 class RuleApplies(str, enum.Enum):
     article = "article"
     wikidata_item = "wikidata_item"
+    commons_file = "commons_file"
     any = "any"
 
 

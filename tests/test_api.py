@@ -43,6 +43,10 @@ def fake_mediawiki(monkeypatch):
             return PageMetadata(exists=True, page_id=11, page_len=20000,
                                 current_rev_id=2, base_rev_id=1,
                                 bytes_added=5000, is_new_page=False)
+        if title == "Stub":
+            return PageMetadata(exists=True, page_id=13, page_len=300,
+                                current_rev_id=5, base_rev_id=4,
+                                bytes_added=120, is_new_page=False)
         return PageMetadata(exists=True, page_id=12, page_len=4100,
                             current_rev_id=4, base_rev_id=None,
                             bytes_added=4100, is_new_page=True)
@@ -105,7 +109,7 @@ def test_full_self_assessment_flow(client):
     assert "organizer" in camp["my_roles"]
     assert camp["settings"]["allow_wikidata_items"] is True
     assert camp["settings"]["show_leaderboard"] is True  # default merged in
-    assert len(camp["rules"]) == 11
+    assert len(camp["rules"]) == 13
 
     # Draft hidden from strangers, visible to organizer
     logout()
@@ -428,6 +432,48 @@ def test_multi_language_submissions(client):
                     json={"title": "Onam", "kind": "article", "language": "ta"})
     assert r.status_code == 201
     assert r.json["wiki_domain"] == "ml.wikipedia.org"
+
+
+def test_min_bytes_and_commons_depicts(client):
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Commons Depicts Contest",
+        settings={"allow_commons_files": True}))
+    assert r.status_code == 201, r.text
+    slug = r.json["slug"]
+    login("Root", is_admin=True)
+    client.post(f"/api/campaigns/{slug}/approve")
+
+    detail = client.get(f"/api/campaigns/{slug}").json
+    depicts = next(r for r in detail["rules"] if r["label"] == "Depicts added")
+    improvement = next(r for r in detail["rules"]
+                       if r["label"] == "Substantial improvement")
+    assert improvement["params"] == {"min_bytes": 500}
+
+    # Commons file submission earns depicts points per unit
+    login("Frank")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "File:Kathakali dancer.jpg",
+                          "kind": "commons_file"})
+    assert r.status_code == 201, r.text
+    sub = r.json
+    assert sub["wiki_domain"] == "commons.wikimedia.org"
+    r = client.put(f"/api/submissions/{sub['id']}/claims",
+                   json=[{"rule_id": depicts["id"], "quantity": 3}])
+    assert r.status_code == 200
+    assert any(line["label"] == "Depicts added" and line["points"] == 3
+               for line in r.json["breakdown"])
+
+    # substantial improvement needs at least 500 added bytes
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Stub", "kind": "article"})
+    assert r.status_code == 201
+    stub = r.json
+    assert stub["bytes_added"] == 120
+    r = client.put(f"/api/submissions/{stub['id']}/claims",
+                   json=[{"rule_id": improvement["id"], "quantity": 1}])
+    assert r.status_code == 400
+    assert "500 bytes" in r.json["detail"]
 
 
 def test_member_management_and_admin_campaigns(client):

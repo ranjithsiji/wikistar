@@ -94,11 +94,11 @@ def test_10_statements_is_2_points():
     assert total(sub) == 2
 
 
-def test_5_labels_is_1_point_and_6_references_is_2_points():
+def test_5_labels_is_1_point_and_references_are_per_unit():
     sub = make_submission(kind=SubmissionKind.wikidata_item, title="Q125")
     claim(sub, "Labels / descriptions / aliases", quantity=5)
-    claim(sub, "References added", quantity=6)
-    assert total(sub) == 3
+    claim(sub, "References added", quantity=6)  # 1 point each since v2.1
+    assert total(sub) == 7
 
 
 def test_suggested_item_created_with_10_statements_is_10_points():

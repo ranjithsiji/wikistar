@@ -40,6 +40,7 @@ from webutil import HTTPException, parse, respond
 bp = Blueprint("submissions", __name__, url_prefix="/api")
 
 WIKIDATA_DOMAIN = "www.wikidata.org"
+COMMONS_DOMAIN = "commons.wikimedia.org"
 
 
 def _get_submission_or_404(db: Session, submission_id: int) -> Submission:
@@ -150,6 +151,10 @@ def create_submission(slug: str):
             and not settings.get("allow_wikidata_items")):
         raise HTTPException(400,
                             "This campaign does not accept Wikidata items")
+    if (payload.kind == SubmissionKind.commons_file
+            and not settings.get("allow_commons_files")):
+        raise HTTPException(400,
+                            "This campaign does not accept Commons files")
 
     roles = campaign_roles(db, campaign, user)
     if MemberRole.jury in roles and not settings.get("jury_can_submit"):
@@ -158,6 +163,8 @@ def create_submission(slug: str):
     title = payload.title.strip()
     if payload.kind == SubmissionKind.wikidata_item:
         wiki_domain = WIKIDATA_DOMAIN
+    elif payload.kind == SubmissionKind.commons_file:
+        wiki_domain = COMMONS_DOMAIN
     elif payload.language and settings.get("multi_language"):
         # Multi-language campaign: the participant picks the wiki.
         wiki_domain = f"{payload.language}.wikipedia.org"

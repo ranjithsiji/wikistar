@@ -69,6 +69,15 @@ def upsert_claims(submission_id: int):
         if item.rule_id in seen:
             raise HTTPException(400, "Duplicate claim for one rule")
         seen.add(item.rule_id)
+        # Rules can require a minimum byte delta (e.g. "substantial
+        # improvement"); checked against the fetched wiki metadata.
+        rule = rules[item.rule_id]
+        min_bytes = int((rule.params or {}).get("min_bytes") or 0)
+        if (min_bytes and sub.metadata_fetched_at is not None
+                and (sub.bytes_added or 0) < min_bytes):
+            raise HTTPException(
+                400, f'"{rule.label}" requires at least {min_bytes} bytes '
+                     f'added (this submission added {sub.bytes_added or 0})')
 
     existing = {c.rule_id: c for c in sub.claims}
     for item in payload:

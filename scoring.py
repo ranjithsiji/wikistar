@@ -215,7 +215,10 @@ def review_total(criteria: list[dict], scores: dict) -> float:
 
 def default_self_assessment_rules() -> list[dict]:
     """The example rule set from the tool documentation (fully editable)."""
-    A, W = RuleApplies.article.value, RuleApplies.wikidata_item.value
+    A = RuleApplies.article.value
+    W = RuleApplies.wikidata_item.value
+    C = RuleApplies.commons_file.value
+    ANY = RuleApplies.any.value
     return [
         dict(rule_type="per_unit", applies_to=A, label="Content added",
              metric="bytes_added", unit_size=1000, points=1, is_auto=True,
@@ -223,21 +226,26 @@ def default_self_assessment_rules() -> list[dict]:
         dict(rule_type="threshold", applies_to=A, label="New article minimum size",
              params={"min_new_article_bytes": 3500}),
         dict(rule_type="flat_bonus", applies_to=A, label="Substantial improvement",
-             metric="substantial_improvement", points=2),
+             metric="substantial_improvement", points=2,
+             params={"min_bytes": 500}),
         dict(rule_type="suggested_list", applies_to=A,
              label="Article from the suggested list", points=10),
         dict(rule_type="flat_bonus", applies_to=A, label="Good Article",
              metric="good_article", points=25),
+        dict(rule_type="per_unit", applies_to=ANY, label="Images added",
+             metric="image_added", unit_size=1, points=1),
+        dict(rule_type="per_unit", applies_to=ANY, label="References added",
+             metric="reference_added", unit_size=1, points=1),
         dict(rule_type="flat_bonus", applies_to=W, label="New Wikidata item created",
              metric="item_created", points=3),
         dict(rule_type="per_unit", applies_to=W, label="Statements added",
              metric="statements", unit_size=5, points=1),
         dict(rule_type="per_unit", applies_to=W, label="Labels / descriptions / aliases",
              metric="labels_descriptions_aliases", unit_size=5, points=1),
-        dict(rule_type="per_unit", applies_to=W, label="References added",
-             metric="references", unit_size=3, points=1),
         dict(rule_type="suggested_list", applies_to=W,
              label="Item from the suggested list", points=5),
+        dict(rule_type="per_unit", applies_to=C, label="Depicts added",
+             metric="depicts_added", unit_size=1, points=1),
         dict(rule_type="eligibility", applies_to=W, label="Topic eligibility",
              params={"any_of": ["P17=Q668", "P27=Q668", "P407=Q36236",
                                 "P1412=Q36236"]}),
