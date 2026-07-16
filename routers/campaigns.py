@@ -132,12 +132,23 @@ def _replace_coordinators(db: Session, campaign: Campaign,
 
 
 def _replace_suggested(campaign: Campaign, payload: CampaignIn) -> None:
-    campaign.suggested_pages = (
-        [SuggestedPage(kind=SubmissionKind.article, title=t.strip())
+    """Sync suggested pages in place: wholesale replacement would flush
+    the new inserts before the deletes and trip uq_suggested."""
+    wanted = (
+        [(SubmissionKind.article, t.strip())
          for t in dict.fromkeys(payload.suggested_articles) if t.strip()]
-        + [SuggestedPage(kind=SubmissionKind.wikidata_item, title=t.strip())
+        + [(SubmissionKind.wikidata_item, t.strip())
            for t in dict.fromkeys(payload.suggested_items) if t.strip()]
     )
+    wanted_keys = set(wanted)
+    existing = {(p.kind, p.title): p for p in campaign.suggested_pages}
+    for key, page in existing.items():
+        if key not in wanted_keys:
+            campaign.suggested_pages.remove(page)
+    for kind, title in wanted:
+        if (kind, title) not in existing:
+            campaign.suggested_pages.append(
+                SuggestedPage(kind=kind, title=title))
 
 
 def _replace_rules(db: Session, campaign: Campaign, payload: CampaignIn) -> None:
