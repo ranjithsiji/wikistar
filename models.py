@@ -66,6 +66,10 @@ class SubmissionKind(str, enum.Enum):
     article = "article"
     wikidata_item = "wikidata_item"
     commons_file = "commons_file"    # Wikimedia Commons (e.g. depicts)
+    # Bulk kinds: one submission covering a user's activity in the
+    # campaign window, scored from counted metrics (see Submission.metrics).
+    wikidata_edits = "wikidata_edits"    # statements + terms on eligible items
+    commons_edits = "commons_edits"      # uploads + depicts statements
 
 
 class SubmissionStatus(str, enum.Enum):
@@ -305,6 +309,9 @@ class Submission(Base):
     bytes_added: Mapped[int] = mapped_column(Integer, default=0)
     is_new_page: Mapped[bool] = mapped_column(Boolean, default=False)
     metadata_fetched_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Bulk kinds only: counted activity, e.g. {"statements": 12, "terms": 5,
+    # "eligible_qids": [...]} or {"uploads": 3, "depicts": 7}.
+    metrics: Mapped[dict | None] = mapped_column(JSON)
 
     status: Mapped[SubmissionStatus] = mapped_column(
         Enum(SubmissionStatus), default=SubmissionStatus.submitted
@@ -325,6 +332,10 @@ class Submission(Base):
 
     @property
     def url(self) -> str:
+        if self.kind in (SubmissionKind.wikidata_edits,
+                         SubmissionKind.commons_edits):
+            user = self.user.username.replace(" ", "_") if self.user else ""
+            return f"https://{self.wiki_domain}/wiki/Special:Contributions/{user}"
         return f"https://{self.wiki_domain}/wiki/{self.title.replace(' ', '_')}"
 
 

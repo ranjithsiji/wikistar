@@ -44,10 +44,31 @@ from models import (
     ScoringMode,
     ScoringRule,
     Submission,
+    SubmissionKind,
 )
 
 # Metrics the engine can compute on its own from submission metadata.
 AUTO_METRICS = {"bytes_added"}
+
+# Bulk kinds cover a user's whole activity in the campaign window; their
+# per_unit rules score from Submission.metrics counts (rule metric ->
+# metrics key) instead of claims.
+BULK_KIND_METRICS: dict[SubmissionKind, dict[str, str]] = {
+    SubmissionKind.wikidata_edits: {
+        "statements": "statements",
+        "labels_descriptions_aliases": "terms",
+    },
+    SubmissionKind.commons_edits: {
+        "image_added": "uploads",
+        "depicts_added": "depicts",
+    },
+}
+
+# Bulk kinds reuse the rules of their per-page counterpart.
+RULE_KIND = {
+    SubmissionKind.wikidata_edits: SubmissionKind.wikidata_item,
+    SubmissionKind.commons_edits: SubmissionKind.commons_file,
+}
 
 
 @dataclass
@@ -71,9 +92,10 @@ class Breakdown:
 
 
 def rule_applies(rule: ScoringRule, submission: Submission) -> bool:
+    kind = RULE_KIND.get(submission.kind, submission.kind)
     return rule.active and rule.applies_to in (
         RuleApplies.any,
-        RuleApplies(submission.kind.value),
+        RuleApplies(kind.value),
     )
 
 
@@ -142,7 +164,18 @@ def compute_breakdown(
     min_new_bytes = _min_new_article_bytes(applicable)
     claims_by_rule: dict[int, Claim] = {c.rule_id: c for c in submission.claims}
 
+    bulk = BULK_KIND_METRICS.get(submission.kind)
     for rule in applicable:
+        # Bulk kinds: per_unit rules score from the counted activity.
+        if bulk is not None:
+            if (rule.rule_type == RuleType.per_unit
+                    and rule.metric in bulk):
+                value = (submission.metrics or {}).get(bulk[rule.metric], 0)
+                units, pts = per_unit_points(rule, value)
+                if pts:
+                    bd.add(PointLine(rule.id, rule.label, "auto", units, pts))
+            continue
+
         if rule.rule_type == RuleType.per_unit and rule.metric in AUTO_METRICS:
             value = submission.bytes_added or 0
             gated = (

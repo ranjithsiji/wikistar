@@ -23,11 +23,14 @@ from models import (
     CampaignMember,
     CampaignStatus,
     MemberRole,
+    RuleApplies,
+    RuleType,
     ScoringMode,
     Submission,
     SubmissionKind,
     User,
 )
+from scoring import BULK_KIND_METRICS
 from routers.common import (
     audit,
     get_campaign_or_404,
@@ -42,6 +45,92 @@ bp = Blueprint("submissions", __name__, url_prefix="/api")
 
 WIKIDATA_DOMAIN = "www.wikidata.org"
 COMMONS_DOMAIN = "commons.wikimedia.org"
+
+# Bulk kinds: one submission covering the participant's activity in the
+# campaign window. domain + canonical title (unique per user via
+# uq_submission) + which rule applicability they piggyback on.
+BULK_KINDS = {
+    SubmissionKind.wikidata_edits: (WIKIDATA_DOMAIN, "Wikidata edits",
+                                    RuleApplies.wikidata_item),
+    SubmissionKind.commons_edits: (COMMONS_DOMAIN, "Commons uploads",
+                                   RuleApplies.commons_file),
+}
+
+
+def _has_bulk_rules(campaign: Campaign, kind: SubmissionKind) -> bool:
+    """A bulk kind is available only when the campaign carries active
+    per_unit rules for its metrics (e.g. statements / depicts_added)."""
+    metrics = set(BULK_KIND_METRICS[kind])
+    applies = BULK_KINDS[kind][2]
+    return any(
+        r.active and r.rule_type == RuleType.per_unit
+        and r.metric in metrics
+        and r.applies_to in (RuleApplies.any, applies)
+        for r in campaign.rules
+    )
+
+
+def _eligibility_any_of(campaign: Campaign) -> list[str]:
+    """The "P17=Q668"-style constraints of the campaign's Wikidata
+    eligibility rule, if one is configured."""
+    for r in campaign.rules:
+        if (r.active and r.rule_type == RuleType.eligibility
+                and r.applies_to in (RuleApplies.any,
+                                     RuleApplies.wikidata_item)
+                and r.params):
+            return list(r.params.get("any_of") or [])
+    return []
+
+
+def _depicts_targets(campaign: Campaign) -> list[str]:
+    """Optional QID whitelist on the depicts rule (params.any_of):
+    only depicts statements pointing at these items count."""
+    for r in campaign.rules:
+        if (r.active and r.rule_type == RuleType.per_unit
+                and r.metric == "depicts_added" and r.params):
+            return list(r.params.get("any_of") or [])
+    return []
+
+
+def _fetch_bulk_metrics(sub: Submission, campaign: Campaign,
+                        username: str) -> None:
+    """Best-effort activity counts for a bulk submission. Users whose
+    edit volume exceeds the campaign's auto-scoring cap (QuickStatements
+    / OpenRefine runs, mass uploads) get {"over_limit": true} instead of
+    counts: the coordinator reviews the contributions and enters the
+    points manually via the points override."""
+    settings = campaign.effective_settings
+    try:
+        if sub.kind == SubmissionKind.wikidata_edits:
+            cap = int(settings.get("max_wikidata_edits_auto", 50) or 0)
+            activity = mediawiki.fetch_wikidata_user_activity(
+                username, campaign.start_date, campaign.end_date,
+                max_edits=cap or None)
+            if activity is None:
+                sub.metrics = {"over_limit": True, "limit": cap}
+            else:
+                eligible = (mediawiki.fetch_eligible_qids(
+                    sorted(activity), _eligibility_any_of(campaign))
+                    if activity else set())
+                sub.metrics = {
+                    "statements": sum(v["statements"]
+                                      for q, v in activity.items()
+                                      if q in eligible),
+                    "terms": sum(v["terms"] for q, v in activity.items()
+                                 if q in eligible),
+                    "edited_qids": len(activity),
+                    "eligible_qids": sorted(eligible),
+                }
+        else:
+            cap = int(settings.get("max_commons_uploads_auto", 100) or 0)
+            metrics = mediawiki.fetch_commons_user_activity(
+                username, campaign.start_date, campaign.end_date,
+                _depicts_targets(campaign), max_edits=cap or None)
+            sub.metrics = (metrics if metrics is not None
+                           else {"over_limit": True, "limit": cap})
+    except Exception:
+        return
+    sub.metadata_fetched_at = datetime.now(timezone.utc)
 
 
 def _get_submission_or_404(db: Session, submission_id: int) -> Submission:
@@ -156,6 +245,13 @@ def create_submission(slug: str):
             and not settings.get("allow_commons_files")):
         raise HTTPException(400,
                             "This campaign does not accept Commons files")
+    if payload.kind in BULK_KINDS and not _has_bulk_rules(campaign,
+                                                          payload.kind):
+        raise HTTPException(
+            400, "This campaign has no scoring rules for this "
+                 "submission type")
+    if payload.kind not in BULK_KINDS and not payload.title.strip():
+        raise HTTPException(400, "A title is required")
 
     # Coordinators (organizers) may submit on behalf of another user.
     participant = user
@@ -169,7 +265,9 @@ def create_submission(slug: str):
         raise HTTPException(403, "Jury members cannot submit to this campaign")
 
     title = payload.title.strip()
-    if payload.kind == SubmissionKind.wikidata_item:
+    if payload.kind in BULK_KINDS:
+        wiki_domain, title, _ = BULK_KINDS[payload.kind]
+    elif payload.kind == SubmissionKind.wikidata_item:
         wiki_domain = WIKIDATA_DOMAIN
     elif payload.kind == SubmissionKind.commons_file:
         wiki_domain = COMMONS_DOMAIN
@@ -197,8 +295,11 @@ def create_submission(slug: str):
         campaign_id=campaign.id, user_id=participant.id, kind=payload.kind,
         title=title, wiki_domain=wiki_domain,
     )
-    meta = _fetch_metadata(sub, campaign, participant.username)
-    _check_eligibility(sub, campaign, participant, settings, meta)
+    if payload.kind in BULK_KINDS:
+        _fetch_bulk_metrics(sub, campaign, participant.username)
+    else:
+        meta = _fetch_metadata(sub, campaign, participant.username)
+        _check_eligibility(sub, campaign, participant, settings, meta)
     db.add(sub)
 
     if MemberRole.participant not in roles:
@@ -237,7 +338,10 @@ def refresh_metadata(submission_id: int):
     campaign = sub.campaign
     if sub.user_id != user.id:
         require_organizer(db, campaign, user)
-    _fetch_metadata(sub, campaign, sub.user.username)
+    if sub.kind in BULK_KINDS:
+        _fetch_bulk_metrics(sub, campaign, sub.user.username)
+    else:
+        _fetch_metadata(sub, campaign, sub.user.username)
     db.commit()
     db.refresh(sub)
     return respond(submission_out(campaign, sub))
@@ -252,7 +356,10 @@ def recalculate_points(submission_id: int):
     sub = _get_submission_or_404(db, submission_id)
     campaign = sub.campaign
     require_organizer(db, campaign, user)
-    _fetch_metadata(sub, campaign, sub.user.username)
+    if sub.kind in BULK_KINDS:
+        _fetch_bulk_metrics(sub, campaign, sub.user.username)
+    else:
+        _fetch_metadata(sub, campaign, sub.user.username)
     had_override = sub.points_override is not None
     sub.points_override = None
     audit(db, user, "recalculate", "submission", sub.id,

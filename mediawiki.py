@@ -5,6 +5,7 @@ Used to verify submissions instead of trusting user input:
   * how many bytes the participant added during the campaign window
   * whether the participant created the page during the window
 """
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 
@@ -144,6 +145,134 @@ def _first_revision(client: httpx.Client, domain: str, page_id: int) -> dict:
     if pages and pages[0].get("revisions"):
         return pages[0]["revisions"][0]
     return {}
+
+
+def fetch_user_contribs(domain: str, username: str, start: date, end: date,
+                        namespace: int = 0,
+                        limit: int | None = None) -> list[dict]:
+    """A user's edits on the wiki inside [start, end], as
+    {"title", "comment"} dicts. With `limit`, pagination stops as soon as
+    more than `limit` edits are seen (the result then has limit+1 or more
+    entries) — callers use that to bail out of huge tool-driven runs."""
+    revs: list[dict] = []
+    params = {
+        "action": "query", "format": "json", "formatversion": 2,
+        "list": "usercontribs", "ucuser": username,
+        "ucnamespace": namespace, "ucprop": "title|comment",
+        "uclimit": "max",
+        # usercontribs walks newest -> oldest: start is the newer bound.
+        "ucstart": _iso(end, end=True), "ucend": _iso(start),
+    }
+    with _client() as client:
+        while True:
+            data = client.get(api_url(domain), params=params).json()
+            revs.extend(data.get("query", {}).get("usercontribs", []))
+            cont = data.get("continue")
+            if not cont or (limit is not None and len(revs) > limit):
+                break
+            params.update(cont)
+    return revs
+
+
+# Wikibase auto-summaries, e.g. "/* wbsetclaim-create:2||1 */ [[Property:P31]]…"
+_STATEMENT_RE = re.compile(r"^/\* wb(setclaim-create|createclaim-create)")
+_TERM_RE = re.compile(r"^/\* wbset(label|description|aliases)-(add|set)")
+# Commons structured data: "…EntityPage/P180]]: [[d:Special:EntityPage/Q42]]"
+_DEPICTS_RE = re.compile(r"EntityPage/P180\]\]: \[\[d:Special:EntityPage/(Q\d+)")
+
+
+def fetch_wikidata_user_activity(username: str, start: date, end: date,
+                                 max_edits: int | None = None
+                                 ) -> dict[str, dict] | None:
+    """Per-item counts of the user's Wikidata work in the window:
+    {qid: {"statements": n, "terms": n}} — statement creations and
+    label/description/alias edits, classified from the auto-summaries.
+    Returns None when the user made more than `max_edits` edits (too
+    much to score automatically, e.g. a QuickStatements batch)."""
+    revs = fetch_user_contribs("www.wikidata.org", username, start, end,
+                               limit=max_edits)
+    if max_edits is not None and len(revs) > max_edits:
+        return None
+    out: dict[str, dict] = {}
+    for rev in revs:
+        qid = rev.get("title", "")
+        if not qid.startswith("Q"):
+            continue
+        comment = rev.get("comment", "")
+        entry = out.setdefault(qid, {"statements": 0, "terms": 0})
+        if _STATEMENT_RE.match(comment):
+            entry["statements"] += 1
+        elif _TERM_RE.match(comment):
+            entry["terms"] += 1
+    return {q: v for q, v in out.items() if v["statements"] or v["terms"]}
+
+
+def fetch_eligible_qids(qids: list[str], any_of: list[str]) -> set[str]:
+    """Items whose claims satisfy at least one "P17=Q668"-style
+    constraint. An empty constraint list means everything is eligible."""
+    if not any_of:
+        return set(qids)
+    pairs = [c.split("=", 1) for c in any_of if "=" in c]
+    eligible: set[str] = set()
+    with _client() as client:
+        for i in range(0, len(qids), 50):  # API limit: 50 ids per call
+            chunk = qids[i:i + 50]
+            data = client.get(api_url("www.wikidata.org"), params={
+                "action": "wbgetentities", "format": "json",
+                "ids": "|".join(chunk), "props": "claims",
+            }).json()
+            for qid, entity in (data.get("entities") or {}).items():
+                claims = entity.get("claims") or {}
+                if any(
+                    isinstance(v := (cl.get("mainsnak", {})
+                                     .get("datavalue", {}).get("value")), dict)
+                    and v.get("id") == target
+                    for prop, target in pairs
+                    for cl in claims.get(prop, [])
+                ):
+                    eligible.add(qid)
+    return eligible
+
+
+def fetch_commons_user_activity(username: str, start: date, end: date,
+                                depicts_targets: list[str] | None = None,
+                                max_edits: int | None = None
+                                ) -> dict | None:
+    """The user's Commons work in the window: new file uploads and
+    depicts (P180) statements added, optionally restricted to the given
+    target QIDs. Returns None when the uploads or file edits exceed
+    `max_edits` (too much to score automatically)."""
+    uploads = 0
+    params = {
+        "action": "query", "format": "json", "formatversion": 2,
+        "list": "logevents", "letype": "upload", "leuser": username,
+        "lelimit": "max", "lestart": _iso(end, end=True), "leend": _iso(start),
+    }
+    with _client() as client:
+        while True:
+            data = client.get(api_url("commons.wikimedia.org"),
+                              params=params).json()
+            uploads += sum(1 for ev in data.get("query", {})
+                           .get("logevents", [])
+                           if ev.get("action") == "upload")
+            cont = data.get("continue")
+            if max_edits is not None and uploads > max_edits:
+                return None
+            if not cont:
+                break
+            params.update(cont)
+
+    revs = fetch_user_contribs("commons.wikimedia.org", username,
+                               start, end, namespace=6, limit=max_edits)
+    if max_edits is not None and len(revs) > max_edits:
+        return None
+    targets = {t.strip().upper() for t in depicts_targets or [] if t.strip()}
+    depicts = 0
+    for rev in revs:
+        m = _DEPICTS_RE.search(rev.get("comment", ""))
+        if m and (not targets or m.group(1) in targets):
+            depicts += 1
+    return {"uploads": uploads, "depicts": depicts}
 
 
 def fetch_article_details(domain: str, title: str) -> dict | None:

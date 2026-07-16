@@ -523,8 +523,11 @@ def participant_details(slug: str, user_id: int):
                     sub.wiki_domain, sub.title)
             elif sub.kind == SubmissionKind.wikidata_item:
                 entry["details"] = mediawiki.fetch_wikidata_details(sub.title)
-            else:
+            elif sub.kind == SubmissionKind.commons_file:
                 entry["details"] = mediawiki.fetch_commons_details(sub.title)
+            else:
+                # Bulk kinds: the stored activity counts are the details.
+                entry["details"] = sub.metrics
         except Exception:
             entry["fetch_failed"] = True
         out.append(entry)

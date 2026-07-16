@@ -56,6 +56,18 @@ const logoPageUrl = computed(() => {
   return file ? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file)}` : ''
 })
 
+// Bulk kinds are offered only when the campaign carries matching rules.
+const hasMetricRule = (applies, metrics) =>
+  (campaign.value?.rules || []).some(r =>
+    r.rule_type === 'per_unit' && metrics.includes(r.metric)
+    && ['any', applies].includes(r.applies_to))
+const allowWikidataEdits = computed(() =>
+  hasMetricRule('wikidata_item', ['statements', 'labels_descriptions_aliases']))
+const allowCommonsEdits = computed(() =>
+  hasMetricRule('commons_file', ['image_added', 'depicts_added']))
+const isBulkKind = computed(() =>
+  ['wikidata_edits', 'commons_edits'].includes(newKind.value))
+
 // Wiki the title autocomplete searches, following project + type.
 const submitWiki = computed(() => {
   if (newKind.value === 'wikidata_item') return 'www.wikidata.org'
@@ -188,7 +200,7 @@ const remove = async () => {
   } catch (e) { error.value = errorMessage(e) }
 }
 const submit = () => run(async () => {
-  const payload = { title: newTitle.value, kind: newKind.value }
+  const payload = { title: isBulkKind.value ? '' : newTitle.value, kind: newKind.value }
   if (campaign.value.settings.multi_language && newKind.value === 'article') {
     payload.language = newLanguage.value || campaign.value.language
   }
@@ -306,20 +318,28 @@ function ruleLabel (id) {
             <label class="label">Project (language)</label>
             <LanguageSelect v-model="newLanguage" />
           </div>
-          <div v-if="campaign.settings.allow_wikidata_items || campaign.settings.allow_commons_files">
+          <div v-if="campaign.settings.allow_wikidata_items || campaign.settings.allow_commons_files
+                     || allowWikidataEdits || allowCommonsEdits">
             <label class="label">Type</label>
             <select v-model="newKind" class="input">
               <option value="article">Article</option>
               <option v-if="campaign.settings.allow_wikidata_items" value="wikidata_item">Wikidata item</option>
               <option v-if="campaign.settings.allow_commons_files" value="commons_file">Commons file</option>
+              <option v-if="allowWikidataEdits" value="wikidata_edits">Wikidata edits (whole period)</option>
+              <option v-if="allowCommonsEdits" value="commons_edits">Commons uploads (whole period)</option>
             </select>
           </div>
-          <div class="flex-1 min-w-48">
+          <div v-if="!isBulkKind" class="flex-1 min-w-48">
             <label class="label">{{ { article: 'Article title', wikidata_item: 'Item QID', commons_file: 'File name' }[newKind] }}</label>
             <TitleAutocomplete v-model="newTitle" required
                                :wiki="submitWiki" :kind="newKind"
                                :placeholder="{ article: 'Start typing or paste the article title…', wikidata_item: 'Q… or search by label', commons_file: 'File:Example.jpg' }[newKind]" />
           </div>
+          <p v-else class="flex-1 min-w-48 text-xs text-neutral-600 dark:text-neutral-300 self-center">
+            {{ newKind === 'wikidata_edits'
+               ? 'Counts the statements and label/description/alias edits made on eligible items during the campaign.'
+               : 'Counts the files uploaded and depicts statements added during the campaign.' }}
+          </p>
           <button class="btn-primary" type="submit">Submit contribution</button>
         </form>
       </div>
@@ -506,6 +526,18 @@ function ruleLabel (id) {
               <template v-if="s.kind === 'commons_file'"> · Commons</template>
               <template v-if="s.is_new_page"> · new page</template>
               <template v-if="s.bytes_added"> · +{{ s.bytes_added.toLocaleString() }} bytes</template>
+              <template v-if="s.kind === 'wikidata_edits' && s.metrics && !s.metrics.over_limit">
+                · {{ s.metrics.statements }} statements
+                · {{ s.metrics.terms }} labels/descriptions/aliases
+                · {{ (s.metrics.eligible_qids || []).length }} of {{ s.metrics.edited_qids }} items eligible
+              </template>
+              <template v-if="s.kind === 'commons_edits' && s.metrics && !s.metrics.over_limit">
+                · {{ s.metrics.uploads }} uploads · {{ s.metrics.depicts }} depicts
+              </template>
+              <span v-if="s.metrics && s.metrics.over_limit"
+                    class="text-amber-700 dark:text-amber-400 font-medium">
+                · over {{ s.metrics.limit }} edits — needs manual scoring
+              </span>
             </div>
           </div>
           <span v-if="s.status !== 'submitted'" class="badge" :class="statusStyles[s.status === 'accepted' ? 'active' : 'rejected']">
@@ -515,6 +547,18 @@ function ruleLabel (id) {
         </div>
 
         <div v-if="expanded === s.id" class="border-t border-neutral-100 dark:border-neutral-800 p-3 space-y-4">
+          <!-- bulk submission over the auto-scoring cap: manual points only -->
+          <p v-if="s.metrics && s.metrics.over_limit"
+             class="text-sm rounded-lg px-3 py-2 bg-amber-50 text-amber-800
+                    dark:bg-amber-950/50 dark:text-amber-300">
+            This user made more than {{ s.metrics.limit }} edits in the campaign
+            period (likely a QuickStatements / OpenRefine or mass-upload run), so
+            the points cannot be calculated automatically.
+            <a :href="s.url" target="_blank" class="underline">Review the
+            contributions ↗</a>, decide whether these edits count, and enter the
+            points with <b>Override points</b>.
+          </p>
+
           <!-- points breakdown -->
           <div v-if="s.breakdown.length">
             <h5 class="label">Points breakdown</h5>

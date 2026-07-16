@@ -706,3 +706,116 @@ def test_coordinator_recalculates_points(client):
     assert r.status_code == 200
     assert r.json["points_override"] is None
     assert r.json["points"] == 15  # computed from rules and fresh metadata
+
+
+def test_wikidata_bulk_submission(client, monkeypatch):
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_user_activity",
+        lambda username, start, end, max_edits=None: {
+            "Q100": {"statements": 12, "terms": 6},   # eligible
+            "Q200": {"statements": 99, "terms": 99},  # not eligible
+        })
+    seen = {}
+    def fake_eligible(qids, any_of):
+        seen["any_of"] = any_of
+        return {"Q100"}
+    monkeypatch.setattr(mediawiki, "fetch_eligible_qids", fake_eligible)
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Wikidata Drive")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"kind": "wikidata_edits"})
+    assert r.status_code == 201, r.text
+    sub = r.json
+    assert sub["title"] == "Wikidata edits"
+    assert sub["wiki_domain"] == "www.wikidata.org"
+    assert sub["metrics"]["statements"] == 12
+    assert sub["metrics"]["terms"] == 6
+    assert sub["metrics"]["eligible_qids"] == ["Q100"]
+    # the campaign's eligibility rule constraints were passed through
+    assert "P17=Q668" in seen["any_of"]
+    # default rules: statements 1/5 -> 2 pts; terms 1/5 -> 1 pt
+    assert sub["points"] == 3
+    assert {l["label"] for l in sub["breakdown"]} == {
+        "Statements added", "Labels / descriptions / aliases"}
+
+    # only one bulk submission per participant
+    assert client.post(f"/api/campaigns/{slug}/submissions",
+                       json={"kind": "wikidata_edits"}).status_code == 409
+
+
+def test_commons_bulk_submission_and_rule_gating(client, monkeypatch):
+    monkeypatch.setattr(
+        mediawiki, "fetch_commons_user_activity",
+        lambda username, start, end, targets=None, max_edits=None: {
+            "uploads": 4, "depicts": 7})
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Commons Drive")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"kind": "commons_edits"})
+    assert r.status_code == 201, r.text
+    sub = r.json
+    assert sub["title"] == "Commons uploads"
+    assert sub["metrics"] == {"uploads": 4, "depicts": 7}
+    # default rules: images 1/1 (any) -> 4 pts; depicts 1/1 -> 7 pts
+    assert sub["points"] == 11
+
+    # a campaign without matching rules refuses the bulk kinds
+    login("Alice")
+    slug2 = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="No Rules Contest", rules=[])).json["slug"]
+    login("Root", is_admin=True)
+    assert client.post(f"/api/campaigns/{slug2}/approve").status_code == 200
+    login("Dana")
+    for kind in ("wikidata_edits", "commons_edits"):
+        r = client.post(f"/api/campaigns/{slug2}/submissions",
+                        json={"kind": kind})
+        assert r.status_code == 400, kind
+    # ...and a missing title on a page submission is a clean 400
+    assert client.post(f"/api/campaigns/{slug2}/submissions",
+                       json={"kind": "article"}).status_code == 400
+
+
+def test_bulk_over_limit_needs_manual_scoring(client, monkeypatch):
+    seen = {}
+    def too_many(username, start, end, max_edits=None):
+        seen["max_edits"] = max_edits
+        return None  # more edits than the campaign's auto-scoring cap
+    monkeypatch.setattr(mediawiki, "fetch_wikidata_user_activity", too_many)
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="QS Flood Contest",
+        settings={"max_wikidata_edits_auto": 75})).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"kind": "wikidata_edits"})
+    assert r.status_code == 201, r.text
+    sub = r.json
+    assert seen["max_edits"] == 75          # campaign setting reached the fetcher
+    assert sub["metrics"] == {"over_limit": True, "limit": 75}
+    assert sub["points"] == 0               # nothing scored automatically
+    assert sub["breakdown"] == []
+
+    # the coordinator enters the points manually
+    login("Alice")
+    r = client.post(f"/api/submissions/{sub['id']}/moderate",
+                    json={"points_override": 42})
+    assert r.json["points"] == 42

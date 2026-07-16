@@ -38,6 +38,20 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         type="bool", default=False, category="participation",
         label="Accept submissions after the end date",
         help="e.g. to register Good Article nominations decided later."),
+    "max_wikidata_edits_auto": dict(
+        type="int", default=50, category="participation",
+        label="Max Wikidata edits for automatic scoring",
+        help="Bulk Wikidata submissions by users with more edits than this "
+             "in the campaign period (e.g. QuickStatements/OpenRefine runs) "
+             "are not scored automatically — the coordinator reviews the "
+             "contributions and enters the points manually. 0 disables "
+             "the cap."),
+    "max_commons_uploads_auto": dict(
+        type="int", default=100, category="participation",
+        label="Max Commons uploads for automatic scoring",
+        help="Bulk Commons submissions with more uploads or file edits "
+             "than this are not scored automatically — the coordinator "
+             "enters the points manually. 0 disables the cap."),
 
     # -- eligibility (Fountain-style article rules) ---------------------------
     "require_page_created_during_campaign": dict(

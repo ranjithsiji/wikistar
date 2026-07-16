@@ -110,7 +110,9 @@ class CampaignDetail(CampaignSummary):
 # ---- submissions -----------------------------------------------------------
 
 class SubmissionIn(BaseModel):
-    title: str = Field(min_length=1, max_length=500)
+    # Optional for the bulk kinds (wikidata_edits / commons_edits), which
+    # carry a canonical title; required for page submissions (router-checked).
+    title: str = Field(default="", max_length=500)
     kind: SubmissionKind = SubmissionKind.article
     # Wiki language of the article; honoured only in multi-language
     # campaigns (otherwise the campaign's wiki always applies).
@@ -168,6 +170,7 @@ class SubmissionOut(ORMModel):
     page_len: int | None
     bytes_added: int
     is_new_page: bool
+    metrics: dict | None = None    # bulk kinds: counted activity
     status: SubmissionStatus
     points_override: float | None
     submitted_at: datetime
