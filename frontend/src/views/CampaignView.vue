@@ -39,10 +39,18 @@ const isParticipant = computed(() =>
 const selfMode = computed(() =>
   ['self', 'hybrid'].includes(campaign.value?.scoring_mode))
 const criteria = computed(() => campaign.value?.settings?.jury_criteria || [])
-const shownSubmissions = computed(() =>
-  onlyMine.value
-    ? submissions.value.filter(s => s.user.username === auth.user?.username)
-    : submissions.value)
+// Coordinators can narrow the submission list to one participant.
+const filterUser = ref('')
+const submitterNames = computed(() =>
+  [...new Set(submissions.value.map(s => s.user.username))]
+    .sort((a, b) => a.localeCompare(b)))
+
+const shownSubmissions = computed(() => {
+  let list = submissions.value
+  if (onlyMine.value) list = list.filter(s => s.user.username === auth.user?.username)
+  if (filterUser.value) list = list.filter(s => s.user.username === filterUser.value)
+  return list
+})
 
 // Optional logo: a Commons file name rendered through Special:FilePath.
 const logoUrl = computed(() => {
@@ -506,9 +514,23 @@ function ruleLabel (id) {
 
     <!-- SUBMISSIONS -->
     <div v-if="tab === 'submissions'">
-      <label v-if="auth.isLoggedIn" class="flex items-center gap-2 text-sm mb-2 cursor-pointer">
-        <input type="checkbox" v-model="onlyMine" /> Show only my submissions
-      </label>
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-2">
+        <label v-if="auth.isLoggedIn" class="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" v-model="onlyMine" /> Show only my submissions
+        </label>
+        <!-- coordinator filter: one participant's submissions -->
+        <label v-if="isOrganizer && submitterNames.length"
+               class="flex items-center gap-2 text-sm">
+          Participant
+          <select v-model="filterUser" class="input !w-52 !py-1">
+            <option value="">All participants</option>
+            <option v-for="n in submitterNames" :key="n" :value="n">{{ n }}</option>
+          </select>
+        </label>
+        <span v-if="filterUser" class="text-xs text-neutral-600 dark:text-neutral-300">
+          {{ shownSubmissions.length }} of {{ submissions.length }} submissions
+        </span>
+      </div>
 
       <p v-if="!shownSubmissions.length" class="text-neutral-600 dark:text-neutral-300">No submissions yet.</p>
       <div v-for="s in shownSubmissions" :key="s.id" class="card mb-2">
