@@ -6,7 +6,8 @@ const routes = [
   { path: '/campaigns/new', name: 'campaign-create', component: () => import('./views/CampaignFormView.vue') },
   { path: '/campaigns/:slug', name: 'campaign', component: () => import('./views/CampaignView.vue'), props: true },
   { path: '/campaigns/:slug/edit', name: 'campaign-edit', component: () => import('./views/CampaignFormView.vue'), props: true },
-  { path: '/admin', name: 'admin', component: () => import('./views/AdminView.vue') }
+  { path: '/admin', name: 'admin', component: () => import('./views/AdminView.vue') },
+  { path: '/about', name: 'about', component: () => import('./views/AboutView.vue') }
 ]
 
 export default createRouter({ history: createWebHistory(), routes })
