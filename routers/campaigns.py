@@ -13,6 +13,7 @@ leaderboard          public unless show_leaderboard is off
 from collections import Counter
 
 from flask import Blueprint, request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import mediawiki
@@ -32,6 +33,7 @@ from models import (
     MemberRole,
     ScoringMode,
     ScoringRule,
+    Submission,
     SubmissionKind,
     SuggestedPage,
     User,
@@ -63,6 +65,22 @@ def meta():
         "settings_registry": settings_registry.SETTING_DEFS,
         "default_rules": {"self": default_self_assessment_rules()},
         "scoring_modes": ["jury", "self", "hybrid"],
+    })
+
+
+@bp.get("/stats")
+def site_stats():
+    """Public headline numbers for the homepage hero."""
+    db = get_db()
+    public = ~Campaign.status.in_((CampaignStatus.draft,
+                                   CampaignStatus.rejected))
+    return respond({
+        "campaigns": db.query(func.count(Campaign.id)).filter(public).scalar(),
+        "live_campaigns": db.query(func.count(Campaign.id))
+            .filter(Campaign.status == CampaignStatus.active).scalar(),
+        "participants": db.query(func.count(func.distinct(CampaignMember.user_id)))
+            .filter(CampaignMember.role == MemberRole.participant).scalar(),
+        "submissions": db.query(func.count(Submission.id)).scalar(),
     })
 
 

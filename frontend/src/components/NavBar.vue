@@ -15,6 +15,11 @@ const themeTitles = {
   system: 'Theme: system — click for light',
 }
 
+const navLinks = [
+  { to: '/contests', label: 'Contests' },
+  { to: '/about', label: 'About' },
+]
+
 const menuOpen = ref(false)
 const menuRoot = ref(null)
 
@@ -32,6 +37,14 @@ router.afterEach(() => { menuOpen.value = false })
       <router-link to="/" class="font-bold text-lg tracking-tight">
         Wiki<span class="text-blue-600 dark:text-blue-400">STAR</span>
       </router-link>
+      <div class="flex items-center gap-1 ml-2">
+        <router-link v-for="link in navLinks" :key="link.to" :to="link.to"
+                     class="rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-600 dark:text-neutral-300
+                            hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100"
+                     active-class="!text-blue-700 dark:!text-blue-400 bg-blue-50 dark:bg-blue-950/50">
+          {{ link.label }}
+        </router-link>
+      </div>
       <div class="flex-1"></div>
       <button class="btn !px-2" :title="themeTitles[theme]"
               :aria-label="themeTitles[theme]" @click="cycleTheme">

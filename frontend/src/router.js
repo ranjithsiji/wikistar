@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 // The single router of the app (v1 had two competing ones).
 const routes = [
   { path: '/', name: 'home', component: () => import('./views/HomeView.vue') },
+  { path: '/contests', name: 'contests', component: () => import('./views/ContestsView.vue') },
   { path: '/campaigns/new', name: 'campaign-create', component: () => import('./views/CampaignFormView.vue') },
   { path: '/campaigns/:slug', name: 'campaign', component: () => import('./views/CampaignView.vue'), props: true },
   { path: '/campaigns/:slug/edit', name: 'campaign-edit', component: () => import('./views/CampaignFormView.vue'), props: true },

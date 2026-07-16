@@ -26,6 +26,9 @@ export default {
   // metadata for forms (settings registry, default rule presets)
   meta: () => http.get('/api/meta'),
 
+  // site-wide public stats (homepage hero)
+  siteStats: () => http.get('/api/stats'),
+
   // campaigns
   listCampaigns: () => http.get('/api/campaigns'),
   getCampaign: (slug) => http.get(`/api/campaigns/${slug}`),
