@@ -68,12 +68,14 @@ webservice source directory; Flask serves the built frontend from
 ```bash
 become wikistar
 git clone https://gitlab.wikimedia.org/toolforge-repos/wikistar.git ~/www/python/src
-# create the venv with uv from pyproject.toml/uv.lock (inside the
-# webservice shell so it matches the runtime image)
+# build uwsgi's venv inside the webservice shell, with the image's own
+# python3 (must match uwsgi's Python), then install deps with uv
 webservice python3.13 shell
-uv venv ~/www/python/venv && cd ~/www/python/src && VIRTUAL_ENV=~/www/python/venv uv sync --active --no-dev
+rm -rf ~/www/python/venv && python3 -m venv ~/www/python/venv
+cd ~/www/python/src
+uv pip install --python ~/www/python/venv/bin/python -r pyproject.toml
 exit
-webservice python3.13 start
+webservice python3.13 restart
 ```
 
 uwsgi serves the `app` callable in `app.py` directly (the default);
