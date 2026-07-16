@@ -9,8 +9,9 @@ const auth = useAuthStore()
 const { theme, setTheme } = useTheme()
 
 const languages = ref([])
-const homeWiki = ref('')
+const homeWikis = ref([])
 const input = ref('')
+const wikiInput = ref('')
 const saving = ref(false)
 const saved = ref(false)
 const error = ref('')
@@ -28,7 +29,7 @@ onMounted(async () => {
   try {
     const prefs = (await api.getPreferences()).data
     languages.value = prefs.preferred_languages
-    homeWiki.value = prefs.home_wiki || ''
+    homeWikis.value = prefs.home_wikis || []
   } catch (e) { error.value = errorMessage(e) }
 })
 
@@ -51,6 +52,25 @@ function clearAll () {
   input.value = ''
 }
 
+function addWiki () {
+  const code = wikiInput.value
+  if (!code) return
+  error.value = ''
+  if (!homeWikis.value.includes(code) && homeWikis.value.length < 10) {
+    homeWikis.value.push(code)
+  }
+  wikiInput.value = ''
+}
+
+function removeWiki (code) {
+  homeWikis.value = homeWikis.value.filter(l => l !== code)
+}
+
+function clearWikis () {
+  homeWikis.value = []
+  wikiInput.value = ''
+}
+
 function move (i, d) {
   const j = i + d
   if (j < 0 || j >= languages.value.length) return
@@ -66,10 +86,10 @@ async function save () {
   try {
     const prefs = (await api.savePreferences({
       preferred_languages: languages.value,
-      home_wiki: homeWiki.value || ''
+      home_wikis: homeWikis.value
     })).data
     languages.value = prefs.preferred_languages
-    homeWiki.value = prefs.home_wiki || ''
+    homeWikis.value = prefs.home_wikis || []
     saved.value = true
   } catch (e) {
     error.value = errorMessage(e)
@@ -125,20 +145,35 @@ async function save () {
         </div>
       </div>
 
-      <!-- home wiki -->
+      <!-- home wikis -->
       <div class="card overflow-hidden">
         <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
                        bg-neutral-50 dark:bg-neutral-950/40">
-          <h2 class="font-semibold text-sm">Home wiki</h2>
+          <h2 class="font-semibold text-sm">Home wikis</h2>
           <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
-            The Wikipedia you mainly edit, e.g. ml — ml.wikipedia.org.
+            The Wikipedias you mainly edit — search and add one or more
+            projects, e.g. ml.wikipedia.org.
           </p>
         </header>
-        <div class="p-4 flex flex-wrap items-center gap-2">
-          <LanguageSelect v-model="homeWiki" class="!w-64"
-                          placeholder="Select your home wiki…" />
-          <button type="button" class="btn" :disabled="!homeWiki"
-                  @click="homeWiki = ''">Clear</button>
+        <div class="p-4 space-y-3">
+          <div v-if="homeWikis.length" class="flex flex-wrap gap-1.5">
+            <span v-for="code in homeWikis" :key="code"
+                  class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300 gap-1">
+              {{ code }}.wikipedia.org
+              <button type="button" class="opacity-60 hover:opacity-100 ml-0.5" title="Remove"
+                      @click="removeWiki(code)">✕</button>
+            </span>
+          </div>
+          <p v-else class="text-sm text-neutral-600 dark:text-neutral-300">
+            No home wiki yet.
+          </p>
+          <form class="flex flex-wrap gap-2" @submit.prevent="addWiki">
+            <LanguageSelect v-model="wikiInput" wiki class="!w-72"
+                            placeholder="Search a Wikipedia…" />
+            <button class="btn" :disabled="!wikiInput || homeWikis.length >= 10">Add</button>
+            <button type="button" class="btn" :disabled="!homeWikis.length && !wikiInput"
+                    @click="clearWikis">Clear</button>
+          </form>
         </div>
       </div>
 

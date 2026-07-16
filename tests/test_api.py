@@ -360,20 +360,20 @@ def test_preferences_and_suggested_links(client, monkeypatch):
 
     login("Carol")
     assert client.get("/api/me/preferences").json == {
-        "preferred_languages": [], "home_wiki": ""}
+        "preferred_languages": [], "home_wikis": []}
     r = client.put("/api/me/preferences",
                    json={"preferred_languages": ["ML", " ta ", "en", "ml"],
-                         "home_wiki": "ML"})
+                         "home_wikis": ["ML", "ta", "ml"]})
     assert r.status_code == 200
     assert r.json == {"preferred_languages": ["ml", "ta", "en"],
-                      "home_wiki": "ml"}
-    assert client.get("/api/me/preferences").json["home_wiki"] == "ml"
+                      "home_wikis": ["ml", "ta"]}
+    assert client.get("/api/me/preferences").json["home_wikis"] == ["ml", "ta"]
     assert client.put("/api/me/preferences",
                       json={"preferred_languages": ["bad code!"]}
                       ).status_code == 400
     assert client.put("/api/me/preferences",
                       json={"preferred_languages": ["ml", "ta", "en"],
-                            "home_wiki": "bad code!"}).status_code == 400
+                            "home_wikis": ["bad code!"]}).status_code == 400
 
     # suggested links resolve QIDs through Wikidata sitelinks in the
     # user's preferred languages

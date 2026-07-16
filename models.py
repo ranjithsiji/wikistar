@@ -118,9 +118,9 @@ class User(Base):
     # Comma-separated wiki language codes ("ml,ta,en"); suggested-list
     # wikilinks are shown in these languages.
     preferred_languages: Mapped[str] = mapped_column(String(255), default="")
-    # Wiki language code of the user's home Wikipedia ("ml" for
-    # ml.wikipedia.org); empty when unset.
-    home_wiki: Mapped[str] = mapped_column(String(32), default="")
+    # Comma-separated language codes of the user's home Wikipedias
+    # ("ml,ta" for ml.wikipedia.org and ta.wikipedia.org); empty when unset.
+    home_wikis: Mapped[str] = mapped_column(String(255), default="")
     registered_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
 

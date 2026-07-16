@@ -8,7 +8,9 @@ import LANGUAGES from '../languages'
 // pick, Escape to close.
 const model = defineModel({ type: String, default: '' })
 const props = defineProps({
-  placeholder: { type: String, default: 'Search language…' }
+  placeholder: { type: String, default: 'Search language…' },
+  // Wikipedia-project mode: options read "ml.wikipedia.org — മലയാളം".
+  wiki: { type: Boolean, default: false }
 })
 
 const open = ref(false)
@@ -18,7 +20,8 @@ const root = ref(null)
 const listEl = ref(null)
 
 function labelOf (l) {
-  return l.name === l.en ? `${l.code} — ${l.name}` : `${l.code} — ${l.name} (${l.en})`
+  const name = l.name === l.en ? l.name : `${l.name} (${l.en})`
+  return props.wiki ? `${l.code}.wikipedia.org — ${name}` : `${l.code} — ${name}`
 }
 
 const selectedLabel = computed(() => {
@@ -90,12 +93,18 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
 
 <template>
   <div ref="root" class="relative">
-    <input class="input" role="combobox" :aria-expanded="open"
+    <input class="input !pr-8" role="combobox" :aria-expanded="open"
            :value="open ? query : selectedLabel"
            :placeholder="open ? 'Type to search…' : (selectedLabel || placeholder)"
            @focus="openList" @click="openList"
            @input="query = $event.target.value"
            @keydown="onKeydown" />
+    <svg class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4
+                text-neutral-500 dark:text-neutral-400 transition-transform"
+         :class="open && 'rotate-180'" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
     <div v-if="open" ref="listEl"
          class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto card shadow-lg py-1">
       <p v-if="!filtered.length" class="px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-300">

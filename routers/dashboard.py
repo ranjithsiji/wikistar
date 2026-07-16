@@ -32,36 +32,39 @@ bp = Blueprint("dashboard", __name__, url_prefix="/api/me")
 _LANG_RE = re.compile(r"^[a-z][a-z0-9-]{1,11}$")
 
 
+def _clean_codes(value, field: str) -> list[str]:
+    """Validate a list of wiki language codes (max 10, deduplicated)."""
+    if not isinstance(value, list) or len(value) > 10:
+        raise HTTPException(400, f"{field} must be a list of up to 10 codes")
+    clean: list[str] = []
+    for lang in value:
+        code = str(lang).strip().lower()
+        if not _LANG_RE.match(code):
+            raise HTTPException(400, f"Invalid language code: {lang}")
+        if code not in clean:
+            clean.append(code)
+    return clean
+
+
 @bp.get("/preferences")
 def get_preferences():
     user = require_user()
     langs = [code for code in (user.preferred_languages or "").split(",") if code]
-    return respond({"preferred_languages": langs,
-                    "home_wiki": user.home_wiki or ""})
+    wikis = [code for code in (user.home_wikis or "").split(",") if code]
+    return respond({"preferred_languages": langs, "home_wikis": wikis})
 
 
 @bp.put("/preferences")
 def save_preferences():
     db, user = get_db(), require_user()
     data = request.get_json(silent=True) or {}
-    langs = data.get("preferred_languages") or []
-    if not isinstance(langs, list) or len(langs) > 10:
-        raise HTTPException(
-            400, "preferred_languages must be a list of up to 10 codes")
-    clean: list[str] = []
-    for lang in langs:
-        code = str(lang).strip().lower()
-        if not _LANG_RE.match(code):
-            raise HTTPException(400, f"Invalid language code: {lang}")
-        if code not in clean:
-            clean.append(code)
-    home = str(data.get("home_wiki") or "").strip().lower()
-    if home and not _LANG_RE.match(home):
-        raise HTTPException(400, f"Invalid home wiki language code: {home}")
-    user.preferred_languages = ",".join(clean)
-    user.home_wiki = home
+    langs = _clean_codes(data.get("preferred_languages") or [],
+                         "preferred_languages")
+    wikis = _clean_codes(data.get("home_wikis") or [], "home_wikis")
+    user.preferred_languages = ",".join(langs)
+    user.home_wikis = ",".join(wikis)
     db.commit()
-    return respond({"preferred_languages": clean, "home_wiki": home})
+    return respond({"preferred_languages": langs, "home_wikis": wikis})
 
 
 def _summary(campaign: Campaign) -> dict:

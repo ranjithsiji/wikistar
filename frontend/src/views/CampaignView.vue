@@ -96,6 +96,26 @@ const suggestedLangs = computed(() => {
   return ['en', ...langs.filter(l => l !== 'en')]
 })
 const itemLink = (item, lang) => item.links.find(l => l.lang === lang)
+
+// Add an extra language column to the suggested-items table on the fly.
+const addingLang = ref('')
+const langLoading = ref(false)
+async function addSuggestedLang () {
+  const code = addingLang.value
+  if (!code) return
+  const langs = [...(suggestedLinks.value?.languages || [])]
+  if (!langs.includes(code)) langs.push(code)
+  langLoading.value = true
+  error.value = ''
+  try {
+    suggestedLinks.value = (await api.suggestedLinks(props.slug, langs)).data
+    addingLang.value = ''
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    langLoading.value = false
+  }
+}
 // Red-link style "start this article" URL, prefilled with the English title.
 function createUrl (item, lang) {
   const title = (item.label_en || item.qid).replaceAll(' ', '_')
@@ -388,7 +408,17 @@ function ruleLabel (id) {
         </ul>
       </div>
       <div class="card overflow-hidden" v-if="campaign.suggested_items.length">
-        <h4 class="font-semibold text-sm px-4 pt-4">Suggested Wikidata items (bonus points)</h4>
+        <div class="flex flex-wrap items-center gap-3 px-4 pt-4">
+          <h4 class="font-semibold text-sm flex-1">Suggested Wikidata items (bonus points)</h4>
+          <form v-if="suggestedLinks && suggestedLinks.items" class="flex gap-2"
+                @submit.prevent="addSuggestedLang">
+            <LanguageSelect v-model="addingLang" class="!w-56" placeholder="Add a language…" />
+            <button class="btn"
+                    :disabled="!addingLang || langLoading || suggestedLinks.languages.length >= 10">
+              {{ langLoading ? 'Loading…' : 'Add language' }}
+            </button>
+          </form>
+        </div>
         <div v-if="suggestedLinks && suggestedLinks.items" class="mt-2">
           <div class="overflow-x-auto">
             <table class="w-full">
