@@ -481,6 +481,50 @@ def leaderboard(slug: str):
     return respond(compute_leaderboard(db, campaign))
 
 
+@bp.get("/campaigns/<slug>/participants/<int:user_id>/details")
+def participant_details(slug: str, user_id: int):
+    """Live per-submission facts for one participant (leaderboard popup).
+    Details are fetched from the MediaWiki APIs on demand; a failed fetch
+    marks the submission instead of failing the whole response."""
+    db, user = get_db(), get_current_user()
+    campaign = get_campaign_or_404(db, slug)
+    if not can_see_campaign(db, campaign, user):
+        raise HTTPException(404, "Campaign not found")
+    if not campaign.effective_settings.get("show_leaderboard", True):
+        allowed = user and (user.is_admin or campaign_roles(db, campaign, user)
+                            & {MemberRole.organizer, MemberRole.jury})
+        if not allowed:
+            raise HTTPException(403, "The leaderboard is not public")
+
+    settings = campaign.effective_settings
+    subs = [s for s in load_submissions(db, campaign.id)
+            if s.user_id == user_id]
+    out = []
+    for sub in subs:
+        bd = compute_breakdown(sub, campaign.rules,
+                               suggested_titles(campaign, sub.kind),
+                               campaign.scoring_mode, settings)
+        entry = {
+            "id": sub.id, "kind": sub.kind, "title": sub.title,
+            "url": sub.url, "wiki_domain": sub.wiki_domain,
+            "status": sub.status, "points": bd.total,
+            "submitted_at": sub.submitted_at, "details": None,
+            "fetch_failed": False,
+        }
+        try:
+            if sub.kind == SubmissionKind.article:
+                entry["details"] = mediawiki.fetch_article_details(
+                    sub.wiki_domain, sub.title)
+            elif sub.kind == SubmissionKind.wikidata_item:
+                entry["details"] = mediawiki.fetch_wikidata_details(sub.title)
+            else:
+                entry["details"] = mediawiki.fetch_commons_details(sub.title)
+        except Exception:
+            entry["fetch_failed"] = True
+        out.append(entry)
+    return respond(out)
+
+
 @bp.get("/campaigns/<slug>/stats")
 def campaign_stats(slug: str):
     db, user = get_db(), get_current_user()

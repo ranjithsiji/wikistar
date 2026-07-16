@@ -54,29 +54,48 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-10">
-    <!-- Hero -->
-    <section class="card overflow-hidden bg-gradient-to-br from-blue-50 via-white to-white
-                    dark:from-blue-950/40 dark:via-neutral-900 dark:to-neutral-900">
-      <div class="px-6 py-10 sm:px-10 sm:py-12">
-        <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">
+    <!-- Hero: full-width, centered, decorative glows.
+         Light: white with ink text; dark: deep navy with white text. -->
+    <section class="full-bleed relative overflow-hidden -mt-6
+                    bg-white text-neutral-900 dark:bg-[#0b1023] dark:text-white">
+      <div class="pointer-events-none absolute -top-32 -right-24 h-[28rem] w-[28rem]
+                  rounded-full bg-blue-500/20 dark:bg-blue-600/25 blur-3xl"></div>
+      <div class="pointer-events-none absolute top-24 right-56 h-24 w-24
+                  rounded-full bg-indigo-400/20 blur-2xl"></div>
+      <div class="pointer-events-none absolute -bottom-28 -left-20 h-80 w-80
+                  rounded-full bg-indigo-500/15 dark:bg-indigo-700/25 blur-3xl"></div>
+
+      <div class="relative max-w-6xl mx-auto px-4 py-16 sm:py-24 text-center">
+        <h1 class="text-4xl sm:text-6xl font-bold tracking-tight">
           Wiki<span class="text-blue-600 dark:text-blue-400">STAR</span>
         </h1>
-        <p class="mt-3 max-w-2xl text-neutral-600 dark:text-neutral-300">
+        <p class="mt-6 max-w-2xl mx-auto text-lg text-neutral-500 dark:text-slate-300">
           Submit, track and review contributions for Wikipedia and Wikidata
           editathons and writing contests.
         </p>
-        <div class="mt-5 flex flex-wrap gap-3">
-          <router-link to="/contests" class="btn-primary">Browse contests</router-link>
-          <router-link to="/about" class="btn">About WikiSTAR</router-link>
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+          <router-link to="/contests"
+                       class="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white
+                              hover:bg-blue-500 transition-colors">
+            Browse contests
+          </router-link>
+          <router-link to="/about"
+                       class="rounded-lg px-6 py-3 text-sm font-semibold transition-colors
+                              bg-neutral-100 text-neutral-900 hover:bg-neutral-200
+                              dark:bg-white/10 dark:text-white dark:hover:bg-white/20">
+            Learn more
+          </router-link>
         </div>
 
-        <dl class="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <dl class="mt-14 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
           <div v-for="t in tiles" :key="t.label"
-               class="card px-4 py-3 bg-white/80 dark:bg-neutral-900/60">
-            <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:text-neutral-300">
+               class="rounded-xl border px-4 py-3
+                      border-neutral-200 bg-neutral-50 dark:border-white/10 dark:bg-white/5">
+            <dd class="text-3xl font-semibold">{{ fmt(t.value) }}</dd>
+            <dt class="mt-1 text-xs font-semibold uppercase tracking-wide
+                       text-neutral-500 dark:text-slate-300">
               {{ t.label }}
             </dt>
-            <dd class="mt-1 text-3xl font-semibold">{{ fmt(t.value) }}</dd>
           </div>
         </dl>
       </div>

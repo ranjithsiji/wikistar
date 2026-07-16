@@ -124,6 +124,107 @@ def fetch_user_registration(domain: str, username: str) -> datetime | None:
             tzinfo=timezone.utc)
 
 
+def _parse_ts(ts: str | None) -> datetime | None:
+    if not ts:
+        return None
+    return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=timezone.utc)
+
+
+def _first_revision(client: httpx.Client, domain: str, page_id: int) -> dict:
+    data = client.get(api_url(domain), params={
+        "action": "query", "format": "json", "formatversion": 2,
+        "prop": "revisions", "pageids": page_id,
+        "rvprop": "timestamp|user", "rvdir": "newer", "rvlimit": 1,
+    }).json()
+    pages = data.get("query", {}).get("pages", [])
+    if pages and pages[0].get("revisions"):
+        return pages[0]["revisions"][0]
+    return {}
+
+
+def fetch_article_details(domain: str, title: str) -> dict | None:
+    """Live per-article facts for the participant popup: size, word count,
+    creation/last-edit dates and the connected Wikidata item. Returns None
+    for a missing page; network errors raise httpx.HTTPError."""
+    with _client() as client:
+        data = client.get(api_url(domain), params={
+            "action": "query", "format": "json", "formatversion": 2,
+            "prop": "info|pageprops", "ppprop": "wikibase_item",
+            "titles": title,
+        }).json()
+        page = data["query"]["pages"][0]
+        if page.get("missing"):
+            return None
+        first = _first_revision(client, domain, page["pageid"])
+        extract = client.get(api_url(domain), params={
+            "action": "query", "format": "json", "formatversion": 2,
+            "prop": "extracts", "explaintext": 1, "exlimit": 1,
+            "titles": title,
+        }).json()
+        text = extract["query"]["pages"][0].get("extract") or ""
+    return {
+        "bytes": page.get("length"),
+        "words": len(text.split()),
+        "created_at": _parse_ts(first.get("timestamp")),
+        "last_updated": _parse_ts(page.get("touched")),
+        "qid": (page.get("pageprops") or {}).get("wikibase_item"),
+    }
+
+
+def fetch_wikidata_details(qid: str) -> dict | None:
+    """Label, size and dates of one Wikidata item, or None if missing."""
+    domain = "www.wikidata.org"
+    with _client() as client:
+        data = client.get(api_url(domain), params={
+            "action": "query", "format": "json", "formatversion": 2,
+            "prop": "info", "titles": qid,
+        }).json()
+        page = data["query"]["pages"][0]
+        if page.get("missing") or page.get("invalid"):
+            return None
+        first = _first_revision(client, domain, page["pageid"])
+        # "mul" holds the default-for-all-languages label Wikidata uses
+        # when no language-specific one exists.
+        entity = client.get(api_url(domain), params={
+            "action": "wbgetentities", "format": "json", "ids": qid,
+            "props": "labels", "languages": "en|mul",
+        }).json().get("entities", {}).get(qid, {})
+        labels = entity.get("labels") or {}
+        label = (labels.get("en") or labels.get("mul")
+                 or next(iter(labels.values()), {})).get("value")
+    return {
+        "qid": qid.upper(),
+        "label": label,
+        "bytes": page.get("length"),
+        "created_at": _parse_ts(first.get("timestamp")),
+        "last_updated": _parse_ts(page.get("touched")),
+    }
+
+
+def fetch_commons_details(title: str) -> dict | None:
+    """Size, uploader and upload date of one Commons file, or None."""
+    with _client() as client:
+        data = client.get(api_url("commons.wikimedia.org"), params={
+            "action": "query", "format": "json", "formatversion": 2,
+            "prop": "imageinfo", "iiprop": "timestamp|user|size|url",
+            "iilimit": "max", "titles": title,
+        }).json()
+        page = data["query"]["pages"][0]
+        infos = page.get("imageinfo") or []
+        if page.get("missing") or not infos:
+            return None
+    latest, oldest = infos[0], infos[-1]  # imageinfo is newest-first
+    return {
+        "size": latest.get("size"),
+        "width": latest.get("width"),
+        "height": latest.get("height"),
+        "uploader": oldest.get("user"),
+        "uploaded_at": _parse_ts(oldest.get("timestamp")),
+        "file_url": latest.get("url"),
+    }
+
+
 def fetch_page_metadata(
     domain: str, title: str, username: str, start: date, end: date
 ) -> PageMetadata:

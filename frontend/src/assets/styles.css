@@ -17,6 +17,12 @@
 }
 
 @layer components {
+  /* Escape the centered page container (max-w-6xl in App.vue) so a
+     section can span the whole viewport width. */
+  .full-bleed {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+  }
   .card {
     @apply bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl;
   }

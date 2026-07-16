@@ -567,3 +567,60 @@ def test_member_management_and_admin_campaigns(client):
     row = next(c for c in rows if c["slug"] == slug)
     assert row["created_by_username"] == "Alice"
     assert row["status"] == "draft"
+
+
+def test_participant_details_popup(client, monkeypatch):
+    from datetime import datetime, timezone
+
+    monkeypatch.setattr(
+        mediawiki, "fetch_article_details",
+        lambda domain, title: {
+            "bytes": 20000, "words": 3100,
+            "created_at": datetime(2020, 1, 2, tzinfo=timezone.utc),
+            "last_updated": datetime(2026, 7, 1, tzinfo=timezone.utc),
+            "qid": "Q1359020",
+        })
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_details",
+        lambda qid: {
+            "qid": qid, "label": "Kathakali", "bytes": 900,
+            "created_at": datetime(2013, 5, 5, tzinfo=timezone.utc),
+            "last_updated": datetime(2026, 6, 1, tzinfo=timezone.utc),
+        })
+
+    login("Alice")
+    payload = make_campaign_payload(client, name="Details Popup Contest")
+    slug = client.post("/api/campaigns", json=payload).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    uid = login("Dana")
+    assert client.post(f"/api/campaigns/{slug}/submissions",
+                       json={"title": "Kathakali", "kind": "article"}
+                       ).status_code == 201
+    assert client.post(f"/api/campaigns/{slug}/submissions",
+                       json={"title": "Q126", "kind": "wikidata_item"}
+                       ).status_code == 201
+
+    logout()  # endpoint is public, like the leaderboard
+    rows = client.get(
+        f"/api/campaigns/{slug}/participants/{uid}/details").json
+    assert len(rows) == 2
+    article = next(r for r in rows if r["kind"] == "article")
+    assert article["details"]["words"] == 3100
+    assert article["details"]["qid"] == "Q1359020"
+    assert article["fetch_failed"] is False
+    item = next(r for r in rows if r["kind"] == "wikidata_item")
+    assert item["details"]["label"] == "Kathakali"
+    assert item["details"]["bytes"] == 900
+
+    # a failing wiki fetch flags the row instead of breaking the response
+    def boom(domain, title):
+        raise RuntimeError("wiki down")
+    monkeypatch.setattr(mediawiki, "fetch_article_details", boom)
+    rows = client.get(
+        f"/api/campaigns/{slug}/participants/{uid}/details").json
+    article = next(r for r in rows if r["kind"] == "article")
+    assert article["fetch_failed"] is True
+    assert article["details"] is None

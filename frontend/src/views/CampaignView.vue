@@ -5,6 +5,7 @@ import api, { errorMessage } from '../api'
 import { useAuthStore } from '../store'
 import ClaimEditor from '../components/ClaimEditor.vue'
 import LanguageSelect from '../components/LanguageSelect.vue'
+import ParticipantDetails from '../components/ParticipantDetails.vue'
 import ReviewForm from '../components/ReviewForm.vue'
 import StatsTab from '../components/StatsTab.vue'
 
@@ -15,6 +16,8 @@ const auth = useAuthStore()
 const campaign = ref(null)
 const submissions = ref([])
 const leaderboard = ref([])
+const stats = ref(null)
+const detailsUser = ref(null)   // leaderboard row whose popup is open
 const error = ref('')
 const notice = ref('')
 const tab = ref('overview')
@@ -38,6 +41,25 @@ const shownSubmissions = computed(() =>
     ? submissions.value.filter(s => s.user.username === auth.user?.username)
     : submissions.value)
 
+// Optional logo: a Commons file name rendered through Special:FilePath.
+const logoUrl = computed(() => {
+  const file = (campaign.value?.settings?.logo || '').replace(/^File:/i, '').trim()
+  return file
+    ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=192`
+    : ''
+})
+const logoPageUrl = computed(() => {
+  const file = (campaign.value?.settings?.logo || '').replace(/^File:/i, '').trim()
+  return file ? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file)}` : ''
+})
+
+const overviewTiles = computed(() => [
+  { label: 'Submissions', value: stats.value?.submissions },
+  { label: 'Participants', value: stats.value?.participants },
+  { label: 'Total points', value: stats.value?.total_points },
+  { label: 'Reviews', value: stats.value?.reviews }
+])
+
 const tabs = computed(() => {
   const t = [['overview', 'Overview'], ['submissions', 'Submissions'],
              ['leaderboard', 'Leaderboard'], ['stats', 'Statistics']]
@@ -51,6 +73,10 @@ async function load () {
   try {
     campaign.value = (await api.getCampaign(props.slug)).data
     submissions.value = (await api.listSubmissions(props.slug)).data
+    // Overview stat tiles; best-effort, never blocks the page.
+    api.campaignStats(props.slug)
+      .then(r => { stats.value = r.data })
+      .catch(() => {})
     if (!newLanguage.value) newLanguage.value = campaign.value.language
     // Fountain model: approval needs on-wiki admin rights (jury: sysop on
     // the target wiki; self: sysop on any Wikipedia), or site admin.
@@ -164,6 +190,9 @@ function ruleLabel (id) {
   <div v-else>
     <!-- header -->
     <div class="flex flex-wrap items-start gap-3 mb-1">
+      <a v-if="logoUrl" :href="logoPageUrl" target="_blank" class="shrink-0" title="Campaign logo (Wikimedia Commons)">
+        <img :src="logoUrl" alt="" class="h-14 w-14 object-contain rounded" />
+      </a>
       <h1 class="text-2xl font-bold">{{ campaign.name }}</h1>
       <span class="badge mt-1.5" :class="statusStyles[campaign.status]">{{ campaign.status }}</span>
       <span class="badge mt-1.5 bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300">
@@ -185,6 +214,10 @@ function ruleLabel (id) {
     <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
       {{ campaign.start_date }} → {{ campaign.end_date }} · {{ campaign.wiki_domain }}
       · {{ campaign.submission_count }} submissions · {{ campaign.participant_count }} participants
+      <template v-if="campaign.settings.campaign_page_url">
+        · <a :href="campaign.settings.campaign_page_url" target="_blank"
+             class="text-blue-600 dark:text-blue-400 hover:underline">Campaign page ↗</a>
+      </template>
     </p>
 
     <p v-if="error" class="text-red-600 dark:text-red-400 text-sm mb-2">{{ error }}</p>
@@ -198,11 +231,78 @@ function ruleLabel (id) {
       </button>
     </div>
 
+    <!-- submit form: on the campaign home page and the submissions tab -->
+    <template v-if="tab === 'overview' || tab === 'submissions'">
+      <div v-if="auth.isLoggedIn && campaign.status === 'active'" class="card p-4 mb-4">
+        <form class="flex flex-wrap gap-2 items-end" @submit.prevent="submit">
+          <div class="flex-1 min-w-48">
+            <label class="label">{{ { article: 'Article title', wikidata_item: 'Item QID', commons_file: 'File name' }[newKind] }}</label>
+            <input v-model="newTitle" class="input" required
+                   :placeholder="{ article: 'Article title', wikidata_item: 'Q…', commons_file: 'File:Example.jpg' }[newKind]" />
+          </div>
+          <div v-if="campaign.settings.multi_language && newKind === 'article'" class="w-56">
+            <label class="label">Language</label>
+            <LanguageSelect v-model="newLanguage" />
+          </div>
+          <div v-if="campaign.settings.allow_wikidata_items || campaign.settings.allow_commons_files">
+            <label class="label">Type</label>
+            <select v-model="newKind" class="input">
+              <option value="article">Article</option>
+              <option v-if="campaign.settings.allow_wikidata_items" value="wikidata_item">Wikidata item</option>
+              <option v-if="campaign.settings.allow_commons_files" value="commons_file">Commons file</option>
+            </select>
+          </div>
+          <button class="btn-primary" type="submit">Submit contribution</button>
+        </form>
+      </div>
+      <p v-else-if="!auth.isLoggedIn && campaign.status === 'active'"
+         class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
+        <a class="text-blue-600 dark:text-blue-400 hover:underline" :href="api.loginUrl">Log in</a>
+        to submit your contribution.
+      </p>
+    </template>
+
     <!-- OVERVIEW -->
     <div v-if="tab === 'overview'" class="space-y-4">
+      <!-- headline statistics -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div v-for="t in overviewTiles" :key="t.label" class="card p-4">
+          <div class="text-2xl font-bold tabular-nums">{{ t.value ?? '—' }}</div>
+          <div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">{{ t.label }}</div>
+        </div>
+      </div>
+
       <div class="card p-4" v-if="campaign.description">
         <p class="text-sm whitespace-pre-wrap">{{ campaign.description }}</p>
       </div>
+
+      <!-- people: one row, groups side by side -->
+      <div class="card p-4">
+        <h4 class="font-semibold text-sm mb-2">People</h4>
+        <div class="flex flex-wrap gap-x-10 gap-y-2 text-sm">
+          <div class="flex flex-wrap items-baseline gap-1.5">
+            <b>Organizers:</b>
+            <template v-if="campaign.members.some(m => m.role === 'organizer')">
+              <span v-for="m in campaign.members.filter(m => m.role === 'organizer')" :key="m.id"
+                    class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                {{ m.user.username }}
+              </span>
+            </template>
+            <span v-else>—</span>
+          </div>
+          <div class="flex flex-wrap items-baseline gap-1.5">
+            <b>Jury:</b>
+            <template v-if="campaign.members.some(m => m.role === 'jury')">
+              <span v-for="m in campaign.members.filter(m => m.role === 'jury')" :key="m.id"
+                    class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300">
+                {{ m.user.username }}
+              </span>
+            </template>
+            <span v-else>—</span>
+          </div>
+        </div>
+      </div>
+
       <div class="grid md:grid-cols-2 gap-4">
         <div class="card p-4">
           <h4 class="font-semibold text-sm mb-2">Scoring rules</h4>
@@ -225,24 +325,15 @@ function ruleLabel (id) {
           </table>
         </div>
         <div class="space-y-4">
-          <div class="card p-4">
-            <h4 class="font-semibold text-sm mb-2">People</h4>
-            <p class="text-sm">
-              <b>Organizers:</b>
-              {{ campaign.members.filter(m => m.role === 'organizer').map(m => m.user.username).join(', ') || '—' }}
-            </p>
-            <p class="text-sm mt-1">
-              <b>Jury:</b>
-              {{ campaign.members.filter(m => m.role === 'jury').map(m => m.user.username).join(', ') || '—' }}
-            </p>
-          </div>
           <div class="card p-4" v-if="campaign.suggested_articles.length || campaign.suggested_items.length">
-            <h4 class="font-semibold text-sm mb-2">Suggested pages (bonus points)</h4>
-            <div class="flex flex-wrap gap-1.5">
-              <a v-for="t in campaign.suggested_articles" :key="t" target="_blank"
-                 :href="`https://${campaign.wiki_domain}/wiki/${t.replaceAll(' ', '_')}`"
-                 class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300 hover:underline">{{ t }}</a>
-            </div>
+            <h4 class="font-semibold text-sm mb-2">Suggested articles (bonus points)</h4>
+            <ul class="space-y-1 text-sm list-disc pl-5">
+              <li v-for="t in campaign.suggested_articles" :key="t">
+                <a target="_blank"
+                   :href="`https://${campaign.wiki_domain}/wiki/${t.replaceAll(' ', '_')}`"
+                   class="text-blue-700 dark:text-blue-400 hover:underline">{{ t }}</a>
+              </li>
+            </ul>
             <template v-if="campaign.suggested_items.length">
               <div v-if="suggestedLinks && suggestedLinks.items" class="mt-3 space-y-1.5">
                 <div v-for="item in suggestedLinks.items" :key="item.qid"
@@ -279,34 +370,6 @@ function ruleLabel (id) {
 
     <!-- SUBMISSIONS -->
     <div v-if="tab === 'submissions'">
-      <!-- submit form -->
-      <div v-if="auth.isLoggedIn && campaign.status === 'active'" class="card p-4 mb-4">
-        <form class="flex flex-wrap gap-2 items-end" @submit.prevent="submit">
-          <div class="flex-1 min-w-48">
-            <label class="label">{{ { article: 'Article title', wikidata_item: 'Item QID', commons_file: 'File name' }[newKind] }}</label>
-            <input v-model="newTitle" class="input" required
-                   :placeholder="{ article: 'Article title', wikidata_item: 'Q…', commons_file: 'File:Example.jpg' }[newKind]" />
-          </div>
-          <div v-if="campaign.settings.multi_language && newKind === 'article'" class="w-56">
-            <label class="label">Language</label>
-            <LanguageSelect v-model="newLanguage" />
-          </div>
-          <div v-if="campaign.settings.allow_wikidata_items || campaign.settings.allow_commons_files">
-            <label class="label">Type</label>
-            <select v-model="newKind" class="input">
-              <option value="article">Article</option>
-              <option v-if="campaign.settings.allow_wikidata_items" value="wikidata_item">Wikidata item</option>
-              <option v-if="campaign.settings.allow_commons_files" value="commons_file">Commons file</option>
-            </select>
-          </div>
-          <button class="btn-primary" type="submit">Submit contribution</button>
-        </form>
-      </div>
-      <p v-else-if="!auth.isLoggedIn" class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
-        <a class="text-blue-600 dark:text-blue-400 hover:underline" :href="api.loginUrl">Log in</a>
-        to submit your contribution.
-      </p>
-
       <label v-if="auth.isLoggedIn" class="flex items-center gap-2 text-sm mb-2 cursor-pointer">
         <input type="checkbox" v-model="onlyMine" /> Show only my submissions
       </label>
@@ -421,9 +484,12 @@ function ruleLabel (id) {
           </thead>
           <tbody>
             <tr v-for="row in leaderboard" :key="row.user.id"
-                class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+                class="border-b border-neutral-100 dark:border-neutral-800 last:border-0
+                       cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+                title="Show this participant's submissions"
+                @click="detailsUser = row.user">
               <td class="td tabular-nums">{{ row.rank }}</td>
-              <td class="td font-medium">{{ row.user.username }}</td>
+              <td class="td font-medium text-blue-700 dark:text-blue-400">{{ row.user.username }}</td>
               <td class="td text-right tabular-nums">{{ row.submission_count }}</td>
               <td class="td text-right tabular-nums font-semibold">{{ row.points }}</td>
             </tr>
@@ -434,5 +500,8 @@ function ruleLabel (id) {
 
     <!-- STATISTICS -->
     <StatsTab v-if="tab === 'stats'" :slug="slug" />
+
+    <ParticipantDetails v-if="detailsUser" :slug="slug" :user="detailsUser"
+                        @close="detailsUser = null" />
   </div>
 </template>

@@ -95,6 +95,15 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         help="Until the campaign is archived."),
 
     # -- display -------------------------------------------------------------
+    "logo": dict(
+        type="str", default="", category="display",
+        label="Campaign logo (Commons file)",
+        help='File name on Wikimedia Commons, e.g. '
+             '"File:Wiki Loves Earth Logo.svg". Shown on the campaign page.'),
+    "campaign_page_url": dict(
+        type="str", default="", category="display",
+        label="Campaign page link",
+        help="URL of the campaign's page on your wiki or Meta-Wiki."),
     "show_leaderboard": dict(
         type="bool", default=True, category="display",
         label="Public leaderboard"),

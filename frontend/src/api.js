@@ -43,6 +43,7 @@ export default {
   addMember: (slug, data) => http.post(`/api/campaigns/${slug}/members`, data),
   removeMember: (slug, memberId) => http.delete(`/api/campaigns/${slug}/members/${memberId}`),
   leaderboard: (slug) => http.get(`/api/campaigns/${slug}/leaderboard`),
+  participantDetails: (slug, userId) => http.get(`/api/campaigns/${slug}/participants/${userId}/details`),
   suggestedLinks: (slug, languages) => http.get(`/api/campaigns/${slug}/suggested-links`,
     { params: languages ? { languages: languages.join(',') } : {} }),
   campaignStats: (slug) => http.get(`/api/campaigns/${slug}/stats`),
