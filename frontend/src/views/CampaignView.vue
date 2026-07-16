@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api, { errorMessage } from '../api'
 import { useAuthStore } from '../store'
@@ -50,6 +50,33 @@ const shownSubmissions = computed(() => {
   if (onlyMine.value) list = list.filter(s => s.user.username === auth.user?.username)
   if (filterUser.value) list = list.filter(s => s.user.username === filterUser.value)
   return list
+})
+
+// Jury mode gets a Fountain-style table grouped by participant; self /
+// hybrid keep the flat expandable list (one pseudo-group without header).
+const juryTable = computed(() => campaign.value?.scoring_mode === 'jury')
+const expandedUsers = ref([])
+const isUserExpanded = (name) => expandedUsers.value.includes(name)
+function toggleUser (name) {
+  expandedUsers.value = isUserExpanded(name)
+    ? expandedUsers.value.filter(n => n !== name)
+    : [...expandedUsers.value, name]
+}
+watch(filterUser, (name) => {
+  if (name && !isUserExpanded(name)) expandedUsers.value.push(name)
+})
+const submissionGroups = computed(() => {
+  if (!juryTable.value) return [{ user: null, subs: shownSubmissions.value }]
+  const map = new Map()
+  for (const s of shownSubmissions.value) {
+    const g = map.get(s.user.username)
+      || { user: s.user, subs: [], points: 0, reviewed: 0 }
+    g.subs.push(s)
+    g.points = Math.round((g.points + s.points) * 100) / 100
+    if (s.reviews.length) g.reviewed += 1
+    map.set(s.user.username, g)
+  }
+  return [...map.values()].sort((a, b) => b.points - a.points)
 })
 
 // Optional logo: a Commons file name rendered through Special:FilePath.
@@ -538,7 +565,41 @@ function ruleLabel (id) {
       </div>
 
       <p v-if="!shownSubmissions.length" class="text-neutral-600 dark:text-neutral-300">No submissions yet.</p>
-      <div v-for="s in shownSubmissions" :key="s.id" class="card mb-2">
+
+      <!-- jury mode: table header -->
+      <div v-if="juryTable && shownSubmissions.length"
+           class="flex items-center gap-3 px-3 pb-1 text-xs font-semibold uppercase tracking-wide
+                  text-neutral-500 dark:text-neutral-400">
+        <span class="w-4"></span>
+        <span>User</span>
+        <span class="flex-1"></span>
+        <span>Articles</span>
+        <span class="w-20 text-right">Points</span>
+      </div>
+
+      <div v-for="g in submissionGroups" :key="g.user?.username || 'flat'">
+        <!-- jury mode: one row per participant, expandable -->
+        <button v-if="g.user" type="button"
+                class="card w-full flex items-center gap-3 px-3 py-2 mb-2 text-left cursor-pointer
+                       hover:border-blue-400 dark:hover:border-blue-600 transition-colors"
+                @click="toggleUser(g.user.username)">
+          <svg class="w-4 h-4 shrink-0 transition-transform text-neutral-500"
+               :class="isUserExpanded(g.user.username) && 'rotate-90'"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+          <span class="font-medium text-blue-700 dark:text-blue-400">{{ g.user.username }}</span>
+          <span class="text-xs text-neutral-500 dark:text-neutral-400">
+            {{ g.reviewed }}/{{ g.subs.length }} reviewed
+          </span>
+          <span class="flex-1"></span>
+          <span class="text-sm tabular-nums">{{ g.subs.length }}</span>
+          <span class="font-bold tabular-nums w-20 text-right">{{ g.points }}</span>
+        </button>
+
+        <div v-if="!g.user || isUserExpanded(g.user.username)" :class="g.user && 'pl-6 mb-1'">
+          <div v-for="s in g.subs" :key="s.id" class="card mb-2">
         <div class="p-3 flex flex-wrap items-center gap-3 cursor-pointer"
              @click="expanded = expanded === s.id ? null : s.id">
           <div class="flex-1 min-w-40">
@@ -656,6 +717,8 @@ function ruleLabel (id) {
                       @click="recalculate(s)">Recalculate points</button>
             </template>
           </div>
+        </div>
+      </div>
         </div>
       </div>
     </div>
