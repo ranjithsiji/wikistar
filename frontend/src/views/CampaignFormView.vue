@@ -73,8 +73,12 @@ function seedDefaults () {
         values: [{ title: 'Yes', value: 1 }, { title: 'No', value: 0 }]
       }]
     }
-  } else if (!form.rules.length && meta.value) {
-    form.rules = meta.value.default_rules.self.map(r => ({ ...r }))
+  } else {
+    if (!form.rules.length && meta.value) {
+      form.rules = meta.value.default_rules.self.map(r => ({ ...r }))
+    }
+    // Self-assessment campaigns span multiple projects by default.
+    form.settings.multi_language = true
   }
 }
 
@@ -157,24 +161,35 @@ async function save () {
                 class="card p-6 text-left hover:border-blue-400 dark:hover:border-blue-600
                        focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                 @click="chooseMode('jury')">
-          <div class="text-3xl mb-3">⚖️</div>
+          <div class="flex items-center gap-3 mb-3">
+            <span class="text-3xl">⚖️</span>
+            <span class="badge bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+              Single project
+            </span>
+          </div>
           <div class="font-semibold text-lg mb-1">Jury assessment</div>
           <p class="text-sm text-neutral-600 dark:text-neutral-400">
-            A jury reviews every submission with a marks form you design —
-            radio groups, checkboxes and number scores. Points are the
-            average of accepting reviews. Like Fountain.
+            Runs on one wiki. A jury reviews every submission with a marks
+            form you design — radio groups, checkboxes and number scores.
+            Points are the average of accepting reviews. Like Fountain.
           </p>
         </button>
         <button type="button"
                 class="card p-6 text-left hover:border-blue-400 dark:hover:border-blue-600
                        focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                 @click="chooseMode('self')">
-          <div class="text-3xl mb-3">🖊️</div>
+          <div class="flex items-center gap-3 mb-3">
+            <span class="text-3xl">🖊️</span>
+            <span class="badge bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300">
+              Multiple projects
+            </span>
+          </div>
           <div class="font-semibold text-lg mb-1">Self-assessment</div>
           <p class="text-sm text-neutral-600 dark:text-neutral-400">
-            Participants claim their own points under the campaign's point
-            rules — bytes added, improvements, suggested pages, Wikidata
-            statements. Organizers (or a verifying jury) check the claims
+            Participants contribute across language Wikipedias and Wikidata,
+            claiming their own points under the campaign's point rules —
+            bytes added, improvements, suggested pages, statements.
+            Coordinators verify the claims before the winners are announced
             and always have the final say.
           </p>
         </button>
