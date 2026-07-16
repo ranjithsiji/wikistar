@@ -350,6 +350,43 @@ def test_personal_dashboard(client):
     assert all(c["status"] == "draft" for c in approvals)
 
 
+def test_preferences_and_suggested_links(client, monkeypatch):
+    logout()
+    assert client.get("/api/me/preferences").status_code == 401
+
+    login("Carol")
+    assert client.get("/api/me/preferences").json == {"preferred_languages": []}
+    r = client.put("/api/me/preferences",
+                   json={"preferred_languages": ["ML", " ta ", "en", "ml"]})
+    assert r.status_code == 200
+    assert r.json == {"preferred_languages": ["ml", "ta", "en"]}
+    assert client.put("/api/me/preferences",
+                      json={"preferred_languages": ["bad code!"]}
+                      ).status_code == 400
+
+    # suggested links resolve QIDs through Wikidata sitelinks in the
+    # user's preferred languages
+    def fake_sitelinks(qids, languages):
+        assert qids == ["Q126"]
+        return {"Q126": {"label": "Kerala",
+                         "links": {lang: f"Kerala ({lang})"
+                                   for lang in languages if lang != "ta"}}}
+    monkeypatch.setattr(mediawiki, "fetch_sitelinks", fake_sitelinks)
+
+    slug = client.get("/api/campaigns").json[0]["slug"]
+    data = client.get(f"/api/campaigns/{slug}/suggested-links").json
+    assert data["languages"] == ["ml", "ta", "en"]
+    item = data["items"][0]
+    assert item["qid"] == "Q126" and item["label"] == "Kerala"
+    assert [l["lang"] for l in item["links"]] == ["ml", "en"]
+    assert item["links"][0]["url"] == "https://ml.wikipedia.org/wiki/Kerala_(ml)"
+
+    # explicit ?languages= wins over the stored preference
+    data = client.get(
+        f"/api/campaigns/{slug}/suggested-links?languages=en").json
+    assert data["languages"] == ["en"]
+
+
 def test_member_management_and_admin_campaigns(client):
     login("Alice")
     r = client.post("/api/campaigns", json=make_campaign_payload(

@@ -8,7 +8,9 @@ Four sections, all scoped to the logged-in user:
   created        campaigns you created (drafts included)
   approval       draft campaigns you hold the right to approve
 """
-from flask import Blueprint
+import re
+
+from flask import Blueprint, request
 from sqlalchemy.orm import selectinload
 
 import wiki_rights
@@ -23,9 +25,38 @@ from models import (
     Submission,
 )
 from routers.common import campaign_summary, compute_leaderboard
-from webutil import jsonable, respond
+from webutil import HTTPException, jsonable, respond
 
 bp = Blueprint("dashboard", __name__, url_prefix="/api/me")
+
+_LANG_RE = re.compile(r"^[a-z][a-z0-9-]{1,11}$")
+
+
+@bp.get("/preferences")
+def get_preferences():
+    user = require_user()
+    langs = [code for code in (user.preferred_languages or "").split(",") if code]
+    return respond({"preferred_languages": langs})
+
+
+@bp.put("/preferences")
+def save_preferences():
+    db, user = get_db(), require_user()
+    data = request.get_json(silent=True) or {}
+    langs = data.get("preferred_languages") or []
+    if not isinstance(langs, list) or len(langs) > 10:
+        raise HTTPException(
+            400, "preferred_languages must be a list of up to 10 codes")
+    clean: list[str] = []
+    for lang in langs:
+        code = str(lang).strip().lower()
+        if not _LANG_RE.match(code):
+            raise HTTPException(400, f"Invalid language code: {lang}")
+        if code not in clean:
+            clean.append(code)
+    user.preferred_languages = ",".join(clean)
+    db.commit()
+    return respond({"preferred_languages": clean})
 
 
 def _summary(campaign: Campaign) -> dict:

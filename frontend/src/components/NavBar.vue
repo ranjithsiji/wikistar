@@ -72,6 +72,10 @@ router.afterEach(() => { menuOpen.value = false })
                        class="block px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800">
             Dashboard
           </router-link>
+          <router-link to="/preferences"
+                       class="block px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800">
+            Preferences
+          </router-link>
           <router-link v-if="auth.isAdmin" to="/admin"
                        class="block px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800">
             Administration

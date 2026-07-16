@@ -43,6 +43,7 @@ const tabs = computed(() => {
 })
 
 const canApprove = ref(false)
+const suggestedLinks = ref(null)   // resolved Wikidata sitelinks
 
 async function load () {
   try {
@@ -54,6 +55,12 @@ async function load () {
       canApprove.value = (await api.approvalRights(props.slug)).data.can_approve
     } else {
       canApprove.value = false
+    }
+    // Suggested QIDs -> wikilinks in the viewer's preferred languages
+    if (campaign.value.suggested_items.length && suggestedLinks.value === null) {
+      try {
+        suggestedLinks.value = (await api.suggestedLinks(props.slug)).data
+      } catch { suggestedLinks.value = false }
     }
   } catch (e) {
     error.value = errorMessage(e)
@@ -222,10 +229,36 @@ function ruleLabel (id) {
               <a v-for="t in campaign.suggested_articles" :key="t" target="_blank"
                  :href="`https://${campaign.wiki_domain}/wiki/${t.replaceAll(' ', '_')}`"
                  class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300 hover:underline">{{ t }}</a>
-              <a v-for="t in campaign.suggested_items" :key="t" target="_blank"
-                 :href="`https://www.wikidata.org/wiki/${t}`"
-                 class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">{{ t }}</a>
             </div>
+            <template v-if="campaign.suggested_items.length">
+              <div v-if="suggestedLinks && suggestedLinks.items" class="mt-3 space-y-1.5">
+                <div v-for="item in suggestedLinks.items" :key="item.qid"
+                     class="flex flex-wrap items-baseline gap-1.5 text-sm">
+                  <a :href="`https://www.wikidata.org/wiki/${item.qid}`" target="_blank"
+                     class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">
+                    {{ item.qid }}
+                  </a>
+                  <span class="font-medium">{{ item.label || '—' }}</span>
+                  <a v-for="link in item.links" :key="link.lang" :href="link.url" target="_blank"
+                     class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300 hover:underline"
+                     :title="link.title">{{ link.lang }}</a>
+                  <span v-if="!item.links.length" class="text-xs text-neutral-400">
+                    no article in your languages yet — write one!
+                  </span>
+                </div>
+                <p class="text-xs text-neutral-400 mt-1">
+                  Wikilinks are shown in
+                  <router-link to="/preferences" class="text-blue-600 dark:text-blue-400 hover:underline">
+                    your preferred languages</router-link>
+                  ({{ suggestedLinks.languages.join(', ') }}).
+                </p>
+              </div>
+              <div v-else class="flex flex-wrap gap-1.5 mt-2">
+                <a v-for="t in campaign.suggested_items" :key="t" target="_blank"
+                   :href="`https://www.wikidata.org/wiki/${t}`"
+                   class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">{{ t }}</a>
+              </div>
+            </template>
           </div>
         </div>
       </div>

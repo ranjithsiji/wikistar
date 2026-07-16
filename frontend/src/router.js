@@ -8,6 +8,7 @@ const routes = [
   { path: '/campaigns/:slug/edit', name: 'campaign-edit', component: () => import('./views/CampaignFormView.vue'), props: true },
   { path: '/admin', name: 'admin', component: () => import('./views/AdminView.vue') },
   { path: '/dashboard', name: 'dashboard', component: () => import('./views/DashboardView.vue') },
+  { path: '/preferences', name: 'preferences', component: () => import('./views/PreferencesView.vue') },
   { path: '/about', name: 'about', component: () => import('./views/AboutView.vue') }
 ]
 

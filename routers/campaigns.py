@@ -15,6 +15,7 @@ from collections import Counter
 from flask import Blueprint, request
 from sqlalchemy.orm import Session
 
+import mediawiki
 import settings_registry
 import wiki_rights
 from auth import (
@@ -257,6 +258,43 @@ def join_campaign(slug: str):
         db.commit()
         db.refresh(campaign)
     return respond(campaign_detail_out(db, campaign, user))
+
+
+@bp.get("/campaigns/<slug>/suggested-links")
+def suggested_links(slug: str):
+    """Suggested Wikidata items resolved to per-language wikilinks via
+    their sitelinks. Languages: ?languages=ml,ta — else the logged-in
+    user's preferred languages — else the campaign's language."""
+    db, user = get_db(), get_current_user()
+    campaign = get_campaign_or_404(db, slug)
+    raw = request.args.get("languages", "")
+    langs = [code for code in (s.strip().lower() for s in raw.split(",")) if code]
+    if not langs and user is not None:
+        langs = [code for code in (user.preferred_languages or "").split(",")
+                 if code]
+    if not langs:
+        langs = [campaign.language]
+    langs = langs[:10]
+    qids = [p.title for p in campaign.suggested_pages
+            if p.kind == SubmissionKind.wikidata_item]
+    try:
+        entities = mediawiki.fetch_sitelinks(qids, langs)
+    except Exception:
+        raise HTTPException(502, "Could not reach Wikidata for sitelinks")
+    items = []
+    for qid in qids:
+        entity = entities.get(qid) or {"label": None, "links": {}}
+        items.append({
+            "qid": qid,
+            "label": entity["label"],
+            "links": [
+                {"lang": lang, "title": entity["links"][lang],
+                 "url": (f"https://{lang}.wikipedia.org/wiki/"
+                         + entity["links"][lang].replace(" ", "_"))}
+                for lang in langs if lang in entity["links"]
+            ],
+        })
+    return respond({"languages": langs, "items": items})
 
 
 @bp.post("/campaigns/<slug>/members")

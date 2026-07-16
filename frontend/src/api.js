@@ -13,6 +13,10 @@ export default {
   loginUrl: '/api/login',
   logoutUrl: '/api/logout',
 
+  // preferences
+  getPreferences: () => http.get('/api/me/preferences'),
+  savePreferences: (data) => http.put('/api/me/preferences', data),
+
   // personal dashboard
   myParticipation: () => http.get('/api/me/participation'),
   myEvaluation: () => http.get('/api/me/evaluation'),
@@ -35,6 +39,8 @@ export default {
   addMember: (slug, data) => http.post(`/api/campaigns/${slug}/members`, data),
   removeMember: (slug, memberId) => http.delete(`/api/campaigns/${slug}/members/${memberId}`),
   leaderboard: (slug) => http.get(`/api/campaigns/${slug}/leaderboard`),
+  suggestedLinks: (slug, languages) => http.get(`/api/campaigns/${slug}/suggested-links`,
+    { params: languages ? { languages: languages.join(',') } : {} }),
   campaignStats: (slug) => http.get(`/api/campaigns/${slug}/stats`),
 
   // submissions

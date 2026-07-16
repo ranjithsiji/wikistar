@@ -74,6 +74,41 @@ def fetch_sysop_wikis(username: str) -> set[str]:
     return domains
 
 
+def fetch_sitelinks(qids: list[str], languages: list[str]) -> dict[str, dict]:
+    """Wikidata sitelinks + label for the given items, restricted to the
+    given wiki languages. Returns {qid: {"label": str|None,
+    "links": {lang: title}}}. Network errors raise httpx.HTTPError."""
+    result: dict[str, dict] = {}
+    if not qids:
+        return result
+    sites = [f"{lang.replace('-', '_')}wiki" for lang in languages]
+    with _client() as client:
+        for start in range(0, len(qids), 50):  # API limit: 50 ids per call
+            chunk = qids[start:start + 50]
+            data = client.get(api_url("www.wikidata.org"), params={
+                "action": "wbgetentities", "format": "json",
+                "ids": "|".join(chunk),
+                "props": "sitelinks|labels",
+                "sitefilter": "|".join(sites),
+                "languages": "|".join(languages) + "|en",
+            }).json()
+            for qid, entity in (data.get("entities") or {}).items():
+                if "missing" in entity:
+                    continue
+                labels = entity.get("labels") or {}
+                label = next((labels[lang]["value"] for lang in languages
+                              if lang in labels),
+                             labels.get("en", {}).get("value"))
+                links = {}
+                sitelinks = entity.get("sitelinks") or {}
+                for lang in languages:
+                    site = f"{lang.replace('-', '_')}wiki"
+                    if site in sitelinks:
+                        links[lang] = sitelinks[site]["title"]
+                result[qid] = {"label": label, "links": links}
+    return result
+
+
 def fetch_user_registration(domain: str, username: str) -> datetime | None:
     """Account registration timestamp on the given wiki, or None."""
     with _client() as client:

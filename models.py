@@ -113,6 +113,9 @@ class User(Base):
     # if the account is renamed.
     mw_global_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Comma-separated wiki language codes ("ml,ta,en"); suggested-list
+    # wikilinks are shown in these languages.
+    preferred_languages: Mapped[str] = mapped_column(String(255), default="")
     registered_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
 
