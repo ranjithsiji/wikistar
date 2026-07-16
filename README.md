@@ -54,6 +54,9 @@ npm run dev                                   # http://localhost:5173, proxies /
 
 # tests
 uv run pytest
+
+# drop the configured database and recreate the schema from scratch
+uv run python reset_db.py
 ```
 
 ## Deployment (Toolforge)
