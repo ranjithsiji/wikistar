@@ -65,7 +65,11 @@ webservice source directory; Flask serves the built frontend from
 ```bash
 become wikistar
 git clone https://gitlab.wikimedia.org/toolforge-repos/wikistar.git ~/www/python/src
-webservice python3.13 shell -- webservice-python-bootstrap   # venv from requirements.txt
+# create the venv with uv from pyproject.toml/uv.lock (inside the
+# webservice shell so it matches the runtime image)
+webservice python3.13 shell
+uv venv ~/www/python/venv && cd ~/www/python/src && VIRTUAL_ENV=~/www/python/venv uv sync --active --no-dev
+exit
 webservice python3.13 start
 ```
 
