@@ -407,7 +407,7 @@ function ruleLabel (id) {
           </li>
         </ul>
       </div>
-      <div class="card overflow-hidden" v-if="campaign.suggested_items.length">
+      <div class="card" v-if="campaign.suggested_items.length">
         <div class="flex flex-wrap items-center gap-3 px-4 pt-4">
           <h4 class="font-semibold text-sm flex-1">Suggested Wikidata items (bonus points)</h4>
           <form v-if="suggestedLinks && suggestedLinks.items" class="flex gap-2"

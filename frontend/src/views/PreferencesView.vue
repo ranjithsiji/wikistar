@@ -110,8 +110,8 @@ async function save () {
 
     <template v-else>
       <!-- preferred languages -->
-      <div class="card overflow-hidden">
-        <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
+      <div class="card">
+        <header class="px-4 py-3 rounded-t-xl border-b border-neutral-200 dark:border-neutral-800
                        bg-neutral-50 dark:bg-neutral-950/40">
           <h2 class="font-semibold text-sm">Preferred languages</h2>
           <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
@@ -146,8 +146,8 @@ async function save () {
       </div>
 
       <!-- home wikis -->
-      <div class="card overflow-hidden">
-        <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
+      <div class="card">
+        <header class="px-4 py-3 rounded-t-xl border-b border-neutral-200 dark:border-neutral-800
                        bg-neutral-50 dark:bg-neutral-950/40">
           <h2 class="font-semibold text-sm">Home wikis</h2>
           <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
@@ -178,8 +178,8 @@ async function save () {
       </div>
 
       <!-- theme (stored on this device) -->
-      <div class="card overflow-hidden">
-        <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
+      <div class="card">
+        <header class="px-4 py-3 rounded-t-xl border-b border-neutral-200 dark:border-neutral-800
                        bg-neutral-50 dark:bg-neutral-950/40">
           <h2 class="font-semibold text-sm">Theme</h2>
           <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
