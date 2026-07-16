@@ -76,14 +76,14 @@ const previewTotal = computed(() => {
             <label class="label !mb-0">Points</label>
             <input v-model.number="mark.value" type="number" step="any" class="input !w-24 text-right" />
           </template>
-          <span v-if="mark.type === 'int'" class="text-xs text-neutral-500">
+          <span v-if="mark.type === 'int'" class="text-xs text-neutral-600 dark:text-neutral-300">
             The juror enters a number; it is added to the total as-is.
           </span>
         </div>
 
         <div v-if="mark.type === 'radio'" class="space-y-2">
           <div v-for="(opt, oi) in mark.values" :key="oi" class="flex items-center gap-3">
-            <span class="w-14 text-xs text-neutral-500 text-right">option</span>
+            <span class="w-14 text-xs text-neutral-600 dark:text-neutral-300 text-right">option</span>
             <input v-model="opt.title" class="input !w-64" required placeholder="Label" />
             <label class="label !mb-0">Points</label>
             <input v-model.number="opt.value" type="number" step="any" class="input !w-24 text-right" />
@@ -105,7 +105,7 @@ const previewTotal = computed(() => {
 
     <div v-if="marks.length" class="card p-4">
       <h4 class="font-semibold text-sm mb-1">Preview</h4>
-      <p class="text-xs text-neutral-500 dark:text-neutral-400 mb-3">
+      <p class="text-xs text-neutral-600 dark:text-neutral-300 mb-3">
         This is what jurors will see. Try it — the total is computed the same
         way as on the review form.
       </p>

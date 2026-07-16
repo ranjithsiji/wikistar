@@ -62,7 +62,7 @@ async function save () {
   <div class="max-w-2xl">
     <h1 class="text-2xl font-bold mb-4">Preferences</h1>
 
-    <p v-if="auth.loaded && !auth.isLoggedIn" class="text-neutral-500 dark:text-neutral-400">
+    <p v-if="auth.loaded && !auth.isLoggedIn" class="text-neutral-600 dark:text-neutral-300">
       Please <a class="text-blue-600 dark:text-blue-400 hover:underline"
                 :href="api.loginUrl">log in</a> to edit your preferences.
     </p>
@@ -71,7 +71,7 @@ async function save () {
       <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
                      bg-neutral-50 dark:bg-neutral-950/40">
         <h2 class="font-semibold text-sm">Preferred languages</h2>
-        <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+        <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
           Suggested Wikidata items in campaigns show wikilinks in these
           languages, in this order. Use wiki language codes such as
           <code>ml</code>, <code>ta</code>, <code>hi</code>, <code>en</code>.
@@ -90,7 +90,7 @@ async function save () {
                     @click="remove(code)">✕</button>
           </span>
         </div>
-        <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
+        <p v-else class="text-sm text-neutral-600 dark:text-neutral-300">
           No languages yet — campaign pages will fall back to the campaign's own language.
         </p>
         <form class="flex gap-2" @submit.prevent="add">

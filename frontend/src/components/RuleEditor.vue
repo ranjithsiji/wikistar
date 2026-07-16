@@ -93,7 +93,7 @@ function removeElig (r, i) {
       <button v-if="defaultRules.length" type="button" class="btn"
               @click="loadPreset(defaultRules)">Load self-assessment preset</button>
     </div>
-    <p v-if="!rules.length" class="text-sm text-neutral-500">
+    <p v-if="!rules.length" class="text-sm text-neutral-600 dark:text-neutral-300">
       No scoring rules yet. Jury-mode campaigns can work without rules; the
       self-assessment mode needs them.
     </p>
@@ -162,7 +162,7 @@ function removeElig (r, i) {
           <input class="input !w-32 font-mono" placeholder="P17" pattern="P[0-9]+"
                  title="A Wikidata property, e.g. P17"
                  :value="pair.p" @input="e => setElig(r, pi, 'p', e.target.value)" />
-          <span class="text-neutral-400">=</span>
+          <span class="text-neutral-500 dark:text-neutral-400">=</span>
           <input class="input !w-32 font-mono" placeholder="Q668" pattern="Q[0-9]+"
                  title="A Wikidata item, e.g. Q668"
                  :value="pair.q" @input="e => setElig(r, pi, 'q', e.target.value)" />

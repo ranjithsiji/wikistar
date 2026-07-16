@@ -1,7 +1,7 @@
 <template>
   <footer class="border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 mt-12">
     <div class="max-w-6xl mx-auto px-4 py-5 flex flex-wrap items-center gap-x-5 gap-y-2
-                text-sm text-neutral-500 dark:text-neutral-400">
+                text-sm text-neutral-600 dark:text-neutral-300">
       <span class="font-semibold text-neutral-700 dark:text-neutral-300">
         Wiki<span class="text-blue-600 dark:text-blue-400">STAR</span>
       </span>

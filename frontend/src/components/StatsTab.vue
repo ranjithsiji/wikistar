@@ -33,13 +33,13 @@ const maxPoints = computed(() =>
 
 <template>
   <p v-if="error" class="text-red-600 dark:text-red-400 text-sm">{{ error }}</p>
-  <div v-else-if="!stats" class="text-neutral-500">Loading…</div>
+  <div v-else-if="!stats" class="text-neutral-600 dark:text-neutral-300">Loading…</div>
   <div v-else class="space-y-6">
     <!-- stat tiles -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <div v-for="t in tiles" :key="t.label" class="card p-4">
         <div class="text-2xl font-bold tabular-nums">{{ t.value }}</div>
-        <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{{ t.label }}</div>
+        <div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">{{ t.label }}</div>
       </div>
     </div>
 
@@ -50,11 +50,11 @@ const maxPoints = computed(() =>
         <div v-for="d in stats.timeline" :key="d.date"
              class="flex flex-col items-center gap-1 min-w-8"
              :title="`${d.date}: ${d.submissions} submissions`">
-          <span class="text-xs tabular-nums text-neutral-500">{{ d.submissions }}</span>
+          <span class="text-xs tabular-nums text-neutral-600 dark:text-neutral-300">{{ d.submissions }}</span>
           <div class="w-5 rounded-t"
                :style="{ height: `${(d.submissions / maxTimeline) * 100}px`,
                          background: 'var(--viz-series)' }"></div>
-          <span class="text-[10px] text-neutral-500 whitespace-nowrap">{{ d.date.slice(5) }}</span>
+          <span class="text-[10px] text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ d.date.slice(5) }}</span>
         </div>
       </div>
     </div>

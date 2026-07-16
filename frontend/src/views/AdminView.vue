@@ -161,22 +161,22 @@ async function refreshCampaigns () {
     <!-- =========================== Dashboard =========================== -->
     <div v-if="tab === 'dashboard'">
       <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.users }}</div><div class="text-xs text-neutral-500 mt-1">Users</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.campaigns }}</div><div class="text-xs text-neutral-500 mt-1">Editathons</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.pending_campaigns }}</div><div class="text-xs text-neutral-500 mt-1">Pending approval</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.submissions }}</div><div class="text-xs text-neutral-500 mt-1">Submissions</div></div>
+        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.users }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Users</div></div>
+        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Editathons</div></div>
+        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.pending_campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Pending approval</div></div>
+        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.submissions }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Submissions</div></div>
       </div>
 
       <h2 class="font-semibold mb-2">Editathons awaiting approval</h2>
-      <p v-if="!pendingCampaigns.length" class="text-sm text-neutral-500 dark:text-neutral-400">
+      <p v-if="!pendingCampaigns.length" class="text-sm text-neutral-600 dark:text-neutral-300">
         Nothing waiting for approval.
       </p>
       <div v-for="c in pendingCampaigns" :key="c.id" class="card p-3 mb-2 flex items-center gap-3 flex-wrap">
         <router-link :to="`/campaigns/${c.slug}`" class="font-medium text-blue-700 dark:text-blue-400 hover:underline flex-1 min-w-40">
           {{ c.name }}
         </router-link>
-        <span class="text-xs text-neutral-500">by {{ c.created_by_username || '—' }}</span>
-        <span class="text-xs text-neutral-500">{{ c.start_date }} → {{ c.end_date }}</span>
+        <span class="text-xs text-neutral-600 dark:text-neutral-300">by {{ c.created_by_username || '—' }}</span>
+        <span class="text-xs text-neutral-600 dark:text-neutral-300">{{ c.start_date }} → {{ c.end_date }}</span>
         <button class="btn" :disabled="busy" @click="reject(c)">Reject</button>
         <button class="btn-primary" :disabled="busy" @click="approve(c)">Approve</button>
       </div>
@@ -194,9 +194,9 @@ async function refreshCampaigns () {
             {{ c.name }}
           </router-link>
           <span class="badge" :class="STATUS_BADGE[c.status]">{{ c.status }}</span>
-          <span class="text-xs text-neutral-500 whitespace-nowrap">by {{ c.created_by_username || '—' }}</span>
-          <span class="text-xs text-neutral-500 whitespace-nowrap">{{ c.start_date }} → {{ c.end_date }}</span>
-          <span class="text-xs text-neutral-500 whitespace-nowrap tabular-nums"
+          <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">by {{ c.created_by_username || '—' }}</span>
+          <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ c.start_date }} → {{ c.end_date }}</span>
+          <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap tabular-nums"
                 :title="`${c.submission_count} submissions / ${c.participant_count} participants`">
             {{ c.submission_count }} subs · {{ c.participant_count }} users
           </span>
@@ -217,7 +217,7 @@ async function refreshCampaigns () {
 
           <!-- members panel -->
           <div v-if="panel === 'members'">
-            <p v-if="!detail" class="text-sm text-neutral-500">Loading…</p>
+            <p v-if="!detail" class="text-sm text-neutral-600 dark:text-neutral-300">Loading…</p>
             <template v-else>
               <table class="w-full max-w-2xl mb-3">
                 <tbody>
@@ -249,8 +249,8 @@ async function refreshCampaigns () {
 
           <!-- articles panel -->
           <div v-if="panel === 'articles'">
-            <p v-if="!articles" class="text-sm text-neutral-500">Loading…</p>
-            <p v-else-if="!articles.length" class="text-sm text-neutral-500">No submissions yet.</p>
+            <p v-if="!articles" class="text-sm text-neutral-600 dark:text-neutral-300">Loading…</p>
+            <p v-else-if="!articles.length" class="text-sm text-neutral-600 dark:text-neutral-300">No submissions yet.</p>
             <div v-else class="overflow-x-auto">
               <table class="w-full">
                 <thead>
@@ -267,10 +267,10 @@ async function refreshCampaigns () {
                          class="text-blue-700 dark:text-blue-400 hover:underline">{{ s.title }}</a>
                     </td>
                     <td class="td">{{ s.user.username }}</td>
-                    <td class="td text-xs text-neutral-500">{{ s.kind }}</td>
+                    <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ s.kind }}</td>
                     <td class="td text-xs">{{ s.status }}</td>
                     <td class="td text-right tabular-nums">{{ s.points }}</td>
-                    <td class="td text-xs text-neutral-500 whitespace-nowrap">
+                    <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">
                       {{ new Date(s.submitted_at).toLocaleDateString() }}
                     </td>
                   </tr>
@@ -297,8 +297,8 @@ async function refreshCampaigns () {
             <tr v-for="u in filteredUsers" :key="u.id"
                 class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
               <td class="td">{{ u.username }}</td>
-              <td class="td text-xs text-neutral-500">{{ new Date(u.registered_at).toLocaleDateString() }}</td>
-              <td class="td text-xs text-neutral-500">{{ u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—' }}</td>
+              <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ new Date(u.registered_at).toLocaleDateString() }}</td>
+              <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—' }}</td>
               <td class="td">
                 <button class="btn !py-0.5 !px-2 text-xs" :disabled="u.id === auth.user?.id"
                         @click="toggleAdmin(u)">
@@ -323,10 +323,10 @@ async function refreshCampaigns () {
           <tbody>
             <tr v-for="l in logs.logs" :key="l.id"
                 class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-              <td class="td text-xs text-neutral-500 whitespace-nowrap">{{ new Date(l.created_at).toLocaleString() }}</td>
+              <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ new Date(l.created_at).toLocaleString() }}</td>
               <td class="td">{{ l.username }}</td>
               <td class="td">{{ l.action }}</td>
-              <td class="td text-xs text-neutral-500">{{ l.entity_type }} {{ l.details?.title || l.details?.username || l.details?.slug || l.entity_id || '' }}</td>
+              <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ l.entity_type }} {{ l.details?.title || l.details?.username || l.details?.slug || l.entity_id || '' }}</td>
             </tr>
           </tbody>
         </table>

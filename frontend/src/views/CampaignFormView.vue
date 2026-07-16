@@ -160,7 +160,7 @@ async function save () {
     <!-- ================= step 0: what kind of campaign? ================= -->
     <div v-if="!modeChosen" class="max-w-3xl mx-auto">
       <h1 class="text-2xl font-bold mb-1">Create a campaign</h1>
-      <p class="text-sm text-neutral-500 dark:text-neutral-400 mb-6">
+      <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-6">
         First, the most important choice — how are contributions scored?
         This defines the whole setup of your campaign.
       </p>
@@ -219,7 +219,7 @@ async function save () {
           change type
         </button>
       </div>
-      <p v-if="!slug" class="text-sm text-neutral-500 dark:text-neutral-400 mb-4">
+      <p v-if="!slug" class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
         New campaigns start as drafts. They go live immediately if you hold
         admin (sysop) rights on the target wiki (jury) or on any Wikipedia
         project (self-assessment); otherwise a wiki admin must approve.
@@ -243,7 +243,7 @@ async function save () {
             <label class="label">URL slug</label>
             <input v-model="form.slug" class="input" pattern="[a-z0-9][a-z0-9_-]*"
                    placeholder="auto-generated from name" />
-            <p class="text-xs text-neutral-400 mt-1">
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
               wikistar.toolforge.org/campaigns/{{ form.slug || '…' }}
             </p>
           </div>
@@ -260,7 +260,7 @@ async function save () {
           <div>
             <label class="label">Wiki language {{ !isJuryFlow && form.settings.multi_language ? '(default)' : '' }}</label>
             <LanguageSelect v-model="form.language" />
-            <p v-if="!isJuryFlow" class="text-xs text-neutral-400 mt-1">
+            <p v-if="!isJuryFlow" class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
               Multi-language submissions can be enabled under Settings →
               Participation.
             </p>
@@ -269,7 +269,7 @@ async function save () {
             <label class="label">Wiki domain</label>
             <input v-model="form.wiki_domain" class="input"
                    :placeholder="`${form.language || 'en'}.wikipedia.org`" />
-            <p class="text-xs text-neutral-400 mt-1">
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
               Leave empty for {{ form.language || 'en' }}.wikipedia.org.
             </p>
           </div>
@@ -301,7 +301,7 @@ async function save () {
             <div class="card p-4">
               <label class="label">Jury members</label>
               <UserPicker v-model="juryUsers" :wiki="juryWiki" />
-              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
+              <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-3">
                 Start typing to search Wikimedia accounts, then press Enter or
                 Add. Jurors review submissions with the marks form from the
                 Marks tab; they can be managed later from the campaign page.
@@ -310,7 +310,7 @@ async function save () {
             <div class="card p-4">
               <label class="label">Coordinators</label>
               <UserPicker v-model="coordinatorUsers" :wiki="juryWiki" />
-              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
+              <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-3">
                 Coordinators (organizers) manage the campaign, moderate
                 submissions and have the final say. The campaign creator is
                 always a coordinator.
@@ -344,7 +344,7 @@ async function save () {
             <div class="card p-4">
               <label class="label">Suggested articles (one title per line)</label>
               <textarea v-model="suggestedArticlesText" class="input font-mono" rows="10"></textarea>
-              <p class="text-xs text-neutral-500 mt-2">Submitting one earns the "suggested list" bonus rule.</p>
+              <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-2">Submitting one earns the "suggested list" bonus rule.</p>
             </div>
             <div class="card p-4">
               <label class="label">Suggested Wikidata items (one QID per line)</label>
@@ -356,7 +356,7 @@ async function save () {
             <div class="card p-4">
               <label class="label">Coordinators</label>
               <UserPicker v-model="coordinatorUsers" :wiki="juryWiki" />
-              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
+              <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-3">
                 Coordinators (organizers) verify the participants' claims,
                 moderate submissions and announce the winners. The campaign
                 creator is always a coordinator.
@@ -366,7 +366,7 @@ async function save () {
               <div class="flex items-center gap-4">
                 <div class="flex-1">
                   <div class="text-sm font-medium">Dedicated verification jury</div>
-                  <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                  <div class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
                     Off: campaign organizers verify the participants' claims.
                     On (hybrid): a jury you name below verifies claims alongside
                     the organizers.
@@ -400,5 +400,5 @@ async function save () {
     </template>
   </div>
   <p v-else-if="error" class="text-red-600 dark:text-red-400">{{ error }}</p>
-  <p v-else class="text-neutral-500">Loading…</p>
+  <p v-else class="text-neutral-600 dark:text-neutral-300">Loading…</p>
 </template>

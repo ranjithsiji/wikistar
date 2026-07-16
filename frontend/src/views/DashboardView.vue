@@ -58,7 +58,7 @@ const STATUS_BADGE = {
   <div>
     <h1 class="text-2xl font-bold tracking-tight mb-4">Dashboard</h1>
 
-    <p v-if="auth.loaded && !auth.isLoggedIn" class="text-neutral-500 dark:text-neutral-400">
+    <p v-if="auth.loaded && !auth.isLoggedIn" class="text-neutral-600 dark:text-neutral-300">
       Please <a class="text-blue-600 dark:text-blue-400 hover:underline"
                 :href="api.loginUrl">log in</a> to see your dashboard.
     </p>
@@ -72,10 +72,10 @@ const STATUS_BADGE = {
       </div>
 
       <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
-      <p v-else-if="loading" class="text-sm text-neutral-500 dark:text-neutral-400">Loading…</p>
+      <p v-else-if="loading" class="text-sm text-neutral-600 dark:text-neutral-300">Loading…</p>
 
       <template v-else-if="current">
-        <p v-if="!current.length" class="text-sm text-neutral-500 dark:text-neutral-400">
+        <p v-if="!current.length" class="text-sm text-neutral-600 dark:text-neutral-300">
           {{ {
             participation: 'You have not submitted to any campaign yet.',
             evaluation: 'You are not on the jury of any campaign.',
@@ -92,9 +92,9 @@ const STATUS_BADGE = {
                            class="font-semibold text-blue-700 dark:text-blue-400 hover:underline">
                 {{ c.name }}
               </router-link>
-              <span class="text-xs text-neutral-500 dark:text-neutral-400">{{ relativeEnd(c) }}</span>
+              <span class="text-xs text-neutral-600 dark:text-neutral-300">{{ relativeEnd(c) }}</span>
             </div>
-            <p v-if="c.hidden_marks" class="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+            <p v-if="c.hidden_marks" class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
               Marks are hidden in this campaign.
             </p>
             <table v-else-if="c.rows.length" class="mt-3 w-full max-w-md text-sm">
@@ -107,7 +107,7 @@ const STATUS_BADGE = {
                 </tr>
               </tbody>
             </table>
-            <p v-else class="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+            <p v-else class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
               No points counted yet.
             </p>
           </div>
@@ -120,7 +120,7 @@ const STATUS_BADGE = {
                               dark:hover:border-neutral-700">
             <div class="flex-1 min-w-0">
               <div class="font-semibold truncate">{{ c.name }}</div>
-              <div class="text-xs text-neutral-500 dark:text-neutral-400">{{ relativeEnd(c) }}</div>
+              <div class="text-xs text-neutral-600 dark:text-neutral-300">{{ relativeEnd(c) }}</div>
             </div>
             <span class="badge tabular-nums"
                   :class="c.missing
@@ -139,7 +139,7 @@ const STATUS_BADGE = {
                               dark:hover:border-neutral-700">
             <div class="flex-1 min-w-0">
               <div class="font-semibold truncate">{{ c.name }}</div>
-              <div class="text-xs text-neutral-500 dark:text-neutral-400">{{ relativeEnd(c) }}</div>
+              <div class="text-xs text-neutral-600 dark:text-neutral-300">{{ relativeEnd(c) }}</div>
             </div>
             <span class="badge" :class="STATUS_BADGE[c.status]">{{ c.status }}</span>
           </router-link>

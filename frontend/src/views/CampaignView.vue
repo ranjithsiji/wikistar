@@ -156,7 +156,7 @@ function ruleLabel (id) {
 
 <template>
   <p v-if="!campaign && error" class="text-red-600 dark:text-red-400">{{ error }}</p>
-  <p v-else-if="!campaign" class="text-neutral-500">Loading…</p>
+  <p v-else-if="!campaign" class="text-neutral-600 dark:text-neutral-300">Loading…</p>
   <div v-else>
     <!-- header -->
     <div class="flex flex-wrap items-start gap-3 mb-1">
@@ -176,7 +176,7 @@ function ruleLabel (id) {
                 class="btn-danger" @click="remove">Delete</button>
       </div>
     </div>
-    <p class="text-sm text-neutral-500 dark:text-neutral-400 mb-4">
+    <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
       {{ campaign.start_date }} → {{ campaign.end_date }} · {{ campaign.wiki_domain }}
       · {{ campaign.submission_count }} submissions · {{ campaign.participant_count }} participants
     </p>
@@ -200,7 +200,7 @@ function ruleLabel (id) {
       <div class="grid md:grid-cols-2 gap-4">
         <div class="card p-4">
           <h4 class="font-semibold text-sm mb-2">Scoring rules</h4>
-          <p v-if="!campaign.rules.length" class="text-sm text-neutral-500">
+          <p v-if="!campaign.rules.length" class="text-sm text-neutral-600 dark:text-neutral-300">
             Points are given by the jury.
           </p>
           <table v-else class="w-full">
@@ -208,7 +208,7 @@ function ruleLabel (id) {
               <tr v-for="r in campaign.rules" :key="r.id"
                   class="border-t border-neutral-100 dark:border-neutral-800 first:border-0">
                 <td class="td pl-0">{{ r.label }}</td>
-                <td class="td text-xs text-neutral-500">{{ r.applies_to.replace('_', ' ') }}</td>
+                <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ r.applies_to.replace('_', ' ') }}</td>
                 <td class="td pr-0 text-right tabular-nums">
                   <template v-if="r.rule_type === 'per_unit'">{{ r.points }} / {{ r.unit_size }}</template>
                   <template v-else-if="['flat_bonus', 'suggested_list'].includes(r.rule_type)">+{{ r.points }}</template>
@@ -249,11 +249,11 @@ function ruleLabel (id) {
                   <a v-for="link in item.links" :key="link.lang" :href="link.url" target="_blank"
                      class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300 hover:underline"
                      :title="link.title">{{ link.lang }}</a>
-                  <span v-if="!item.links.length" class="text-xs text-neutral-400">
+                  <span v-if="!item.links.length" class="text-xs text-neutral-500 dark:text-neutral-400">
                     no article in your languages yet — write one!
                   </span>
                 </div>
-                <p class="text-xs text-neutral-400 mt-1">
+                <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
                   Wikilinks are shown in
                   <router-link to="/preferences" class="text-blue-600 dark:text-blue-400 hover:underline">
                     your preferred languages</router-link>
@@ -296,7 +296,7 @@ function ruleLabel (id) {
           <button class="btn-primary" type="submit">Submit contribution</button>
         </form>
       </div>
-      <p v-else-if="!auth.isLoggedIn" class="text-sm text-neutral-500 mb-4">
+      <p v-else-if="!auth.isLoggedIn" class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
         <a class="text-blue-600 dark:text-blue-400 hover:underline" :href="api.loginUrl">Log in</a>
         to submit your contribution.
       </p>
@@ -305,14 +305,14 @@ function ruleLabel (id) {
         <input type="checkbox" v-model="onlyMine" /> Show only my submissions
       </label>
 
-      <p v-if="!shownSubmissions.length" class="text-neutral-500">No submissions yet.</p>
+      <p v-if="!shownSubmissions.length" class="text-neutral-600 dark:text-neutral-300">No submissions yet.</p>
       <div v-for="s in shownSubmissions" :key="s.id" class="card mb-2">
         <div class="p-3 flex flex-wrap items-center gap-3 cursor-pointer"
              @click="expanded = expanded === s.id ? null : s.id">
           <div class="flex-1 min-w-40">
             <a :href="s.url" target="_blank" class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
                @click.stop>{{ s.title }}</a>
-            <div class="text-xs text-neutral-500 mt-0.5">
+            <div class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
               by {{ s.user.username }} · {{ new Date(s.submitted_at).toLocaleDateString() }}
               <template v-if="campaign.settings.multi_language && s.kind === 'article'">
                 · {{ s.wiki_domain.split('.')[0] }}
@@ -326,7 +326,7 @@ function ruleLabel (id) {
           <span v-if="s.status !== 'submitted'" class="badge" :class="statusStyles[s.status === 'accepted' ? 'active' : 'rejected']">
             {{ s.status }}
           </span>
-          <span class="font-bold tabular-nums text-lg">{{ s.points }}<span class="text-xs font-normal text-neutral-500"> pts</span></span>
+          <span class="font-bold tabular-nums text-lg">{{ s.points }}<span class="text-xs font-normal text-neutral-600 dark:text-neutral-300"> pts</span></span>
         </div>
 
         <div v-if="expanded === s.id" class="border-t border-neutral-100 dark:border-neutral-800 p-3 space-y-4">
@@ -338,7 +338,7 @@ function ruleLabel (id) {
                 <tr v-for="(line, i) in s.breakdown" :key="i"
                     class="border-t border-neutral-100 dark:border-neutral-800 first:border-0">
                   <td class="td pl-0">{{ line.label }}</td>
-                  <td class="td text-xs text-neutral-500">{{ line.source }}<template v-if="line.status"> · {{ line.status }}</template></td>
+                  <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ line.source }}<template v-if="line.status"> · {{ line.status }}</template></td>
                   <td class="td pr-0 text-right tabular-nums">{{ line.points }}</td>
                 </tr>
               </tbody>
@@ -352,7 +352,7 @@ function ruleLabel (id) {
               <b>{{ r.reviewer.username }}</b>
               <span class="badge" :class="claimStatusStyles[r.decision === 'accept' ? 'verified' : r.decision === 'reject' ? 'rejected' : 'claimed']">{{ r.decision }}</span>
               <span class="tabular-nums">{{ r.total }} pts</span>
-              <span class="text-neutral-500">{{ r.comment }}</span>
+              <span class="text-neutral-600 dark:text-neutral-300">{{ r.comment }}</span>
             </div>
           </div>
 
@@ -404,7 +404,7 @@ function ruleLabel (id) {
 
     <!-- LEADERBOARD -->
     <div v-if="tab === 'leaderboard'">
-      <p v-if="!leaderboard.length" class="text-neutral-500">No points yet.</p>
+      <p v-if="!leaderboard.length" class="text-neutral-600 dark:text-neutral-300">No points yet.</p>
       <div v-else class="card overflow-x-auto">
         <table class="w-full">
           <thead>

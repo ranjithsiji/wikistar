@@ -54,7 +54,7 @@ function save () {
 
 <template>
   <form class="space-y-2" @submit.prevent="save">
-    <p v-if="!claimable.length" class="text-sm text-neutral-500">
+    <p v-if="!claimable.length" class="text-sm text-neutral-600 dark:text-neutral-300">
       This campaign has no claimable rules for this submission type.
     </p>
     <div v-for="rule in claimable" :key="rule.id"
@@ -62,10 +62,10 @@ function save () {
       <label class="sm:col-span-4 flex items-center gap-2">
         <input type="checkbox" v-model="state[rule.id].checked" />
         {{ rule.label }}
-        <span class="text-neutral-500 text-xs" v-if="rule.rule_type === 'per_unit'">
+        <span class="text-neutral-600 dark:text-neutral-300 text-xs" v-if="rule.rule_type === 'per_unit'">
           ({{ rule.points }} pts / {{ rule.unit_size }})
         </span>
-        <span class="text-neutral-500 text-xs" v-else>(+{{ rule.points }} pts)</span>
+        <span class="text-neutral-600 dark:text-neutral-300 text-xs" v-else>(+{{ rule.points }} pts)</span>
       </label>
       <div class="sm:col-span-2">
         <input v-if="rule.rule_type === 'per_unit'" type="number" min="0"

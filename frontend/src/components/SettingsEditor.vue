@@ -56,14 +56,14 @@ const groups = computed(() => {
       <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
                      bg-neutral-50 dark:bg-neutral-950/40">
         <h4 class="font-semibold text-sm">{{ g.label }}</h4>
-        <p v-if="g.desc" class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{{ g.desc }}</p>
+        <p v-if="g.desc" class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">{{ g.desc }}</p>
       </header>
       <div class="divide-y divide-neutral-100 dark:divide-neutral-800">
         <div v-for="item in g.items" :key="item.key"
              class="px-4 py-3 flex items-center gap-4">
           <div class="flex-1 min-w-0">
             <div class="text-sm font-medium">{{ item.label }}</div>
-            <div v-if="item.help" class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+            <div v-if="item.help" class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
               {{ item.help }}
             </div>
           </div>

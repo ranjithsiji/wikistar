@@ -18,10 +18,10 @@ const modeLabels = { jury: 'Jury scoring', self: 'Self-assessment', hybrid: 'Hyb
       <h3 class="font-semibold">{{ campaign.name }}</h3>
       <span class="badge shrink-0" :class="statusStyles[campaign.status]">{{ campaign.status }}</span>
     </div>
-    <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
+    <p class="text-sm text-neutral-600 dark:text-neutral-300 mt-1 line-clamp-2">
       {{ campaign.description || 'No description' }}
     </p>
-    <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
+    <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-600 dark:text-neutral-300">
       <span>{{ campaign.start_date }} → {{ campaign.end_date }}</span>
       <span>{{ campaign.wiki_domain }}</span>
       <span>{{ modeLabels[campaign.scoring_mode] }}</span>

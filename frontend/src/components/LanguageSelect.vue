@@ -98,7 +98,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
            @keydown="onKeydown" />
     <div v-if="open" ref="listEl"
          class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto card shadow-lg py-1">
-      <p v-if="!filtered.length" class="px-3 py-1.5 text-sm text-neutral-500">
+      <p v-if="!filtered.length" class="px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-300">
         No language matches "{{ query }}"
       </p>
       <button v-for="(l, i) in filtered" :key="l.code" type="button"

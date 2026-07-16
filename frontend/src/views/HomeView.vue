@@ -35,8 +35,8 @@ onMounted(async () => {
       </div>
     </div>
     <p v-if="error" class="text-red-600 dark:text-red-400 text-sm mb-3">{{ error }}</p>
-    <p v-if="loading" class="text-neutral-500">Loading…</p>
-    <p v-else-if="!shown.length" class="text-neutral-500">No campaigns yet.</p>
+    <p v-if="loading" class="text-neutral-600 dark:text-neutral-300">Loading…</p>
+    <p v-else-if="!shown.length" class="text-neutral-600 dark:text-neutral-300">No campaigns yet.</p>
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <CampaignCard v-for="c in shown" :key="c.id" :campaign="c" />
     </div>
