@@ -22,6 +22,14 @@ if not _url:
     _url = "mysql+pymysql://root@localhost/wikistar"
 
 _server, _, _db_name = _url.rpartition("/")
+
+# Tests are a development tool: refuse to run against production
+# (ToolsDB) so a stray `pytest` on the server can never touch it.
+if "tools.db.svc.wikimedia.cloud" in _server:
+    raise SystemExit(
+        "Refusing to run tests against ToolsDB (production). "
+        "Run the test suite on a development machine with a local MariaDB.")
+
 TEST_DB_NAME = f"{_db_name}_test"
 os.environ["DATABASE_URL"] = f"{_server}/{TEST_DB_NAME}"
 
