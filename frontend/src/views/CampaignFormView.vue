@@ -7,6 +7,7 @@ import MarksEditor from '../components/MarksEditor.vue'
 import RuleEditor from '../components/RuleEditor.vue'
 import SettingsEditor from '../components/SettingsEditor.vue'
 import ToggleSwitch from '../components/ToggleSwitch.vue'
+import UserPicker from '../components/UserPicker.vue'
 
 const props = defineProps({ slug: { type: String, default: null } })
 const router = useRouter()
@@ -27,9 +28,12 @@ const form = reactive({
   settings: {}, rules: [], jury_usernames: [],
   suggested_articles: [], suggested_items: []
 })
-const juryText = ref('')
+const juryUsers = ref([])
 const suggestedArticlesText = ref('')
 const suggestedItemsText = ref('')
+
+const juryWiki = computed(() =>
+  form.wiki_domain || `${form.language || 'en'}.wikipedia.org`)
 
 const isJuryFlow = computed(() => form.scoring_mode === 'jury')
 const isHybrid = computed({
@@ -100,8 +104,8 @@ onMounted(async () => {
         suggested_articles: c.suggested_articles,
         suggested_items: c.suggested_items
       })
-      juryText.value = c.members.filter(m => m.role === 'jury')
-        .map(m => m.user.username).join('\n')
+      juryUsers.value = c.members.filter(m => m.role === 'jury')
+        .map(m => m.user.username)
       suggestedArticlesText.value = c.suggested_articles.join('\n')
       suggestedItemsText.value = c.suggested_items.join('\n')
     }
@@ -121,7 +125,7 @@ async function save () {
     ...form,
     slug: form.slug || null,
     wiki_domain: form.wiki_domain || null,
-    jury_usernames: splitLines(juryText.value),
+    jury_usernames: [...juryUsers.value],
     suggested_articles: splitLines(suggestedArticlesText.value),
     suggested_items: splitLines(suggestedItemsText.value)
   }
@@ -289,13 +293,13 @@ async function save () {
                             :categories="['jury']" />
           </div>
 
-          <div v-show="section === 'jury'" class="card p-4 max-w-xl">
-            <label class="label">Jury members (one Wikimedia username per line)</label>
-            <textarea v-model="juryText" class="input font-mono" rows="8"></textarea>
-            <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
-              Jurors review submissions with the marks form from the Marks
-              tab. They are added to the campaign automatically and can be
-              managed later from the campaign page.
+          <div v-show="section === 'jury'" class="card p-4 max-w-2xl">
+            <label class="label">Jury members</label>
+            <UserPicker v-model="juryUsers" :wiki="juryWiki" />
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
+              Start typing to search Wikimedia accounts, then press Enter or
+              Add. Jurors review submissions with the marks form from the
+              Marks tab; they can be managed later from the campaign page.
             </p>
           </div>
 
@@ -347,8 +351,8 @@ async function save () {
                 <ToggleSwitch v-model="isHybrid" />
               </div>
               <div v-if="isHybrid" class="mt-4">
-                <label class="label">Verifying jury (one Wikimedia username per line)</label>
-                <textarea v-model="juryText" class="input font-mono" rows="6"></textarea>
+                <label class="label">Verifying jury</label>
+                <UserPicker v-model="juryUsers" :wiki="juryWiki" />
               </div>
             </div>
             <SettingsEditor v-model="form.settings" :registry="meta.settings_registry"
