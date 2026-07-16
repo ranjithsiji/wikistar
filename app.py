@@ -34,6 +34,9 @@ for module in (auth_routes, campaigns, submissions, reviews, claims, admin):
 
 # Dev convenience; production schema changes go through Alembic.
 Base.metadata.create_all(bind=engine)
+# uwsgi imports the app in the master and then forks workers: drop the
+# connection the line above pooled, so workers never share one socket.
+engine.dispose()
 
 
 @app.teardown_appcontext

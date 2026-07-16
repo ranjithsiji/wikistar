@@ -9,7 +9,9 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+# pool_recycle stays under ToolsDB's idle-connection kill window.
+engine = create_engine(settings.database_url, pool_pre_ping=True,
+                       pool_recycle=280)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 # Request-scoped session; app.py removes it after every request.
