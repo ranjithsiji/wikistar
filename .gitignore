@@ -52,3 +52,5 @@ wheels/
 .env.venv/
 venv/
 uwsgi.log
+.env
+config.toml
