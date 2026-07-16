@@ -243,6 +243,26 @@ def refresh_metadata(submission_id: int):
     return respond(submission_out(campaign, sub))
 
 
+@bp.post("/submissions/<int:submission_id>/recalculate")
+def recalculate_points(submission_id: int):
+    """Coordinator's forced recalculation: refetch the wiki metadata and
+    score the submission from the campaign rules again, dropping any
+    manual points override so the computed total takes effect."""
+    db, user = get_db(), require_user()
+    sub = _get_submission_or_404(db, submission_id)
+    campaign = sub.campaign
+    require_organizer(db, campaign, user)
+    _fetch_metadata(sub, campaign, sub.user.username)
+    had_override = sub.points_override is not None
+    sub.points_override = None
+    audit(db, user, "recalculate", "submission", sub.id,
+          {"campaign": campaign.slug, "title": sub.title,
+           "cleared_override": had_override})
+    db.commit()
+    db.refresh(sub)
+    return respond(submission_out(campaign, sub))
+
+
 @bp.post("/submissions/<int:submission_id>/moderate")
 def moderate_submission(submission_id: int):
     """Organizer final say: accept/reject and points override."""

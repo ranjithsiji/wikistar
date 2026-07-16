@@ -77,7 +77,8 @@ def fetch_sysop_wikis(username: str) -> set[str]:
 def fetch_sitelinks(qids: list[str], languages: list[str]) -> dict[str, dict]:
     """Wikidata sitelinks + label for the given items, restricted to the
     given wiki languages. Returns {qid: {"label": str|None,
-    "links": {lang: title}}}. Network errors raise httpx.HTTPError."""
+    "label_en": str|None, "links": {lang: title}}}. Network errors raise
+    httpx.HTTPError."""
     result: dict[str, dict] = {}
     if not qids:
         return result
@@ -90,22 +91,24 @@ def fetch_sitelinks(qids: list[str], languages: list[str]) -> dict[str, dict]:
                 "ids": "|".join(chunk),
                 "props": "sitelinks|labels",
                 "sitefilter": "|".join(sites),
-                "languages": "|".join(languages) + "|en",
+                # "mul" holds Wikidata's default-for-all-languages label.
+                "languages": "|".join(languages) + "|en|mul",
             }).json()
             for qid, entity in (data.get("entities") or {}).items():
                 if "missing" in entity:
                     continue
                 labels = entity.get("labels") or {}
+                label_en = (labels.get("en") or labels.get("mul") or {}).get("value")
                 label = next((labels[lang]["value"] for lang in languages
-                              if lang in labels),
-                             labels.get("en", {}).get("value"))
+                              if lang in labels), label_en)
                 links = {}
                 sitelinks = entity.get("sitelinks") or {}
                 for lang in languages:
                     site = f"{lang.replace('-', '_')}wiki"
                     if site in sitelinks:
                         links[lang] = sitelinks[site]["title"]
-                result[qid] = {"label": label, "links": links}
+                result[qid] = {"label": label, "label_en": label_en,
+                               "links": links}
     return result
 
 

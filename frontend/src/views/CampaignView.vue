@@ -8,6 +8,8 @@ import LanguageSelect from '../components/LanguageSelect.vue'
 import ParticipantDetails from '../components/ParticipantDetails.vue'
 import ReviewForm from '../components/ReviewForm.vue'
 import StatsTab from '../components/StatsTab.vue'
+import TitleAutocomplete from '../components/TitleAutocomplete.vue'
+import UserSelect from '../components/UserSelect.vue'
 
 const props = defineProps({ slug: { type: String, required: true } })
 const router = useRouter()
@@ -54,6 +56,20 @@ const logoPageUrl = computed(() => {
   return file ? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file)}` : ''
 })
 
+// Wiki the title autocomplete searches, following project + type.
+const submitWiki = computed(() => {
+  if (newKind.value === 'wikidata_item') return 'www.wikidata.org'
+  if (newKind.value === 'commons_file') return 'commons.wikimedia.org'
+  if (campaign.value?.settings?.multi_language) {
+    return `${newLanguage.value || campaign.value.language}.wikipedia.org`
+  }
+  return campaign.value?.wiki_domain
+})
+const participantNames = computed(() =>
+  [...new Set((campaign.value?.members || [])
+    .filter(m => m.role === 'participant')
+    .map(m => m.user.username))])
+
 const overviewTiles = computed(() => [
   { label: 'Submissions', value: stats.value?.submissions },
   { label: 'Participants', value: stats.value?.participants },
@@ -62,13 +78,29 @@ const overviewTiles = computed(() => [
 ])
 
 const tabs = computed(() => {
-  const t = [['overview', 'Overview'], ['submissions', 'Submissions'],
-             ['leaderboard', 'Leaderboard'], ['stats', 'Statistics']]
+  const t = [['overview', 'Overview'], ['submissions', 'Submissions']]
+  if (campaign.value?.suggested_articles.length || campaign.value?.suggested_items.length) {
+    t.push(['suggested', 'Suggested articles'])
+  }
+  t.push(['leaderboard', 'Leaderboard'], ['stats', 'Statistics'])
   return t
 })
 
 const canApprove = ref(false)
 const suggestedLinks = ref(null)   // resolved Wikidata sitelinks
+
+// Suggested-items table: English first, then the preference languages
+// (the backend always includes "en" in the response).
+const suggestedLangs = computed(() => {
+  const langs = suggestedLinks.value?.languages || []
+  return ['en', ...langs.filter(l => l !== 'en')]
+})
+const itemLink = (item, lang) => item.links.find(l => l.lang === lang)
+// Red-link style "start this article" URL, prefilled with the English title.
+function createUrl (item, lang) {
+  const title = (item.label_en || item.qid).replaceAll(' ', '_')
+  return `https://${lang}.wikipedia.org/w/index.php?title=${encodeURIComponent(title)}&action=edit&redlink=1`
+}
 
 async function load () {
   try {
@@ -149,6 +181,12 @@ const withdraw = (s) => {
   return run(() => api.deleteSubmission(s.id))
 }
 const refresh = (s) => run(() => api.refreshSubmission(s.id), 'Wiki metadata refreshed.')
+const recalculate = (s) => {
+  if (s.points_override != null && !confirm(
+    'This clears the manual points override and recomputes the points '
+    + 'from fresh wiki data and the campaign rules. Continue?')) return
+  return run(() => api.recalculateSubmission(s.id), 'Points recalculated.')
+}
 const saveReview = (s, review) => run(() => api.submitReview(s.id, review), 'Review saved.')
 const saveClaims = (s, claims) => run(() => api.saveClaims(s.id, claims), 'Claims saved.')
 const moderateSub = (s, status) => run(() => api.moderateSubmission(s.id, { status }))
@@ -238,18 +276,14 @@ function ruleLabel (id) {
       <div v-if="auth.isLoggedIn && campaign.status === 'active'" class="card p-4 mb-4">
         <form class="flex flex-wrap gap-2 items-end" @submit.prevent="submit">
           <!-- coordinators submit on behalf of a participant -->
-          <div v-if="isOrganizer" class="w-52">
+          <div v-if="isOrganizer" class="w-56">
             <label class="label">Username</label>
-            <input v-model="newUsername" class="input" required
-                   placeholder="Wikimedia username" title="Coordinators submit on behalf of this participant" />
+            <UserSelect v-model="newUsername" required :participants="participantNames"
+                        title="Coordinators submit on behalf of this participant" />
           </div>
-          <div class="flex-1 min-w-48">
-            <label class="label">{{ { article: 'Article title', wikidata_item: 'Item QID', commons_file: 'File name' }[newKind] }}</label>
-            <input v-model="newTitle" class="input" required
-                   :placeholder="{ article: 'Article title', wikidata_item: 'Q…', commons_file: 'File:Example.jpg' }[newKind]" />
-          </div>
+          <!-- project first: it decides where the title is looked up -->
           <div v-if="campaign.settings.multi_language && newKind === 'article'" class="w-56">
-            <label class="label">Language</label>
+            <label class="label">Project (language)</label>
             <LanguageSelect v-model="newLanguage" />
           </div>
           <div v-if="campaign.settings.allow_wikidata_items || campaign.settings.allow_commons_files">
@@ -259,6 +293,12 @@ function ruleLabel (id) {
               <option v-if="campaign.settings.allow_wikidata_items" value="wikidata_item">Wikidata item</option>
               <option v-if="campaign.settings.allow_commons_files" value="commons_file">Commons file</option>
             </select>
+          </div>
+          <div class="flex-1 min-w-48">
+            <label class="label">{{ { article: 'Article title', wikidata_item: 'Item QID', commons_file: 'File name' }[newKind] }}</label>
+            <TitleAutocomplete v-model="newTitle" required
+                               :wiki="submitWiki" :kind="newKind"
+                               :placeholder="{ article: 'Start typing or paste the article title…', wikidata_item: 'Q… or search by label', commons_file: 'File:Example.jpg' }[newKind]" />
           </div>
           <button class="btn-primary" type="submit">Submit contribution</button>
         </form>
@@ -312,7 +352,7 @@ function ruleLabel (id) {
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">
-        <div class="card p-4">
+        <div class="card p-4 md:col-span-2">
           <h4 class="font-semibold text-sm mb-2">Scoring rules</h4>
           <p v-if="!campaign.rules.length" class="text-sm text-neutral-600 dark:text-neutral-300">
             Points are given by the jury.
@@ -332,46 +372,84 @@ function ruleLabel (id) {
             </tbody>
           </table>
         </div>
-        <div class="space-y-4">
-          <div class="card p-4" v-if="campaign.suggested_articles.length || campaign.suggested_items.length">
-            <h4 class="font-semibold text-sm mb-2">Suggested articles (bonus points)</h4>
-            <ul class="space-y-1 text-sm list-disc pl-5">
-              <li v-for="t in campaign.suggested_articles" :key="t">
-                <a target="_blank"
-                   :href="`https://${campaign.wiki_domain}/wiki/${t.replaceAll(' ', '_')}`"
-                   class="text-blue-700 dark:text-blue-400 hover:underline">{{ t }}</a>
-              </li>
-            </ul>
-            <template v-if="campaign.suggested_items.length">
-              <div v-if="suggestedLinks && suggestedLinks.items" class="mt-3 space-y-1.5">
-                <div v-for="item in suggestedLinks.items" :key="item.qid"
-                     class="flex flex-wrap items-baseline gap-1.5 text-sm">
-                  <a :href="`https://www.wikidata.org/wiki/${item.qid}`" target="_blank"
-                     class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">
-                    {{ item.qid }}
-                  </a>
-                  <span class="font-medium">{{ item.label || '—' }}</span>
-                  <a v-for="link in item.links" :key="link.lang" :href="link.url" target="_blank"
-                     class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300 hover:underline"
-                     :title="link.title">{{ link.lang }}</a>
-                  <span v-if="!item.links.length" class="text-xs text-neutral-500 dark:text-neutral-400">
-                    no article in your languages yet — write one!
-                  </span>
-                </div>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                  Wikilinks are shown in
-                  <router-link to="/preferences" class="text-blue-600 dark:text-blue-400 hover:underline">
-                    your preferred languages</router-link>
-                  ({{ suggestedLinks.languages.join(', ') }}).
-                </p>
-              </div>
-              <div v-else class="flex flex-wrap gap-1.5 mt-2">
-                <a v-for="t in campaign.suggested_items" :key="t" target="_blank"
-                   :href="`https://www.wikidata.org/wiki/${t}`"
-                   class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">{{ t }}</a>
-              </div>
-            </template>
+      </div>
+    </div>
+
+    <!-- SUGGESTED ARTICLES -->
+    <div v-if="tab === 'suggested'" class="space-y-4">
+      <div class="card p-4" v-if="campaign.suggested_articles.length">
+        <h4 class="font-semibold text-sm mb-2">Suggested articles (bonus points)</h4>
+        <ul class="space-y-1 text-sm list-disc pl-5 sm:columns-2 lg:columns-3">
+          <li v-for="t in campaign.suggested_articles" :key="t">
+            <a target="_blank"
+               :href="`https://${campaign.wiki_domain}/wiki/${t.replaceAll(' ', '_')}`"
+               class="text-blue-700 dark:text-blue-400 hover:underline">{{ t }}</a>
+          </li>
+        </ul>
+      </div>
+      <div class="card overflow-hidden" v-if="campaign.suggested_items.length">
+        <h4 class="font-semibold text-sm px-4 pt-4">Suggested Wikidata items (bonus points)</h4>
+        <div v-if="suggestedLinks && suggestedLinks.items" class="mt-2">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-neutral-200 dark:border-neutral-800">
+                  <th class="th pl-4">Item</th>
+                  <th class="th">Label (English)</th>
+                  <th v-for="lang in suggestedLangs" :key="lang" class="th text-center">
+                    {{ lang }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in suggestedLinks.items" :key="item.qid"
+                    class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+                  <td class="td pl-4">
+                    <a :href="`https://www.wikidata.org/wiki/${item.qid}`" target="_blank"
+                       class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">
+                      {{ item.qid }}
+                    </a>
+                  </td>
+                  <td class="td font-medium">{{ item.label_en || item.label || '—' }}</td>
+                  <td v-for="lang in suggestedLangs" :key="lang" class="td text-center">
+                    <!-- exists: link to the article -->
+                    <a v-if="itemLink(item, lang)" :href="itemLink(item, lang).url"
+                       target="_blank" :title="`${itemLink(item, lang).title} — read on ${lang}.wikipedia.org`"
+                       class="inline-flex items-center justify-center w-6 h-6 rounded-full
+                              bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300
+                              hover:ring-2 hover:ring-green-400">
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m5 13 4 4L19 7" />
+                      </svg>
+                    </a>
+                    <!-- missing: start it -->
+                    <a v-else :href="createUrl(item, lang)" target="_blank"
+                       :title="`Not on ${lang}.wikipedia.org yet — start this article`"
+                       class="inline-flex items-center justify-center w-6 h-6 rounded-full
+                              bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400
+                              hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-950 dark:hover:text-blue-300">
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="3" stroke-linecap="round">
+                        <path d="M12 5v14m-7-7h14" />
+                      </svg>
+                    </a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400 px-4 py-3">
+            ✓ the article exists — click to read it; + it is missing — click to
+            start it. Language columns come from
+            <router-link to="/preferences" class="text-blue-600 dark:text-blue-400 hover:underline">
+              your preferred languages</router-link>.
+          </p>
+        </div>
+        <div v-else class="flex flex-wrap gap-1.5 p-4">
+          <a v-for="t in campaign.suggested_items" :key="t" target="_blank"
+             :href="`https://www.wikidata.org/wiki/${t}`"
+             class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">{{ t }}</a>
         </div>
       </div>
     </div>
@@ -473,6 +551,8 @@ function ruleLabel (id) {
               <button class="btn" @click="moderateSub(s, 'accepted')">Accept</button>
               <button class="btn-danger" @click="moderateSub(s, 'rejected')">Reject</button>
               <button class="btn" @click="overrideSub(s)">Override points</button>
+              <button class="btn" title="Refetch wiki data and rescore from the campaign rules, clearing any override"
+                      @click="recalculate(s)">Recalculate points</button>
             </template>
           </div>
         </div>

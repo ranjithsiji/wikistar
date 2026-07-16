@@ -36,7 +36,8 @@ _LANG_RE = re.compile(r"^[a-z][a-z0-9-]{1,11}$")
 def get_preferences():
     user = require_user()
     langs = [code for code in (user.preferred_languages or "").split(",") if code]
-    return respond({"preferred_languages": langs})
+    return respond({"preferred_languages": langs,
+                    "home_wiki": user.home_wiki or ""})
 
 
 @bp.put("/preferences")
@@ -54,9 +55,13 @@ def save_preferences():
             raise HTTPException(400, f"Invalid language code: {lang}")
         if code not in clean:
             clean.append(code)
+    home = str(data.get("home_wiki") or "").strip().lower()
+    if home and not _LANG_RE.match(home):
+        raise HTTPException(400, f"Invalid home wiki language code: {home}")
     user.preferred_languages = ",".join(clean)
+    user.home_wiki = home
     db.commit()
-    return respond({"preferred_languages": clean})
+    return respond({"preferred_languages": clean, "home_wiki": home})
 
 
 def _summary(campaign: Campaign) -> dict:

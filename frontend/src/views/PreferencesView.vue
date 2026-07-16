@@ -3,19 +3,32 @@ import { onMounted, ref } from 'vue'
 import api, { errorMessage } from '../api'
 import LanguageSelect from '../components/LanguageSelect.vue'
 import { useAuthStore } from '../store'
+import { useTheme } from '../theme'
 
 const auth = useAuthStore()
+const { theme, setTheme } = useTheme()
+
 const languages = ref([])
+const homeWiki = ref('')
 const input = ref('')
 const saving = ref(false)
 const saved = ref(false)
 const error = ref('')
 
+// theme.js calls the follow-the-OS mode "system"; shown here as "Auto".
+const themeChoices = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'Auto' }
+]
+
 onMounted(async () => {
   if (!auth.isLoggedIn && !auth.loaded) await auth.fetchUser()
   if (!auth.isLoggedIn) return
   try {
-    languages.value = (await api.getPreferences()).data.preferred_languages
+    const prefs = (await api.getPreferences()).data
+    languages.value = prefs.preferred_languages
+    homeWiki.value = prefs.home_wiki || ''
   } catch (e) { error.value = errorMessage(e) }
 })
 
@@ -33,6 +46,11 @@ function remove (code) {
   languages.value = languages.value.filter(l => l !== code)
 }
 
+function clearAll () {
+  languages.value = []
+  input.value = ''
+}
+
 function move (i, d) {
   const j = i + d
   if (j < 0 || j >= languages.value.length) return
@@ -46,9 +64,12 @@ async function save () {
   saved.value = false
   error.value = ''
   try {
-    languages.value = (await api.savePreferences({
-      preferred_languages: languages.value
-    })).data.preferred_languages
+    const prefs = (await api.savePreferences({
+      preferred_languages: languages.value,
+      home_wiki: homeWiki.value || ''
+    })).data
+    languages.value = prefs.preferred_languages
+    homeWiki.value = prefs.home_wiki || ''
     saved.value = true
   } catch (e) {
     error.value = errorMessage(e)
@@ -59,52 +80,94 @@ async function save () {
 </script>
 
 <template>
-  <div class="max-w-2xl">
-    <h1 class="text-2xl font-bold mb-4">Preferences</h1>
+  <div class="max-w-2xl space-y-6">
+    <h1 class="text-2xl font-bold">Preferences</h1>
 
     <p v-if="auth.loaded && !auth.isLoggedIn" class="text-neutral-600 dark:text-neutral-300">
       Please <a class="text-blue-600 dark:text-blue-400 hover:underline"
                 :href="api.loginUrl">log in</a> to edit your preferences.
     </p>
 
-    <div v-else class="card overflow-hidden">
-      <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
-                     bg-neutral-50 dark:bg-neutral-950/40">
-        <h2 class="font-semibold text-sm">Preferred languages</h2>
-        <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
-          Suggested Wikidata items in campaigns show wikilinks in these
-          languages, in this order. Use wiki language codes such as
-          <code>ml</code>, <code>ta</code>, <code>hi</code>, <code>en</code>.
-        </p>
-      </header>
-      <div class="p-4 space-y-3">
-        <div v-if="languages.length" class="flex flex-wrap gap-1.5">
-          <span v-for="(code, i) in languages" :key="code"
-                class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300 gap-1">
-            <button type="button" class="opacity-60 hover:opacity-100" title="Move left"
-                    :disabled="i === 0" @click="move(i, -1)">‹</button>
-            {{ code }}
-            <button type="button" class="opacity-60 hover:opacity-100" title="Move right"
-                    :disabled="i === languages.length - 1" @click="move(i, 1)">›</button>
-            <button type="button" class="opacity-60 hover:opacity-100 ml-0.5" title="Remove"
-                    @click="remove(code)">✕</button>
-          </span>
+    <template v-else>
+      <!-- preferred languages -->
+      <div class="card overflow-hidden">
+        <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
+                       bg-neutral-50 dark:bg-neutral-950/40">
+          <h2 class="font-semibold text-sm">Preferred languages</h2>
+          <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
+            Suggested articles in campaigns are shown in these languages,
+            in this order.
+          </p>
+        </header>
+        <div class="p-4 space-y-3">
+          <div v-if="languages.length" class="flex flex-wrap gap-1.5">
+            <span v-for="(code, i) in languages" :key="code"
+                  class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300 gap-1">
+              <button type="button" class="opacity-60 hover:opacity-100" title="Move left"
+                      :disabled="i === 0" @click="move(i, -1)">‹</button>
+              {{ code }}
+              <button type="button" class="opacity-60 hover:opacity-100" title="Move right"
+                      :disabled="i === languages.length - 1" @click="move(i, 1)">›</button>
+              <button type="button" class="opacity-60 hover:opacity-100 ml-0.5" title="Remove"
+                      @click="remove(code)">✕</button>
+            </span>
+          </div>
+          <p v-else class="text-sm text-neutral-600 dark:text-neutral-300">
+            No languages yet — campaign pages will fall back to the campaign's own language.
+          </p>
+          <form class="flex flex-wrap gap-2" @submit.prevent="add">
+            <LanguageSelect v-model="input" class="!w-64"
+                            placeholder="Add a language…" />
+            <button class="btn" :disabled="!input || languages.length >= 10">Add</button>
+            <button type="button" class="btn" :disabled="!languages.length && !input"
+                    @click="clearAll">Clear</button>
+          </form>
         </div>
-        <p v-else class="text-sm text-neutral-600 dark:text-neutral-300">
-          No languages yet — campaign pages will fall back to the campaign's own language.
-        </p>
-        <form class="flex gap-2" @submit.prevent="add">
-          <LanguageSelect v-model="input" class="!w-64"
-                          placeholder="Add a language…" />
-          <button class="btn" :disabled="!input || languages.length >= 10">Add</button>
-          <span class="flex-1"></span>
-          <button type="button" class="btn-primary" :disabled="saving" @click="save">
-            {{ saving ? 'Saving…' : 'Save' }}
+      </div>
+
+      <!-- home wiki -->
+      <div class="card overflow-hidden">
+        <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
+                       bg-neutral-50 dark:bg-neutral-950/40">
+          <h2 class="font-semibold text-sm">Home wiki</h2>
+          <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
+            The Wikipedia you mainly edit, e.g. ml — ml.wikipedia.org.
+          </p>
+        </header>
+        <div class="p-4 flex flex-wrap items-center gap-2">
+          <LanguageSelect v-model="homeWiki" class="!w-64"
+                          placeholder="Select your home wiki…" />
+          <button type="button" class="btn" :disabled="!homeWiki"
+                  @click="homeWiki = ''">Clear</button>
+        </div>
+      </div>
+
+      <!-- theme (stored on this device) -->
+      <div class="card overflow-hidden">
+        <header class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800
+                       bg-neutral-50 dark:bg-neutral-950/40">
+          <h2 class="font-semibold text-sm">Theme</h2>
+          <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
+            Applied immediately and remembered on this device. Auto follows
+            your system setting.
+          </p>
+        </header>
+        <div class="p-4 flex gap-2">
+          <button v-for="c in themeChoices" :key="c.value" type="button"
+                  class="btn" :class="theme === c.value && '!bg-blue-600 !border-blue-600 !text-white'"
+                  @click="setTheme(c.value)">
+            {{ c.label }}
           </button>
-        </form>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="button" class="btn-primary" :disabled="saving" @click="save">
+          {{ saving ? 'Saving…' : 'Save preferences' }}
+        </button>
         <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
         <p v-else-if="saved" class="text-sm text-green-700 dark:text-green-400">Preferences saved.</p>
       </div>
-    </div>
+    </template>
   </div>
 </template>

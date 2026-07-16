@@ -359,20 +359,27 @@ def test_preferences_and_suggested_links(client, monkeypatch):
     assert client.get("/api/me/preferences").status_code == 401
 
     login("Carol")
-    assert client.get("/api/me/preferences").json == {"preferred_languages": []}
+    assert client.get("/api/me/preferences").json == {
+        "preferred_languages": [], "home_wiki": ""}
     r = client.put("/api/me/preferences",
-                   json={"preferred_languages": ["ML", " ta ", "en", "ml"]})
+                   json={"preferred_languages": ["ML", " ta ", "en", "ml"],
+                         "home_wiki": "ML"})
     assert r.status_code == 200
-    assert r.json == {"preferred_languages": ["ml", "ta", "en"]}
+    assert r.json == {"preferred_languages": ["ml", "ta", "en"],
+                      "home_wiki": "ml"}
+    assert client.get("/api/me/preferences").json["home_wiki"] == "ml"
     assert client.put("/api/me/preferences",
                       json={"preferred_languages": ["bad code!"]}
                       ).status_code == 400
+    assert client.put("/api/me/preferences",
+                      json={"preferred_languages": ["ml", "ta", "en"],
+                            "home_wiki": "bad code!"}).status_code == 400
 
     # suggested links resolve QIDs through Wikidata sitelinks in the
     # user's preferred languages
     def fake_sitelinks(qids, languages):
         assert qids == ["Q126"]
-        return {"Q126": {"label": "Kerala",
+        return {"Q126": {"label": "Kerala", "label_en": "Kerala",
                          "links": {lang: f"Kerala ({lang})"
                                    for lang in languages if lang != "ta"}}}
     monkeypatch.setattr(mediawiki, "fetch_sitelinks", fake_sitelinks)
@@ -382,13 +389,18 @@ def test_preferences_and_suggested_links(client, monkeypatch):
     assert data["languages"] == ["ml", "ta", "en"]
     item = data["items"][0]
     assert item["qid"] == "Q126" and item["label"] == "Kerala"
+    assert item["label_en"] == "Kerala"
     assert [l["lang"] for l in item["links"]] == ["ml", "en"]
     assert item["links"][0]["url"] == "https://ml.wikipedia.org/wiki/Kerala_(ml)"
 
-    # explicit ?languages= wins over the stored preference
+    # explicit ?languages= wins over the stored preference; English always
+    # rides along for the suggested-items table
     data = client.get(
         f"/api/campaigns/{slug}/suggested-links?languages=en").json
     assert data["languages"] == ["en"]
+    data = client.get(
+        f"/api/campaigns/{slug}/suggested-links?languages=hi").json
+    assert data["languages"] == ["hi", "en"]
 
 
 def test_multi_language_submissions(client):
@@ -665,3 +677,32 @@ def test_coordinator_submits_on_behalf(client):
                           "username": "Mallory"})
     assert r.status_code == 201
     assert r.json["user"]["username"] == "Mallory"
+
+
+def test_coordinator_recalculates_points(client):
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Recalc Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Kathakali", "kind": "article"}).json
+    # Kathakali: 5000 bytes -> 5 pts + suggested list 10 = 15
+    assert sub["points"] == 15
+
+    # participants cannot force a recalculation
+    r = client.post(f"/api/submissions/{sub['id']}/recalculate")
+    assert r.status_code == 403
+
+    # an override wins until a coordinator recalculates
+    login("Alice")
+    r = client.post(f"/api/submissions/{sub['id']}/moderate",
+                    json={"points_override": 99})
+    assert r.json["points"] == 99
+    r = client.post(f"/api/submissions/{sub['id']}/recalculate")
+    assert r.status_code == 200
+    assert r.json["points_override"] is None
+    assert r.json["points"] == 15  # computed from rules and fresh metadata

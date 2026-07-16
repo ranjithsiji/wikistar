@@ -329,6 +329,10 @@ def suggested_links(slug: str):
     if not langs:
         langs = [campaign.language]
     langs = langs[:10]
+    # English always rides along: the suggested-items table shows an
+    # English column and English labels next to the user's languages.
+    if "en" not in langs:
+        langs.append("en")
     qids = [p.title for p in campaign.suggested_pages
             if p.kind == SubmissionKind.wikidata_item]
     try:
@@ -337,10 +341,12 @@ def suggested_links(slug: str):
         raise HTTPException(502, "Could not reach Wikidata for sitelinks")
     items = []
     for qid in qids:
-        entity = entities.get(qid) or {"label": None, "links": {}}
+        entity = entities.get(qid) or {"label": None, "label_en": None,
+                                       "links": {}}
         items.append({
             "qid": qid,
             "label": entity["label"],
+            "label_en": entity.get("label_en"),
             "links": [
                 {"lang": lang, "title": entity["links"][lang],
                  "url": (f"https://{lang}.wikipedia.org/wiki/"
