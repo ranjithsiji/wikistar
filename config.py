@@ -12,7 +12,7 @@ CONFIG_FILE = ROOT_DIR / "config.toml"
 
 _DEFAULTS = {
     "SECRET_KEY": "dev-secret-change-me",
-    "DATABASE_URL": f"sqlite:///{ROOT_DIR / 'instance' / 'dev.db'}",
+    "DATABASE_URL": "mysql+pymysql://root@localhost/wikistar",
     "CONSUMER_KEY": "",
     "CONSUMER_SECRET": "",
     "OAUTH_MWURI": "https://meta.wikimedia.org",

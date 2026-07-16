@@ -8,7 +8,7 @@ adjusted points_final always wins.
 """
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from flask import Blueprint
 from sqlalchemy.orm import Session
 
 from auth import require_jury, require_user
@@ -20,13 +20,13 @@ from models import (
     RuleType,
     ScoringMode,
     Submission,
-    User,
 )
 from routers.common import audit, submission_out
-from schemas import ClaimIn, ClaimModeration, ClaimOut, SubmissionOut
+from schemas import ClaimIn, ClaimModeration, ClaimOut
 from scoring import AUTO_METRICS, claim_points
+from webutil import HTTPException, parse, respond
 
-router = APIRouter(prefix="/api", tags=["claims"])
+bp = Blueprint("claims", __name__, url_prefix="/api")
 
 CLAIMABLE_TYPES = (RuleType.per_unit, RuleType.flat_bonus)
 
@@ -38,13 +38,12 @@ def _get_submission_or_404(db: Session, submission_id: int) -> Submission:
     return sub
 
 
-@router.put("/submissions/{submission_id}/claims",
-            response_model=SubmissionOut)
-def upsert_claims(submission_id: int, payload: list[ClaimIn],
-                  db: Session = Depends(get_db),
-                  user: User = Depends(require_user)):
+@bp.put("/submissions/<int:submission_id>/claims")
+def upsert_claims(submission_id: int):
     """Owner only. Replaces the participant's claim set for this
     submission (one claim per rule); returns the recomputed breakdown."""
+    db, user = get_db(), require_user()
+    payload = parse(list[ClaimIn])
     sub = _get_submission_or_404(db, submission_id)
     campaign = sub.campaign
     settings = campaign.effective_settings
@@ -99,14 +98,14 @@ def upsert_claims(submission_id: int, payload: list[ClaimIn],
            "claims": len(payload)})
     db.commit()
     db.refresh(sub)
-    return submission_out(campaign, sub, settings)
+    return respond(submission_out(campaign, sub, settings))
 
 
-@router.post("/claims/{claim_id}/moderate", response_model=ClaimOut)
-def moderate_claim(claim_id: int, payload: ClaimModeration,
-                   db: Session = Depends(get_db),
-                   user: User = Depends(require_user)):
+@bp.post("/claims/<int:claim_id>/moderate")
+def moderate_claim(claim_id: int):
     """Organizer/jury of the campaign: verify / adjust / reject."""
+    db, user = get_db(), require_user()
+    payload = parse(ClaimModeration)
     claim = db.get(Claim, claim_id)
     if claim is None:
         raise HTTPException(404, "Claim not found")
@@ -127,4 +126,4 @@ def moderate_claim(claim_id: int, payload: ClaimModeration,
            "points_final": payload.points_final})
     db.commit()
     db.refresh(claim)
-    return ClaimOut.model_validate(claim)
+    return respond(ClaimOut.model_validate(claim))

@@ -33,8 +33,11 @@ campaign and fully editable; a default preset ships with the tool.
 
 ## Stack
 
-FastAPI · SQLAlchemy 2.0 · MariaDB (SQLite in dev) · MediaWiki OAuth 2.0
+Flask · SQLAlchemy 2.0 · MariaDB · MediaWiki OAuth 2.0
 (Authlib) · Vue 3 · Vite · Pinia · Tailwind CSS 4
+
+The FastAPI/ASGI variant of this backend is preserved on the
+[`archive/fastapi-v2`](../../tree/archive/fastapi-v2) branch.
 
 ## Development
 
@@ -42,7 +45,7 @@ FastAPI · SQLAlchemy 2.0 · MariaDB (SQLite in dev) · MediaWiki OAuth 2.0
 # backend (Python 3.12, uv)
 cp config.toml.example config.toml   # fill in OAuth credentials
 uv sync
-uv run uvicorn app:app --reload      # http://localhost:8000, docs at /docs
+uv run flask --app app run --debug --port 8000   # http://localhost:8000
 
 # frontend
 cd frontend
@@ -55,14 +58,22 @@ uv run pytest
 
 ## Deployment (Toolforge)
 
-The repository root is the webservice source directory
-(`/data/project/wikistar/www/python/src`); FastAPI serves the built
-frontend from `frontend/dist` (`npm run build`).
+Classic python webservice (uwsgi). The repository root is the
+webservice source directory; Flask serves the built frontend from
+`frontend/dist` (`npm run build`).
 
-* **Classic python webservice (uwsgi, WSGI):** point uwsgi at the
-  `application` callable in `app.py` (`callable = application` in
-  `~/www/python/uwsgi.ini`).
-* **Build service / any ASGI server:** run `uvicorn app:app`.
+```bash
+become wikistar
+git clone https://gitlab.wikimedia.org/toolforge-repos/wikistar.git ~/www/python/src
+webservice python3.13 shell -- webservice-python-bootstrap   # venv from requirements.txt
+webservice python3.13 start
+```
+
+uwsgi serves the `app` callable in `app.py` directly (the default);
+`application` is provided as an alias. Configuration comes from
+environment variables or `~/www/python/src/config.toml` (SECRET_KEY,
+DATABASE_URL for ToolsDB, CONSUMER_KEY/CONSUMER_SECRET,
+SESSION_COOKIE_SECURE=true).
 
 OAuth consumer registration:
 <https://meta.wikimedia.org/wiki/Special:OAuthConsumerRegistration>

@@ -5,17 +5,18 @@ PUT is an upsert on (submission_id, reviewer_id): a juror has exactly one
 review per submission and can revise it until the campaign is archived.
 Jurors cannot review their own submissions.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from flask import Blueprint
 from sqlalchemy.orm import Session
 
 from auth import require_jury, require_user
 from db import get_db
-from models import CampaignStatus, Review, Submission, User
+from models import CampaignStatus, Review, Submission
 from routers.common import audit
 from schemas import ReviewIn, ReviewOut
 from scoring import review_total
+from webutil import HTTPException, parse, respond
 
-router = APIRouter(prefix="/api", tags=["reviews"])
+bp = Blueprint("reviews", __name__, url_prefix="/api")
 
 
 def _get_submission_or_404(db: Session, submission_id: int) -> Submission:
@@ -25,10 +26,10 @@ def _get_submission_or_404(db: Session, submission_id: int) -> Submission:
     return sub
 
 
-@router.put("/submissions/{submission_id}/review", response_model=ReviewOut)
-def upsert_review(submission_id: int, payload: ReviewIn,
-                  db: Session = Depends(get_db),
-                  user: User = Depends(require_user)):
+@bp.put("/submissions/<int:submission_id>/review")
+def upsert_review(submission_id: int):
+    db, user = get_db(), require_user()
+    payload = parse(ReviewIn)
     sub = _get_submission_or_404(db, submission_id)
     campaign = sub.campaign
     require_jury(db, campaign, user)
@@ -57,12 +58,12 @@ def upsert_review(submission_id: int, payload: ReviewIn,
            "decision": payload.decision.value, "total": payload.total})
     db.commit()
     db.refresh(review)
-    return ReviewOut.model_validate(review)
+    return respond(ReviewOut.model_validate(review))
 
 
-@router.delete("/submissions/{submission_id}/review", status_code=204)
-def delete_own_review(submission_id: int, db: Session = Depends(get_db),
-                      user: User = Depends(require_user)):
+@bp.delete("/submissions/<int:submission_id>/review")
+def delete_own_review(submission_id: int):
+    db, user = get_db(), require_user()
     sub = _get_submission_or_404(db, submission_id)
     review = db.query(Review).filter_by(
         submission_id=sub.id, reviewer_id=user.id).first()
@@ -74,3 +75,4 @@ def delete_own_review(submission_id: int, db: Session = Depends(get_db),
           {"campaign": sub.campaign.slug, "title": sub.title})
     db.delete(review)
     db.commit()
+    return respond(None, 204)

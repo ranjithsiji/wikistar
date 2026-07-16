@@ -7,7 +7,7 @@ be refreshed; a failed fetch never blocks the submission.
 """
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from flask import Blueprint
 from sqlalchemy.orm import Session
 
 import mediawiki
@@ -34,9 +34,10 @@ from routers.common import (
     load_submissions,
     submission_out,
 )
-from schemas import SubmissionIn, SubmissionModerationIn, SubmissionOut
+from schemas import SubmissionIn, SubmissionModerationIn
+from webutil import HTTPException, parse, respond
 
-router = APIRouter(prefix="/api", tags=["submissions"])
+bp = Blueprint("submissions", __name__, url_prefix="/api")
 
 WIKIDATA_DOMAIN = "www.wikidata.org"
 
@@ -106,10 +107,9 @@ def _check_eligibility(sub: Submission, campaign: Campaign, user: User,
                      f"after {registered_after}")
 
 
-@router.get("/campaigns/{slug}/submissions",
-            response_model=list[SubmissionOut])
-def list_submissions(slug: str, db: Session = Depends(get_db),
-                     user: User | None = Depends(get_current_user)):
+@bp.get("/campaigns/<slug>/submissions")
+def list_submissions(slug: str):
+    db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
     settings = campaign.effective_settings
     out = [submission_out(campaign, s, settings)
@@ -128,14 +128,13 @@ def list_submissions(slug: str, db: Session = Depends(get_db),
                 if campaign.scoring_mode == ScoringMode.jury:
                     item.points = 0
                     item.breakdown = []
-    return out
+    return respond(out)
 
 
-@router.post("/campaigns/{slug}/submissions", response_model=SubmissionOut,
-             status_code=201)
-def create_submission(slug: str, payload: SubmissionIn,
-                      db: Session = Depends(get_db),
-                      user: User = Depends(require_user)):
+@bp.post("/campaigns/<slug>/submissions")
+def create_submission(slug: str):
+    db, user = get_db(), require_user()
+    payload = parse(SubmissionIn)
     campaign = get_campaign_or_404(db, slug)
     settings = campaign.effective_settings
 
@@ -188,12 +187,12 @@ def create_submission(slug: str, payload: SubmissionIn,
           {"campaign": slug, "title": title})
     db.commit()
     db.refresh(sub)
-    return submission_out(campaign, sub, settings)
+    return respond(submission_out(campaign, sub, settings), 201)
 
 
-@router.delete("/submissions/{submission_id}", status_code=204)
-def delete_submission(submission_id: int, db: Session = Depends(get_db),
-                      user: User = Depends(require_user)):
+@bp.delete("/submissions/<int:submission_id>")
+def delete_submission(submission_id: int):
+    db, user = get_db(), require_user()
     sub = _get_submission_or_404(db, submission_id)
     campaign = sub.campaign
     if sub.user_id != user.id:
@@ -205,12 +204,12 @@ def delete_submission(submission_id: int, db: Session = Depends(get_db),
           {"campaign": campaign.slug, "title": sub.title})
     db.delete(sub)
     db.commit()
+    return respond(None, 204)
 
 
-@router.post("/submissions/{submission_id}/refresh",
-             response_model=SubmissionOut)
-def refresh_metadata(submission_id: int, db: Session = Depends(get_db),
-                     user: User = Depends(require_user)):
+@bp.post("/submissions/<int:submission_id>/refresh")
+def refresh_metadata(submission_id: int):
+    db, user = get_db(), require_user()
     sub = _get_submission_or_404(db, submission_id)
     campaign = sub.campaign
     if sub.user_id != user.id:
@@ -218,15 +217,14 @@ def refresh_metadata(submission_id: int, db: Session = Depends(get_db),
     _fetch_metadata(sub, campaign, sub.user.username)
     db.commit()
     db.refresh(sub)
-    return submission_out(campaign, sub)
+    return respond(submission_out(campaign, sub))
 
 
-@router.post("/submissions/{submission_id}/moderate",
-             response_model=SubmissionOut)
-def moderate_submission(submission_id: int, payload: SubmissionModerationIn,
-                        db: Session = Depends(get_db),
-                        user: User = Depends(require_user)):
+@bp.post("/submissions/<int:submission_id>/moderate")
+def moderate_submission(submission_id: int):
     """Organizer final say: accept/reject and points override."""
+    db, user = get_db(), require_user()
+    payload = parse(SubmissionModerationIn)
     sub = _get_submission_or_404(db, submission_id)
     campaign = sub.campaign
     require_organizer(db, campaign, user)
@@ -243,4 +241,4 @@ def moderate_submission(submission_id: int, payload: SubmissionModerationIn,
                                if sub.points_override is not None else None)})
     db.commit()
     db.refresh(sub)
-    return submission_out(campaign, sub)
+    return respond(submission_out(campaign, sub))

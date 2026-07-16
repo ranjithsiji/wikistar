@@ -1,8 +1,9 @@
 """Helpers shared by the routers: lookups, serializers, audit logging."""
 import re
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
+
+from webutil import HTTPException
 
 from models import (
     AuditLog,

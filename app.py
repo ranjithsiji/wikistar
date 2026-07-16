@@ -1,64 +1,66 @@
-"""WikiSTAR v2 application entry point.
+"""WikiSTAR v2 application entry point (Flask).
 
-Run locally:   uv run uvicorn app:app --reload
-API docs:      http://localhost:8000/docs
+Run locally:   uv run python app.py   (or: uv run flask --app app run --debug)
 
-Toolforge (classic python webservice, ~/www/python/src): uwsgi speaks
-WSGI only, so point it at the `application` callable below
-(uwsgi.ini: callable = application). With the build service or any
-ASGI server, use `app` directly.
+Toolforge (classic python webservice): clone the repo to
+~/www/python/src and install requirements.txt into ~/www/python/venv;
+uwsgi serves the `app` callable below directly.
 """
-import httpx
+from flask import Flask, send_file
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-from contextlib import asynccontextmanager
-
-from a2wsgi import ASGIMiddleware
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from starlette.middleware.sessions import SessionMiddleware
-
+from auth import oauth
 from config import ROOT_DIR, settings
-from db import Base, engine
-from routers import admin, auth, campaigns, claims, reviews, submissions
+from db import Base, db_session, engine
+from routers import admin, auth as auth_routes, campaigns, claims, reviews, submissions
+from webutil import register_errors
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    # Dev convenience; production schema changes go through Alembic.
-    Base.metadata.create_all(bind=engine)
-    yield
-
-
-app = FastAPI(title="WikiSTAR", version="2.0.0", lifespan=lifespan)
-
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.secret_key,
-    https_only=settings.session_cookie_secure,
-    same_site="lax",
+app = Flask(__name__)
+app.secret_key = settings.secret_key
+app.config.update(
+    SESSION_COOKIE_SECURE=settings.session_cookie_secure,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
 )
+# Trust the Toolforge front proxy so url_for(_external=True) builds
+# https://wikistar.toolforge.org/... URLs (needed for the OAuth callback).
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-for router_module in (auth, campaigns, submissions, reviews, claims, admin):
-    app.include_router(router_module.router)
+oauth.init_app(app)
+register_errors(app)
+
+for module in (auth_routes, campaigns, submissions, reviews, claims, admin):
+    app.register_blueprint(module.bp)
+
+# Dev convenience; production schema changes go through Alembic.
+Base.metadata.create_all(bind=engine)
+
+
+@app.teardown_appcontext
+def _remove_db_session(exc):
+    db_session.remove()
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": app.version}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 # ---- serve the built SPA ---------------------------------------------------
 DIST = ROOT_DIR / "frontend" / "dist"
 if DIST.exists():
-    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
-
-    @app.get("/{path:path}", include_in_schema=False)
+    @app.get("/", defaults={"path": ""})
+    @app.get("/<path:path>")
     def spa(path: str):
         candidate = (DIST / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(DIST):
-            return FileResponse(candidate)
-        return FileResponse(DIST / "index.html")
+            return send_file(candidate)
+        return send_file(DIST / "index.html")
 
 
-# WSGI entry point for Toolforge's uwsgi-based python webservice.
-application = ASGIMiddleware(app)
+# Alternate WSGI entry point name, in case uwsgi is configured with
+# `callable = application`.
+application = app
+
+if __name__ == "__main__":
+    app.run(debug=True, port=8000)

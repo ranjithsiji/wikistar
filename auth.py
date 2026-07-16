@@ -1,6 +1,6 @@
-"""MediaWiki OAuth 2.0 (Authlib Starlette client) + auth dependencies.
+"""MediaWiki OAuth 2.0 (Authlib Flask client) + auth dependencies.
 
-Flow (identical to the proven Flask v1 flow, ported to FastAPI):
+Flow (same as the previous versions of this app):
   GET /api/login      -> authorize_redirect to {OAUTH_MWURI}/w/rest.php/oauth2/authorize
   GET /oauth-callback -> authorize_access_token, then GET oauth2/resource/profile
                          -> upsert User, store user_id in the signed session cookie
@@ -10,13 +10,14 @@ client never sends usernames.
 """
 from datetime import datetime, timezone
 
-from authlib.integrations.starlette_client import OAuth
-from fastapi import Depends, HTTPException, Request
+from authlib.integrations.flask_client import OAuth
+from flask import session
 from sqlalchemy.orm import Session
 
 from config import settings
 from db import get_db
 from models import Campaign, CampaignMember, MemberRole, User
+from webutil import HTTPException
 
 USER_AGENT = "WikiSTAR/2.0 (https://wikistar.toolforge.org)"
 
@@ -32,10 +33,10 @@ oauth.register(
 )
 
 
-async def fetch_profile(request: Request) -> dict:
+def fetch_profile() -> dict:
     """Exchange the callback code for a token and fetch the user profile."""
-    token = await oauth.mediawiki.authorize_access_token(request)
-    resp = await oauth.mediawiki.get("oauth2/resource/profile", token=token)
+    token = oauth.mediawiki.authorize_access_token()
+    resp = oauth.mediawiki.get("oauth2/resource/profile", token=token)
     resp.raise_for_status()
     return resp.json()
 
@@ -64,20 +65,22 @@ def upsert_user(db: Session, profile: dict) -> User:
 
 # ---- dependencies ----------------------------------------------------------
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User | None:
-    user_id = request.session.get("user_id")
+def get_current_user(db: Session | None = None) -> User | None:
+    user_id = session.get("user_id")
     if user_id is None:
         return None
-    return db.get(User, user_id)
+    return (db if db is not None else get_db()).get(User, user_id)
 
 
-def require_user(user: User | None = Depends(get_current_user)) -> User:
+def require_user() -> User:
+    user = get_current_user()
     if user is None:
         raise HTTPException(401, "Login required")
     return user
 
 
-def require_admin(user: User = Depends(require_user)) -> User:
+def require_admin() -> User:
+    user = require_user()
     if not user.is_admin:
         raise HTTPException(403, "Admin access required")
     return user

@@ -1,14 +1,12 @@
-"""End-to-end API tests over the real app with a SQLite database.
+"""End-to-end API tests over the real app with a MariaDB test database.
 
-Auth is simulated by overriding the get_current_user dependency;
-MediaWiki lookups are monkeypatched.
+Auth uses the real signed session cookie (set via the test client's
+session_transaction); MediaWiki lookups are monkeypatched.
 """
 from datetime import date, timedelta
 
 import pytest
-from starlette.testclient import TestClient
 
-import auth as auth_module
 import mediawiki
 from app import app
 from db import Base, SessionLocal, engine
@@ -17,30 +15,19 @@ from models import User
 
 TODAY = date.today()
 
-_current: dict = {"user_id": None}
-
-
-def _fake_current_user():
-    if _current["user_id"] is None:
-        return None
-    db = SessionLocal()
-    try:
-        return db.get(User, _current["user_id"])
-    finally:
-        db.close()
-
-
-app.dependency_overrides[auth_module.get_current_user] = _fake_current_user
+_client = None
 
 
 @pytest.fixture(scope="module")
-def client(module_mocker=None):
+def client():
+    global _client
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    with TestClient(app) as c:
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        _client = c
         yield c
-    app.dependency_overrides.pop(auth_module.get_current_user, None)
-    app.dependency_overrides[auth_module.get_current_user] = _fake_current_user
+    _client = None
 
 
 SYSOP_WIKIS: dict[str, set] = {}
@@ -71,18 +58,21 @@ def login(username: str, is_admin: bool = False) -> int:
             db.add(user)
         user.is_admin = is_admin
         db.commit()
-        _current["user_id"] = user.id
-        return user.id
+        user_id = user.id
     finally:
         db.close()
+    with _client.session_transaction() as s:
+        s["user_id"] = user_id
+    return user_id
 
 
 def logout():
-    _current["user_id"] = None
+    with _client.session_transaction() as s:
+        s.pop("user_id", None)
 
 
 def make_campaign_payload(client, mode="self", **extra):
-    meta = client.get("/api/meta").json()
+    meta = client.get("/api/meta").json
     payload = {
         "name": "Kerala Culture Contest",
         "description": "Improve Kerala culture coverage",
@@ -109,7 +99,7 @@ def test_full_self_assessment_flow(client):
     login("Alice")
     r = client.post("/api/campaigns", json=make_campaign_payload(client))
     assert r.status_code == 201, r.text
-    camp = r.json()
+    camp = r.json
     slug = camp["slug"]
     assert camp["status"] == "draft"
     assert "organizer" in camp["my_roles"]
@@ -119,28 +109,28 @@ def test_full_self_assessment_flow(client):
 
     # Draft hidden from strangers, visible to organizer
     logout()
-    assert slug not in [c["slug"] for c in client.get("/api/campaigns").json()]
+    assert slug not in [c["slug"] for c in client.get("/api/campaigns").json]
     assert client.get(f"/api/campaigns/{slug}").status_code == 404
     login("Alice")
-    assert slug in [c["slug"] for c in client.get("/api/campaigns").json()]
+    assert slug in [c["slug"] for c in client.get("/api/campaigns").json]
 
     # --- approval (admin only) ----------------------------------------------
     login("Carol")
     assert client.post(f"/api/campaigns/{slug}/approve").status_code == 403
     login("Root", is_admin=True)
     r = client.post(f"/api/campaigns/{slug}/approve")
-    assert r.status_code == 200 and r.json()["status"] == "active"
+    assert r.status_code == 200 and r.json["status"] == "active"
 
     # --- participation ------------------------------------------------------
     login("Carol")
     r = client.post(f"/api/campaigns/{slug}/join")
     assert r.status_code == 200
-    assert "participant" in r.json()["my_roles"]
+    assert "participant" in r.json["my_roles"]
 
     r = client.post(f"/api/campaigns/{slug}/submissions",
                     json={"title": "Kathakali", "kind": "article"})
     assert r.status_code == 201, r.text
-    sub = r.json()
+    sub = r.json
     assert sub["bytes_added"] == 5000
     # 5 pts bytes (nearest) + 10 pts suggested list
     assert sub["points"] == 15
@@ -158,7 +148,7 @@ def test_full_self_assessment_flow(client):
 
     # --- claims ---------------------------------------------------------
     login("Carol")
-    detail = client.get(f"/api/campaigns/{slug}").json()
+    detail = client.get(f"/api/campaigns/{slug}").json
     improvement = next(r for r in detail["rules"]
                        if r["label"] == "Substantial improvement")
     ga = next(r for r in detail["rules"] if r["label"] == "Good Article")
@@ -168,7 +158,7 @@ def test_full_self_assessment_flow(client):
     r = client.put(f"/api/submissions/{sub['id']}/claims",
                    json=[{"rule_id": improvement["id"], "quantity": 1}])
     assert r.status_code == 200
-    assert r.json()["points"] == 17  # 5 + 10 + 2
+    assert r.json["points"] == 17  # 5 + 10 + 2
 
     # auto rules are not claimable
     r = client.put(f"/api/submissions/{sub['id']}/claims",
@@ -182,28 +172,28 @@ def test_full_self_assessment_flow(client):
     assert r.status_code == 403
 
     # --- moderation -----------------------------------------------------
-    submissions = client.get(f"/api/campaigns/{slug}/submissions").json()
+    submissions = client.get(f"/api/campaigns/{slug}/submissions").json
     claim_id = submissions[0]["claims"][0]["id"]
     r = client.post(f"/api/claims/{claim_id}/moderate",
                     json={"status": "adjusted", "points_final": 1})
     assert r.status_code == 200
-    submissions = client.get(f"/api/campaigns/{slug}/submissions").json()
+    submissions = client.get(f"/api/campaigns/{slug}/submissions").json
     assert submissions[0]["points"] == 16  # 5 + 10 + adjusted 1
 
     r = client.post(f"/api/submissions/{sub['id']}/moderate",
                     json={"points_override": 3})
-    assert r.status_code == 200 and r.json()["points"] == 3
+    assert r.status_code == 200 and r.json["points"] == 3
     r = client.post(f"/api/submissions/{sub['id']}/moderate",
                     json={"clear_override": True})
-    assert r.json()["points"] == 16
+    assert r.json["points"] == 16
 
     # --- leaderboard & stats ---------------------------------------------
     logout()
-    board = client.get(f"/api/campaigns/{slug}/leaderboard").json()
+    board = client.get(f"/api/campaigns/{slug}/leaderboard").json
     assert board[0]["user"]["username"] == "Carol"
     assert board[0]["points"] == 16
 
-    stats = client.get(f"/api/campaigns/{slug}/stats").json()
+    stats = client.get(f"/api/campaigns/{slug}/stats").json
     assert stats["submissions"] == 1
     assert stats["participants"] == 1
     assert stats["total_points"] == 16
@@ -219,7 +209,7 @@ def test_jury_mode_flow(client):
         settings={"jury_criteria": [
             {"key": "quality", "title": "Quality", "type": "int"}]}))
     assert r.status_code == 201, r.text
-    slug = r.json()["slug"]
+    slug = r.json["slug"]
     login("Root", is_admin=True)
     client.post(f"/api/campaigns/{slug}/approve")
 
@@ -227,7 +217,7 @@ def test_jury_mode_flow(client):
     r = client.post(f"/api/campaigns/{slug}/submissions",
                     json={"title": "Onam", "kind": "article"})
     assert r.status_code == 201
-    sub = r.json()
+    sub = r.json
     assert sub["points"] == 0  # no reviews yet
 
     # non-jury cannot review
@@ -243,15 +233,15 @@ def test_jury_mode_flow(client):
                    json={"total": 999, "decision": "accept",
                          "scores": {"quality": 8}, "comment": "solid"})
     assert r.status_code == 200
-    assert r.json()["total"] == 8
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json()
+    assert r.json["total"] == 8
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json
     assert subs[0]["points"] == 8
 
     # upsert: revising replaces, not duplicates
     r = client.put(f"/api/submissions/{sub['id']}/review",
                    json={"total": 6, "decision": "accept"})
     assert r.status_code == 200
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json()
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json
     assert subs[0]["points"] == 6
     assert len(subs[0]["reviews"]) == 1
 
@@ -272,16 +262,16 @@ def test_wiki_admin_approval_rules(client):
     login("MlAdmin")
     r = client.post("/api/campaigns", json=make_campaign_payload(
         client, mode="jury", name="ML Jury Contest", rules=[], language="ml"))
-    assert r.status_code == 201 and r.json()["status"] == "active"
+    assert r.status_code == 201 and r.json["status"] == "active"
 
     # ordinary creator stays draft; ml sysop can approve a jury campaign
     login("Alice")
     r = client.post("/api/campaigns", json=make_campaign_payload(
         client, mode="jury", name="ML Jury Draft", rules=[], language="ml"))
-    slug = r.json()["slug"]
-    assert r.json()["status"] == "draft"
+    slug = r.json["slug"]
+    assert r.json["status"] == "draft"
     login("CommonsAdmin")  # sysop, but not on a Wikipedia -> no jury rights
-    rights = client.get(f"/api/campaigns/{slug}/approval-rights").json()
+    rights = client.get(f"/api/campaigns/{slug}/approval-rights").json
     assert rights["can_approve"] is False
     assert client.post(f"/api/campaigns/{slug}/approve").status_code == 403
     login("MlAdmin")
@@ -291,19 +281,19 @@ def test_wiki_admin_approval_rules(client):
     login("Alice")
     r = client.post("/api/campaigns", json=make_campaign_payload(
         client, mode="self", name="Self Draft", language="ta"))
-    slug = r.json()["slug"]
-    assert r.json()["status"] == "draft"
+    slug = r.json["slug"]
+    assert r.json["status"] == "draft"
     login("CommonsAdmin")
     assert client.post(f"/api/campaigns/{slug}/approve").status_code == 403
     login("MlAdmin")  # sysop on ml.wikipedia.org (not the target wiki) is fine
     r = client.post(f"/api/campaigns/{slug}/approve")
-    assert r.status_code == 200 and r.json()["status"] == "active"
+    assert r.status_code == 200 and r.json["status"] == "active"
 
     # a self campaign created by a Wikipedia sysop goes live immediately
     login("MlAdmin")
     r = client.post("/api/campaigns", json=make_campaign_payload(
         client, mode="self", name="Self by sysop", language="ta"))
-    assert r.json()["status"] == "active"
+    assert r.json["status"] == "active"
     SYSOP_WIKIS.clear()
 
 
@@ -319,9 +309,9 @@ def test_settings_validation_and_admin(client):
     # admin endpoints gated and functional
     assert client.get("/api/admin/stats").status_code == 403
     login("Root", is_admin=True)
-    stats = client.get("/api/admin/stats").json()
+    stats = client.get("/api/admin/stats").json
     assert stats["campaigns"] >= 2 and stats["users"] >= 4
-    logs = client.get("/api/admin/logs").json()
+    logs = client.get("/api/admin/logs").json
     assert logs["total"] > 0
-    users = client.get("/api/admin/users").json()
+    users = client.get("/api/admin/users").json
     assert any(u["username"] == "Carol" for u in users)

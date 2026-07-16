@@ -12,7 +12,7 @@ leaderboard          public unless show_leaderboard is off
 """
 from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException
+from flask import Blueprint, request
 from sqlalchemy.orm import Session
 
 import settings_registry
@@ -48,34 +48,29 @@ from routers.common import (
     suggested_titles,
     unique_slug,
 )
-from schemas import (
-    CampaignDetail,
-    CampaignIn,
-    CampaignStats,
-    CampaignSummary,
-    LeaderboardRow,
-)
+from schemas import CampaignIn, CampaignStats
 from scoring import compute_breakdown, default_self_assessment_rules
+from webutil import HTTPException, parse, respond
 
-router = APIRouter(prefix="/api", tags=["campaigns"])
+bp = Blueprint("campaigns", __name__, url_prefix="/api")
 
 
-@router.get("/meta")
+@bp.get("/meta")
 def meta():
     """Static metadata the frontend needs to render forms."""
-    return {
+    return respond({
         "settings_registry": settings_registry.SETTING_DEFS,
         "default_rules": {"self": default_self_assessment_rules()},
         "scoring_modes": ["jury", "self", "hybrid"],
-    }
+    })
 
 
-@router.get("/campaigns", response_model=list[CampaignSummary])
-def list_campaigns(db: Session = Depends(get_db),
-                   user: User | None = Depends(get_current_user)):
+@bp.get("/campaigns")
+def list_campaigns():
+    db, user = get_db(), get_current_user()
     campaigns = db.query(Campaign).order_by(Campaign.start_date.desc()).all()
-    return [campaign_summary(c) for c in campaigns
-            if can_see_campaign(db, c, user)]
+    return respond([campaign_summary(c) for c in campaigns
+                    if can_see_campaign(db, c, user)])
 
 
 def _validated_settings(payload: CampaignIn) -> dict:
@@ -149,9 +144,10 @@ def _replace_rules(db: Session, campaign: Campaign, payload: CampaignIn) -> None
             db.delete(rule)
 
 
-@router.post("/campaigns", response_model=CampaignDetail, status_code=201)
-def create_campaign(payload: CampaignIn, db: Session = Depends(get_db),
-                    user: User = Depends(require_user)):
+@bp.post("/campaigns")
+def create_campaign():
+    db, user = get_db(), require_user()
+    payload = parse(CampaignIn)
     overrides = _validated_settings(payload)
     slug = unique_slug(db, payload.slug or slugify(payload.name))
     campaign = Campaign(slug=slug, status=CampaignStatus.draft,
@@ -176,16 +172,16 @@ def create_campaign(payload: CampaignIn, db: Session = Depends(get_db),
            "auto_approved": auto_ok and auto_reason or False})
     db.commit()
     db.refresh(campaign)
-    return campaign_detail_out(db, campaign, user)
+    return respond(campaign_detail_out(db, campaign, user), 201)
 
 
-@router.get("/campaigns/{slug}", response_model=CampaignDetail)
-def campaign_detail(slug: str, db: Session = Depends(get_db),
-                    user: User | None = Depends(get_current_user)):
+@bp.get("/campaigns/<slug>")
+def campaign_detail(slug: str):
+    db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
     if not can_see_campaign(db, campaign, user):
         raise HTTPException(404, "Campaign not found")
-    return campaign_detail_out(db, campaign, user)
+    return respond(campaign_detail_out(db, campaign, user))
 
 
 # Transitions organizers may perform themselves; admins may do anything.
@@ -196,10 +192,10 @@ ORGANIZER_TRANSITIONS = {
 }
 
 
-@router.put("/campaigns/{slug}", response_model=CampaignDetail)
-def update_campaign(slug: str, payload: CampaignIn,
-                    db: Session = Depends(get_db),
-                    user: User = Depends(require_user)):
+@bp.put("/campaigns/<slug>")
+def update_campaign(slug: str):
+    db, user = get_db(), require_user()
+    payload = parse(CampaignIn)
     campaign = get_campaign_or_404(db, slug)
     require_organizer(db, campaign, user)
     overrides = _validated_settings(payload)
@@ -223,12 +219,12 @@ def update_campaign(slug: str, payload: CampaignIn,
     audit(db, user, "update", "campaign", campaign.id, {"slug": campaign.slug})
     db.commit()
     db.refresh(campaign)
-    return campaign_detail_out(db, campaign, user)
+    return respond(campaign_detail_out(db, campaign, user))
 
 
-@router.delete("/campaigns/{slug}", status_code=204)
-def delete_campaign(slug: str, db: Session = Depends(get_db),
-                    user: User = Depends(require_user)):
+@bp.delete("/campaigns/<slug>")
+def delete_campaign(slug: str):
+    db, user = get_db(), require_user()
     campaign = get_campaign_or_404(db, slug)
     if not user.is_admin:
         require_organizer(db, campaign, user)
@@ -239,12 +235,13 @@ def delete_campaign(slug: str, db: Session = Depends(get_db),
           {"slug": campaign.slug, "name": campaign.name})
     db.delete(campaign)
     db.commit()
+    return respond(None, 204)
 
 
-@router.post("/campaigns/{slug}/join", response_model=CampaignDetail)
-def join_campaign(slug: str, db: Session = Depends(get_db),
-                  user: User = Depends(require_user)):
+@bp.post("/campaigns/<slug>/join")
+def join_campaign(slug: str):
     """Join as a participant — works the same in jury and self modes."""
+    db, user = get_db(), require_user()
     campaign = get_campaign_or_404(db, slug)
     if campaign.status != CampaignStatus.active:
         raise HTTPException(400, "This campaign is not open for participation")
@@ -259,20 +256,20 @@ def join_campaign(slug: str, db: Session = Depends(get_db),
         audit(db, user, "join", "campaign", campaign.id, {"slug": slug})
         db.commit()
         db.refresh(campaign)
-    return campaign_detail_out(db, campaign, user)
+    return respond(campaign_detail_out(db, campaign, user))
 
 
-@router.get("/campaigns/{slug}/approval-rights")
-def approval_rights(slug: str, db: Session = Depends(get_db),
-                    user: User | None = Depends(get_current_user)):
+@bp.get("/campaigns/<slug>/approval-rights")
+def approval_rights(slug: str):
     """Whether the current user may approve this campaign, and why (not)."""
+    db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
     if user is None:
-        return {"can_approve": False, "reason": "not_logged_in"}
+        return respond({"can_approve": False, "reason": "not_logged_in"})
     allowed, reason = wiki_rights.can_approve_campaign(user, campaign)
-    return {"can_approve": allowed, "reason": reason,
-            "wiki_domain": campaign.wiki_domain,
-            "scoring_mode": campaign.scoring_mode.value}
+    return respond({"can_approve": allowed, "reason": reason,
+                    "wiki_domain": campaign.wiki_domain,
+                    "scoring_mode": campaign.scoring_mode.value})
 
 
 def _require_approval_rights(campaign: Campaign, user: User) -> str:
@@ -286,9 +283,9 @@ def _require_approval_rights(campaign: Campaign, user: User) -> str:
     return reason
 
 
-@router.post("/campaigns/{slug}/approve", response_model=CampaignDetail)
-def approve_campaign(slug: str, db: Session = Depends(get_db),
-                     user: User = Depends(require_user)):
+@bp.post("/campaigns/<slug>/approve")
+def approve_campaign(slug: str):
+    db, user = get_db(), require_user()
     campaign = get_campaign_or_404(db, slug)
     reason = _require_approval_rights(campaign, user)
     if campaign.status not in (CampaignStatus.draft, CampaignStatus.rejected):
@@ -298,40 +295,38 @@ def approve_campaign(slug: str, db: Session = Depends(get_db),
           {"slug": slug, "approved_by_right": reason})
     db.commit()
     db.refresh(campaign)
-    return campaign_detail_out(db, campaign, user)
+    return respond(campaign_detail_out(db, campaign, user))
 
 
-@router.post("/campaigns/{slug}/reject", response_model=CampaignDetail)
-def reject_campaign(slug: str, payload: dict | None = None,
-                    db: Session = Depends(get_db),
-                    user: User = Depends(require_user)):
+@bp.post("/campaigns/<slug>/reject")
+def reject_campaign(slug: str):
+    db, user = get_db(), require_user()
     campaign = get_campaign_or_404(db, slug)
     _require_approval_rights(campaign, user)
-    reason = (payload or {}).get("reason", "")
+    reason = (request.get_json(silent=True) or {}).get("reason", "")
     campaign.status = CampaignStatus.rejected
     audit(db, user, "reject", "campaign", campaign.id,
           {"slug": slug, "reason": reason})
     db.commit()
     db.refresh(campaign)
-    return campaign_detail_out(db, campaign, user)
+    return respond(campaign_detail_out(db, campaign, user))
 
 
-@router.get("/campaigns/{slug}/leaderboard",
-            response_model=list[LeaderboardRow])
-def leaderboard(slug: str, db: Session = Depends(get_db),
-                user: User | None = Depends(get_current_user)):
+@bp.get("/campaigns/<slug>/leaderboard")
+def leaderboard(slug: str):
+    db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
     if not campaign.effective_settings.get("show_leaderboard", True):
         allowed = user and (user.is_admin or campaign_roles(db, campaign, user)
                             & {MemberRole.organizer, MemberRole.jury})
         if not allowed:
             raise HTTPException(403, "The leaderboard is not public")
-    return compute_leaderboard(db, campaign)
+    return respond(compute_leaderboard(db, campaign))
 
 
-@router.get("/campaigns/{slug}/stats", response_model=CampaignStats)
-def campaign_stats(slug: str, db: Session = Depends(get_db),
-                   user: User | None = Depends(get_current_user)):
+@bp.get("/campaigns/<slug>/stats")
+def campaign_stats(slug: str):
+    db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
     if not can_see_campaign(db, campaign, user):
         raise HTTPException(404, "Campaign not found")
@@ -354,7 +349,7 @@ def campaign_stats(slug: str, db: Session = Depends(get_db),
                                    campaign.scoring_mode, settings)
             total_points = round(total_points + bd.total, 2)
 
-    return CampaignStats(
+    return respond(CampaignStats(
         submissions=len(subs),
         participants=len({s.user_id for s in subs}),
         reviews=reviews,
@@ -369,4 +364,4 @@ def campaign_stats(slug: str, db: Session = Depends(get_db),
         timeline=[{"date": d, "submissions": n}
                   for d, n in sorted(timeline.items())],
         top_contributors=compute_leaderboard(db, campaign)[:10],
-    )
+    ))

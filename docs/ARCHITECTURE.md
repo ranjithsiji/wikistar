@@ -7,8 +7,8 @@ branch.
 
 | Layer     | Technology |
 |-----------|------------|
-| Backend   | FastAPI + SQLAlchemy 2.0 (Python 3.12, managed with `uv`) |
-| Database  | MariaDB/MySQL (SQLite for local dev/tests) |
+| Backend   | Flask + SQLAlchemy 2.0 (Python 3.12, managed with `uv`) |
+| Database  | MariaDB/MySQL (local server in dev; ToolsDB on Toolforge; tests use a dedicated `wikistar_test` database) |
 | Auth      | MediaWiki OAuth 2.0 via Authlib (Starlette client), signed session cookie |
 | Frontend  | Vue 3 + Vite + Pinia + Tailwind CSS 4 |
 
@@ -175,8 +175,8 @@ documentation (4,100-byte translation → 4 pts; 3,900 bytes + improvement
 
 Python files live at the repository root because Toolforge's classic
 python webservice serves directly from `~/www/python/src` and expects
-`app.py` there. `app.py` exposes both the ASGI app (`app`, for
-uvicorn/build service) and a WSGI adapter (`application`, for uwsgi).
+`app.py` there. `app.py` exposes the Flask WSGI app as `app` (uwsgi's
+default callable name), with `application` as an alias.
 
 ```
 app.py         entry point: app assembly, session middleware, SPA serving
