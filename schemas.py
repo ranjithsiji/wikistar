@@ -65,6 +65,7 @@ class CampaignIn(BaseModel):
     settings: dict = {}  # validated against settings_registry
     rules: list[RuleIn] = []
     jury_usernames: list[str] = []
+    coordinator_usernames: list[str] = []  # extra organizers; creator always stays
     suggested_articles: list[str] = []
     suggested_items: list[str] = []
 

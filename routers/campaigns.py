@@ -108,6 +108,29 @@ def _replace_jury(db: Session, campaign: Campaign, usernames: list[str],
                               role=MemberRole.jury, added_by=acting.id))
 
 
+def _replace_coordinators(db: Session, campaign: Campaign,
+                          usernames: list[str], acting: User) -> None:
+    """Sync the organizer role to the given usernames. The campaign's
+    creator always keeps the role."""
+    db.flush()
+    wanted = {u.strip() for u in usernames if u.strip()}
+    creator = db.get(User, campaign.created_by) if campaign.created_by else None
+    if creator is not None:
+        wanted.add(creator.username)
+    current = {
+        m.user.username: m
+        for m in db.query(CampaignMember)
+        .filter_by(campaign_id=campaign.id, role=MemberRole.organizer).all()
+    }
+    for username, member in current.items():
+        if username not in wanted:
+            db.delete(member)
+    for username in wanted - set(current):
+        member_user = get_or_create_user(db, username)
+        db.add(CampaignMember(campaign_id=campaign.id, user_id=member_user.id,
+                              role=MemberRole.organizer, added_by=acting.id))
+
+
 def _replace_suggested(campaign: Campaign, payload: CampaignIn) -> None:
     campaign.suggested_pages = (
         [SuggestedPage(kind=SubmissionKind.article, title=t.strip())
@@ -165,6 +188,7 @@ def create_campaign():
     campaign.set_settings(overrides)
     db.add(CampaignMember(campaign_id=campaign.id, user_id=user.id,
                           role=MemberRole.organizer, added_by=user.id))
+    _replace_coordinators(db, campaign, payload.coordinator_usernames, user)
     _replace_jury(db, campaign, payload.jury_usernames, user)
     _replace_suggested(campaign, payload)
     _replace_rules(db, campaign, payload)
@@ -214,6 +238,7 @@ def update_campaign(slug: str):
 
     _apply_scalar_fields(campaign, payload)
     campaign.set_settings(overrides)
+    _replace_coordinators(db, campaign, payload.coordinator_usernames, user)
     _replace_jury(db, campaign, payload.jury_usernames, user)
     _replace_suggested(campaign, payload)
     _replace_rules(db, campaign, payload)

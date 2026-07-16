@@ -476,6 +476,26 @@ def test_min_bytes_and_commons_depicts(client):
     assert "500 bytes" in r.json["detail"]
 
 
+def test_coordinators(client):
+    login("Alice")
+    r = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Coordinated Contest",
+        coordinator_usernames=["CoordCathy"]))
+    assert r.status_code == 201, r.text
+    slug = r.json["slug"]
+    organizers = {m["user"]["username"] for m in r.json["members"]
+                  if m["role"] == "organizer"}
+    assert organizers == {"Alice", "CoordCathy"}
+
+    # clearing the list keeps the creator as coordinator
+    r = client.put(f"/api/campaigns/{slug}", json=make_campaign_payload(
+        client, name="Coordinated Contest", coordinator_usernames=[]))
+    assert r.status_code == 200, r.text
+    organizers = {m["user"]["username"] for m in r.json["members"]
+                  if m["role"] == "organizer"}
+    assert organizers == {"Alice"}
+
+
 def test_member_management_and_admin_campaigns(client):
     login("Alice")
     r = client.post("/api/campaigns", json=make_campaign_payload(

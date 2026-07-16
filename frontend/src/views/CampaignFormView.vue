@@ -29,6 +29,7 @@ const form = reactive({
   suggested_articles: [], suggested_items: []
 })
 const juryUsers = ref([])
+const coordinatorUsers = ref([])
 const suggestedArticlesText = ref('')
 const suggestedItemsText = ref('')
 
@@ -106,6 +107,8 @@ onMounted(async () => {
       })
       juryUsers.value = c.members.filter(m => m.role === 'jury')
         .map(m => m.user.username)
+      coordinatorUsers.value = c.members.filter(m => m.role === 'organizer')
+        .map(m => m.user.username)
       suggestedArticlesText.value = c.suggested_articles.join('\n')
       suggestedItemsText.value = c.suggested_items.join('\n')
     }
@@ -126,6 +129,7 @@ async function save () {
     slug: form.slug || null,
     wiki_domain: form.wiki_domain || null,
     jury_usernames: [...juryUsers.value],
+    coordinator_usernames: [...coordinatorUsers.value],
     suggested_articles: splitLines(suggestedArticlesText.value),
     suggested_items: splitLines(suggestedItemsText.value)
   }
@@ -293,14 +297,25 @@ async function save () {
                             :categories="['jury']" />
           </div>
 
-          <div v-show="section === 'jury'" class="card p-4 max-w-2xl">
-            <label class="label">Jury members</label>
-            <UserPicker v-model="juryUsers" :wiki="juryWiki" />
-            <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
-              Start typing to search Wikimedia accounts, then press Enter or
-              Add. Jurors review submissions with the marks form from the
-              Marks tab; they can be managed later from the campaign page.
-            </p>
+          <div v-show="section === 'jury'" class="space-y-4 max-w-2xl">
+            <div class="card p-4">
+              <label class="label">Jury members</label>
+              <UserPicker v-model="juryUsers" :wiki="juryWiki" />
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
+                Start typing to search Wikimedia accounts, then press Enter or
+                Add. Jurors review submissions with the marks form from the
+                Marks tab; they can be managed later from the campaign page.
+              </p>
+            </div>
+            <div class="card p-4">
+              <label class="label">Coordinators</label>
+              <UserPicker v-model="coordinatorUsers" :wiki="juryWiki" />
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
+                Coordinators (organizers) manage the campaign, moderate
+                submissions and have the final say. The campaign creator is
+                always a coordinator.
+              </p>
+            </div>
           </div>
 
           <div v-show="section === 'display'">
@@ -338,6 +353,15 @@ async function save () {
           </div>
 
           <div v-show="section === 'verification'" class="space-y-4">
+            <div class="card p-4">
+              <label class="label">Coordinators</label>
+              <UserPicker v-model="coordinatorUsers" :wiki="juryWiki" />
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-3">
+                Coordinators (organizers) verify the participants' claims,
+                moderate submissions and announce the winners. The campaign
+                creator is always a coordinator.
+              </p>
+            </div>
             <div class="card p-4">
               <div class="flex items-center gap-4">
                 <div class="flex-1">
