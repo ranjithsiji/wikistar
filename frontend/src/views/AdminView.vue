@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import api, { errorMessage } from '../api'
 import { useAuthStore } from '../store'
 
@@ -19,6 +19,11 @@ const stats = ref(null)
 
 // ---- editathons ------------------------------------------------------------
 const campaigns = ref([])
+const statusFilter = ref('all')
+const shownCampaigns = computed(() =>
+  statusFilter.value === 'all'
+    ? campaigns.value
+    : campaigns.value.filter(c => c.status === statusFilter.value))
 const expanded = ref(null)          // slug of the expanded campaign row
 const detail = ref(null)            // campaign detail (members) of expanded row
 const articles = ref(null)          // submissions of expanded row
@@ -46,7 +51,27 @@ const filteredUsers = computed(() => {
 })
 
 // ---- activity --------------------------------------------------------------
-const logs = ref({ total: 0, logs: [] })
+const logs = ref({ total: 0, logs: [], actions: [] })
+const logAction = ref('')
+const logUser = ref('')
+let logTimer = null
+
+const logParams = () => ({
+  limit: 100,
+  ...(logAction.value ? { action: logAction.value } : {}),
+  ...(logUser.value.trim() ? { username: logUser.value.trim() } : {})
+})
+
+async function reloadLogs () {
+  try {
+    logs.value = (await api.adminLogs(logParams())).data
+  } catch (e) { error.value = errorMessage(e) }
+}
+watch(logAction, reloadLogs)
+watch(logUser, () => {
+  clearTimeout(logTimer)
+  logTimer = setTimeout(reloadLogs, 300)
+})
 
 async function load () {
   error.value = ''
@@ -66,8 +91,9 @@ onMounted(load)
 
 async function loadMoreLogs () {
   try {
-    const { data } = await api.adminLogs({ limit: 100, offset: logs.value.logs.length })
-    logs.value = { total: data.total, logs: [...logs.value.logs, ...data.logs] }
+    const { data } = await api.adminLogs(
+      { ...logParams(), offset: logs.value.logs.length })
+    logs.value = { ...data, logs: [...logs.value.logs, ...data.logs] }
   } catch (e) { error.value = errorMessage(e) }
 }
 
@@ -135,10 +161,50 @@ async function removeCampaign (c) {
     await refreshCampaigns()
   })
 }
+async function deactivate (c) {
+  if (!confirm(`Deactivate "${c.name}"? It goes back to draft and is hidden until approved again.`)) return
+  await run(async () => { await api.deactivateCampaign(c.slug); await refreshCampaigns() })
+}
 async function refreshCampaigns () {
   campaigns.value = (await api.adminCampaigns()).data
   const { data } = await api.adminStats()
   stats.value = data
+}
+
+// ---- submitted articles: admin repairs -------------------------------------
+async function reloadArticles () {
+  articles.value = (await api.listSubmissions(expanded.value)).data
+}
+async function renameArticle (s) {
+  const title = prompt('New title for this submission:', s.title)
+  if (title === null || !title.trim() || title.trim() === s.title) return
+  await run(async () => {
+    await api.adminEditSubmission(s.id, { title: title.trim() })
+    await reloadArticles()
+  })
+}
+async function moderateArticle (s, status) {
+  await run(async () => {
+    await api.moderateSubmission(s.id, { status })
+    await reloadArticles()
+  })
+}
+async function overrideArticle (s) {
+  const v = prompt('Final points (empty to clear the override):',
+                   s.points_override ?? '')
+  if (v === null) return
+  const payload = v === '' ? { clear_override: true } : { points_override: Number(v) }
+  await run(async () => {
+    await api.moderateSubmission(s.id, payload)
+    await reloadArticles()
+  })
+}
+async function deleteArticle (s) {
+  if (!confirm(`Delete the submission "${s.title}" by ${s.user.username}?`)) return
+  await run(async () => {
+    await api.deleteSubmission(s.id)
+    await reloadArticles()
+  })
 }
 </script>
 
@@ -160,11 +226,14 @@ async function refreshCampaigns () {
 
     <!-- =========================== Dashboard =========================== -->
     <div v-if="tab === 'dashboard'">
-      <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
         <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.users }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Users</div></div>
         <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Editathons</div></div>
+        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.active_campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Active</div></div>
         <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.pending_campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Pending approval</div></div>
         <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.submissions }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Submissions</div></div>
+        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.reviews }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Reviews</div></div>
+        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.claims }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Claims</div></div>
       </div>
 
       <h2 class="font-semibold mb-2">Editathons awaiting approval</h2>
@@ -180,11 +249,31 @@ async function refreshCampaigns () {
         <button class="btn" :disabled="busy" @click="reject(c)">Reject</button>
         <button class="btn-primary" :disabled="busy" @click="approve(c)">Approve</button>
       </div>
+
+      <h2 class="font-semibold mb-2 mt-6">Latest activity</h2>
+      <div class="card overflow-x-auto">
+        <table class="w-full">
+          <tbody>
+            <tr v-for="l in logs.logs.slice(0, 10)" :key="l.id"
+                class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+              <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ new Date(l.created_at).toLocaleString() }}</td>
+              <td class="td">{{ l.username }}</td>
+              <td class="td">{{ l.action }}</td>
+              <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ l.entity_type }} {{ l.details?.title || l.details?.username || l.details?.slug || l.entity_id || '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- =========================== Editathons ========================== -->
     <div v-if="tab === 'campaigns'" class="space-y-2">
-      <div v-for="c in campaigns" :key="c.id" class="card">
+      <div class="flex gap-1 mb-1">
+        <button v-for="f in ['all', 'draft', 'active', 'finished', 'archived', 'rejected']"
+                :key="f" class="tab !py-1" :class="{ 'tab-active': statusFilter === f }"
+                @click="statusFilter = f">{{ f }}</button>
+      </div>
+      <div v-for="c in shownCampaigns" :key="c.id" class="card">
         <div class="p-3 flex items-center gap-3 flex-wrap">
           <button class="btn !px-2 !py-0.5 text-xs" @click="toggleExpand(c)">
             {{ expanded === c.slug ? '▾' : '▸' }}
@@ -204,6 +293,8 @@ async function refreshCampaigns () {
                   :disabled="busy" @click="approve(c)">Approve</button>
           <button v-if="c.status === 'draft'" class="btn !py-0.5 text-xs"
                   :disabled="busy" @click="reject(c)">Reject</button>
+          <button v-if="c.status === 'active'" class="btn !py-0.5 text-xs"
+                  :disabled="busy" @click="deactivate(c)">Deactivate</button>
           <button class="btn-danger !py-0.5 text-xs" :disabled="busy" @click="removeCampaign(c)">Delete</button>
         </div>
 
@@ -257,6 +348,7 @@ async function refreshCampaigns () {
                   <tr class="border-b border-neutral-200 dark:border-neutral-800">
                     <th class="th">Title</th><th class="th">User</th><th class="th">Kind</th>
                     <th class="th">Status</th><th class="th text-right">Points</th><th class="th">Submitted</th>
+                    <th class="th text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -268,10 +360,27 @@ async function refreshCampaigns () {
                     </td>
                     <td class="td">{{ s.user.username }}</td>
                     <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ s.kind }}</td>
-                    <td class="td text-xs">{{ s.status }}</td>
+                    <td class="td text-xs">
+                      {{ s.status }}
+                      <span v-if="s.points_override != null"
+                            class="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                            title="Points manually overridden">override</span>
+                    </td>
                     <td class="td text-right tabular-nums">{{ s.points }}</td>
                     <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">
                       {{ new Date(s.submitted_at).toLocaleDateString() }}
+                    </td>
+                    <td class="td text-right whitespace-nowrap space-x-1">
+                      <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
+                              title="Rename the submitted page" @click="renameArticle(s)">Rename</button>
+                      <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
+                              @click="moderateArticle(s, 'accepted')">Accept</button>
+                      <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
+                              @click="moderateArticle(s, 'rejected')">Reject</button>
+                      <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
+                              title="Set or clear a manual points override" @click="overrideArticle(s)">Points</button>
+                      <button class="btn-danger !py-0.5 !px-2 text-xs" :disabled="busy"
+                              @click="deleteArticle(s)">Delete</button>
                     </td>
                   </tr>
                 </tbody>
@@ -290,15 +399,24 @@ async function refreshCampaigns () {
           <thead>
             <tr class="border-b border-neutral-200 dark:border-neutral-800">
               <th class="th">Username</th><th class="th">Registered</th>
-              <th class="th">Last login</th><th class="th">Site admin</th>
+              <th class="th">Last login</th>
+              <th class="th text-right">Submissions</th>
+              <th class="th text-right">Campaigns</th>
+              <th class="th">Site admin</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="u in filteredUsers" :key="u.id"
                 class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-              <td class="td">{{ u.username }}</td>
+              <td class="td">
+                <a :href="`https://meta.wikimedia.org/wiki/User:${u.username.replaceAll(' ', '_')}`"
+                   target="_blank" rel="noopener"
+                   class="text-blue-700 dark:text-blue-400 hover:underline">{{ u.username }}</a>
+              </td>
               <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ new Date(u.registered_at).toLocaleDateString() }}</td>
               <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—' }}</td>
+              <td class="td text-right tabular-nums">{{ u.submission_count }}</td>
+              <td class="td text-right tabular-nums">{{ u.campaigns_created }}</td>
               <td class="td">
                 <button class="btn !py-0.5 !px-2 text-xs" :disabled="u.id === auth.user?.id"
                         @click="toggleAdmin(u)">
@@ -313,6 +431,16 @@ async function refreshCampaigns () {
 
     <!-- =========================== Activity ============================ -->
     <div v-if="tab === 'activity'">
+      <div class="flex flex-wrap gap-2 mb-3">
+        <select v-model="logAction" class="input !w-48">
+          <option value="">All actions</option>
+          <option v-for="a in logs.actions" :key="a" :value="a">{{ a }}</option>
+        </select>
+        <input v-model="logUser" class="input !w-56" placeholder="Filter by username…" />
+        <span class="self-center text-xs text-neutral-600 dark:text-neutral-300">
+          {{ logs.total }} entries
+        </span>
+      </div>
       <div class="card overflow-x-auto">
         <table class="w-full">
           <thead>

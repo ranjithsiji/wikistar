@@ -69,5 +69,6 @@ export default {
   adminCampaigns: () => http.get('/api/admin/campaigns'),
   adminLogs: (params) => http.get('/api/admin/logs', { params }),
   adminUsers: () => http.get('/api/admin/users'),
-  setAdmin: (userId, isAdmin) => http.post(`/api/admin/users/${userId}/set-admin?is_admin=${isAdmin}`)
+  setAdmin: (userId, isAdmin) => http.post(`/api/admin/users/${userId}/set-admin?is_admin=${isAdmin}`),
+  adminEditSubmission: (id, data) => http.put(`/api/admin/submissions/${id}`, data)
 }

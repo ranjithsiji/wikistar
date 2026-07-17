@@ -933,3 +933,58 @@ def test_template_written_on_submission(client, monkeypatch):
         client, name="Bad Placement",
         settings={"template_placement": "sidebar"}))
     assert r.status_code == 400
+
+
+def test_admin_panel_controls(client):
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Admin Panel Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Stub", "kind": "article"}).json
+
+    # non-admins never reach the panel
+    assert client.get("/api/admin/stats").status_code == 403
+    assert client.put(f"/api/admin/submissions/{sub['id']}",
+                      json={"title": "X"}).status_code == 403
+
+    login("Root", is_admin=True)
+    stats = client.get("/api/admin/stats").json
+    assert {"users", "campaigns", "active_campaigns", "pending_campaigns",
+            "submissions", "reviews", "claims"} <= set(stats)
+
+    # user list carries activity counts
+    dana = next(u for u in client.get("/api/admin/users").json
+                if u["username"] == "Dana")
+    assert dana["submission_count"] >= 1
+    alice = next(u for u in client.get("/api/admin/users").json
+                 if u["username"] == "Alice")
+    assert alice["campaigns_created"] >= 1
+
+    # rename a submitted article: metadata refetched for the new title
+    r = client.put(f"/api/admin/submissions/{sub['id']}",
+                   json={"title": "Kathakali"})
+    assert r.status_code == 200, r.text
+    assert r.json["title"] == "Kathakali"
+    assert r.json["bytes_added"] == 5000  # fake metadata for Kathakali
+    assert client.put(f"/api/admin/submissions/{sub['id']}",
+                      json={"title": ""}).status_code == 400
+
+    # renaming onto an existing submission of the same user is refused
+    login("Dana")
+    client.post(f"/api/campaigns/{slug}/submissions",
+                json={"title": "Theyyam", "kind": "article"})
+    login("Root", is_admin=True)
+    assert client.put(f"/api/admin/submissions/{sub['id']}",
+                      json={"title": "Theyyam"}).status_code == 409
+
+    # activity log filters by action and username
+    data = client.get("/api/admin/logs?action=edit_submission").json
+    assert data["total"] >= 1
+    assert all(l["action"] == "edit_submission" for l in data["logs"])
+    assert "edit_submission" in data["actions"]
+    data = client.get("/api/admin/logs?username=Root&action=set_admin").json
+    assert all(l["username"] == "Root" for l in data["logs"])
