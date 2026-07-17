@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 import { useAuthStore } from '../store'
@@ -15,10 +15,11 @@ const themeTitles = {
   system: 'Theme: system — click for light',
 }
 
-const navLinks = [
+const navLinks = computed(() => [
   { to: '/contests', label: 'Contests' },
   { to: '/about', label: 'About' },
-]
+  ...(auth.isAdmin ? [{ to: '/admin', label: 'Admin' }] : []),
+])
 
 const menuOpen = ref(false)
 const menuRoot = ref(null)

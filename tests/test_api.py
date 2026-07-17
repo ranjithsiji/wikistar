@@ -988,3 +988,21 @@ def test_admin_panel_controls(client):
     assert "edit_submission" in data["actions"]
     data = client.get("/api/admin/logs?username=Root&action=set_admin").json
     assert all(l["username"] == "Root" for l in data["logs"])
+
+
+def test_admin_flag_survives_login(client):
+    from auth import upsert_user
+    from db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        # the first admin is flagged directly in the database; a later
+        # OAuth login must not reset the flag
+        user = upsert_user(db, {"username": "DbAdmin", "sub": 90001})
+        assert user.is_admin is False
+        user.is_admin = True
+        db.commit()
+        user = upsert_user(db, {"username": "DbAdmin", "sub": 90001})
+        assert user.is_admin is True
+    finally:
+        db.close()
