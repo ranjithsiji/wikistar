@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { CdxTextInput, CdxSelect } from '@wikimedia/codex'
 import ToggleSwitch from './ToggleSwitch.vue'
 
 // Registry-driven settings form. v-model: {key: value} of ALL settings
@@ -72,12 +73,14 @@ const groups = computed(() => {
             </div>
           </div>
           <ToggleSwitch v-if="item.type === 'bool'" v-model="values[item.key]" />
-          <input v-else-if="item.type === 'int'" type="number"
-                 v-model.number="values[item.key]" class="input !w-24 text-right" />
-          <select v-else-if="item.choices" v-model="values[item.key]" class="input !w-52">
-            <option v-for="c in item.choices" :key="c" :value="c">{{ c }}</option>
-          </select>
-          <input v-else type="text" v-model="values[item.key]" class="input !w-52" />
+          <cdx-text-input v-else-if="item.type === 'int'" input-type="number"
+                          class="!w-24" :model-value="values[item.key]"
+                          @update:model-value="values[item.key] = Number($event)" />
+          <cdx-select v-else-if="item.choices" class="!w-52"
+                      :menu-items="item.choices.map(c => ({ value: c, label: c }))"
+                      :selected="values[item.key]"
+                      @update:selected="values[item.key] = $event" />
+          <cdx-text-input v-else class="!w-52" v-model="values[item.key]" />
         </div>
       </div>
     </section>

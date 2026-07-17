@@ -10,7 +10,7 @@ branch.
 | Backend   | Flask + SQLAlchemy 2.0 (Python 3.12, managed with `uv`) |
 | Database  | MariaDB/MySQL (local server in dev; ToolsDB on Toolforge; tests use a dedicated `wikistar_test` database) |
 | Auth      | MediaWiki OAuth 2.0 via Authlib (Starlette client), signed session cookie |
-| Frontend  | Vue 3 + Vite + Pinia + Tailwind CSS 4 |
+| Frontend  | Vue 3 + Vite + Pinia + Tailwind CSS 4 + Wikimedia Codex (design tokens & components) |
 
 ## Design principles (fixes for v1's flaws)
 
@@ -201,6 +201,38 @@ routers/
   admin.py        stats, audit log, user admin
   common.py       serializers, leaderboard, audit helper
 ```
+
+## Design system (Codex)
+
+The UI uses the **Wikimedia Codex** design system for colours and,
+incrementally, components.
+
+- **Tokens & palette.** `src/main.js` imports the Codex design tokens
+  (`@wikimedia/codex-design-tokens`) and component styles
+  (`@wikimedia/codex`). `src/assets/styles.css` then remaps Tailwind's
+  `blue` / `red` / `green` / `neutral` / `amber` / `yellow` / `violet`
+  scales to the Codex "wikimedia-ui" palette via `@theme`, so every
+  existing utility class (`blue-600`, `neutral-200`, …) already renders
+  in Wikimedia colours — no per-component rewrite was needed. The
+  signature progressive blue is `#36c`.
+- **Dark mode.** Codex ships light tokens on `:root` and dark mode as a
+  Less mixin. `src/assets/codex-dark.css` is that mixin's values scoped
+  to the `.dark` class that `theme.js` toggles; regenerate it (don't
+  hand-edit) after a Codex upgrade from
+  `theme-wikimedia-ui-mixin-dark.less`. Codex components and our own
+  Tailwind UI therefore follow the same theme switch.
+- **Components.** Codex Vue 3 components are tree-shakable — import per
+  use (`import { CdxTable } from '@wikimedia/codex'`). Adopted so far:
+  `CdxMessage` (login banner), `CdxTable` (the sortable participant-
+  details popup and the leaderboard), `CdxTextInput` / `CdxTextArea` /
+  `CdxSelect` (campaign-form General step and the settings editor's
+  choice/number/text fields), and `CdxDialog` (the participant-details
+  modal). `CdxDialog` teleports to `<body>`, so width/style overrides on
+  it must be **unscoped** and target its own class. Remaining bespoke
+  widgets (`LanguageSelect`, `RuleEditor`, `MarksEditor`, `UserPicker`,
+  `ToggleSwitch`) stay as-is — they are already on-palette; convert them
+  to `CdxLookup`/`CdxChipInput`/`CdxToggleSwitch` only if a real need
+  arises. The `.btn`/`.input`/`.card` utility classes remain valid.
 
 ## Approval model (Fountain)
 

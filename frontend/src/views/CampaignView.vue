@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { CdxTable } from '@wikimedia/codex'
 import api, { errorMessage } from '../api'
 import { useAuthStore } from '../store'
 import ClaimEditor from '../components/ClaimEditor.vue'
@@ -18,6 +19,31 @@ const auth = useAuthStore()
 const campaign = ref(null)
 const submissions = ref([])
 const leaderboard = ref([])
+const lbColumns = [
+  { id: 'rank', label: '#', textAlign: 'number' },
+  { id: 'username', label: 'Participant', allowSort: true },
+  { id: 'submission_count', label: 'Submissions', textAlign: 'number', allowSort: true },
+  { id: 'points', label: 'Points', textAlign: 'number', allowSort: true }
+]
+const lbSort = ref({})
+const lbRows = computed(() => {
+  const rows = leaderboard.value.map(r => ({
+    rank: r.rank, username: r.user.username,
+    submission_count: r.submission_count, points: r.points, user: r.user
+  }))
+  const [key, dir] = Object.entries(lbSort.value)[0] || []
+  if (!key) return rows  // server order (ranked) when no explicit sort
+  const mul = dir === 'asc' ? 1 : -1
+  return rows.sort((a, b) => {
+    const va = key === 'username' ? a.username.toLowerCase() : a[key]
+    const vb = key === 'username' ? b.username.toLowerCase() : b[key]
+    return (va < vb ? -1 : va > vb ? 1 : 0) * mul
+  })
+})
+function onLbSort (newSort) {
+  const active = Object.entries(newSort).find(([, dir]) => dir !== 'none')
+  lbSort.value = active ? { [active[0]]: active[1] } : {}
+}
 const stats = ref(null)
 const detailsUser = ref(null)   // leaderboard row whose popup is open
 const error = ref('')
@@ -726,28 +752,18 @@ function ruleLabel (id) {
     <!-- LEADERBOARD -->
     <div v-if="tab === 'leaderboard'">
       <p v-if="!leaderboard.length" class="text-neutral-600 dark:text-neutral-300">No points yet.</p>
-      <div v-else class="card overflow-x-auto">
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-neutral-200 dark:border-neutral-800">
-              <th class="th">#</th><th class="th">Participant</th>
-              <th class="th text-right">Submissions</th><th class="th text-right">Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in leaderboard" :key="row.user.id"
-                class="border-b border-neutral-100 dark:border-neutral-800 last:border-0
-                       cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
-                title="Show this participant's submissions"
-                @click="detailsUser = row.user">
-              <td class="td tabular-nums">{{ row.rank }}</td>
-              <td class="td font-medium text-blue-700 dark:text-blue-400">{{ row.user.username }}</td>
-              <td class="td text-right tabular-nums">{{ row.submission_count }}</td>
-              <td class="td text-right tabular-nums font-semibold">{{ row.points }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <cdx-table v-else caption="Leaderboard" :hide-caption="true"
+                 :columns="lbColumns" :data="lbRows"
+                 :sort="lbSort" @update:sort="onLbSort">
+        <template #item-username="{ item, row }">
+          <button type="button" title="Show this participant's submissions"
+                  class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
+                  @click="detailsUser = row.user">{{ item }}</button>
+        </template>
+        <template #item-points="{ item }">
+          <span class="tabular-nums font-semibold">{{ item }}</span>
+        </template>
+      </cdx-table>
     </div>
 
     <!-- STATISTICS -->

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { CdxTextInput, CdxTextArea } from '@wikimedia/codex'
 import api, { errorMessage } from '../api'
 import LanguageSelect from '../components/LanguageSelect.vue'
 import MarksEditor from '../components/MarksEditor.vue'
@@ -331,12 +332,12 @@ async function save () {
         <div v-show="section === 'general'" class="card p-4 grid gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2">
             <label class="label">Name *</label>
-            <input v-model="form.name" class="input" required minlength="3" />
+            <cdx-text-input v-model="form.name" required minlength="3" />
           </div>
           <div>
             <label class="label">URL slug</label>
-            <input v-model="form.slug" class="input" pattern="[a-z0-9][a-z0-9_-]*"
-                   placeholder="auto-generated from name" />
+            <cdx-text-input v-model="form.slug" pattern="[a-z0-9][a-z0-9_-]*"
+                            placeholder="auto-generated from name" />
             <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
               wikistar.toolforge.org/campaigns/{{ form.slug || '…' }}
             </p>
@@ -344,11 +345,11 @@ async function save () {
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="label">Start date *</label>
-              <input v-model="form.start_date" type="date" class="input" required />
+              <cdx-text-input v-model="form.start_date" input-type="date" required />
             </div>
             <div>
               <label class="label">End date *</label>
-              <input v-model="form.end_date" type="date" class="input" required />
+              <cdx-text-input v-model="form.end_date" input-type="date" required />
             </div>
           </div>
           <div>
@@ -361,16 +362,16 @@ async function save () {
           </div>
           <div>
             <label class="label">Wiki domain</label>
-            <input v-model="form.wiki_domain" class="input"
-                   :placeholder="`${form.language || 'en'}.wikipedia.org`" />
+            <cdx-text-input v-model="form.wiki_domain"
+                            :placeholder="`${form.language || 'en'}.wikipedia.org`" />
             <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
               Leave empty for {{ form.language || 'en' }}.wikipedia.org.
             </p>
           </div>
           <div class="sm:col-span-2">
             <label class="label">Description</label>
-            <textarea v-model="form.description" class="input" rows="4"
-                      placeholder="Goals, rules and prizes of the campaign"></textarea>
+            <cdx-text-area v-model="form.description" :rows="4"
+                           placeholder="Goals, rules and prizes of the campaign" />
           </div>
         </div>
 
