@@ -11,7 +11,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from auth import oauth
 from config import ROOT_DIR, settings
-from db import Base, db_session, engine
+from db import Base, db_session, engine, sync_schema
 from routers import (admin, auth as auth_routes, campaigns, claims, dashboard,
                      reviews, submissions)
 from webutil import register_errors
@@ -34,8 +34,9 @@ for module in (auth_routes, campaigns, submissions, reviews, claims, admin,
                dashboard):
     app.register_blueprint(module.bp)
 
-# Dev convenience; production schema changes go through Alembic.
-Base.metadata.create_all(bind=engine)
+# Create missing tables and additively backfill any new mapped columns,
+# so deploying a model change never 500s on an un-migrated column.
+sync_schema()
 # uwsgi imports the app in the master and then forks workers: drop the
 # connection the line above pooled, so workers never share one socket.
 engine.dispose()
