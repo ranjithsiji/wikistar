@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { CdxTable } from '@wikimedia/codex'
 import api, { errorMessage } from '../api'
@@ -193,6 +193,30 @@ watch(suggestedSections, (secs) => {
     activeSection.value = secs[0].heading
   }
 })
+
+// With many headings the tab bar overflows: show at most three tabs and
+// a menu at the end listing every heading. Selecting a hidden heading
+// swaps it into the last visible slot.
+const MAX_SECTION_TABS = 3
+const sectionMenuOpen = ref(false)
+const sectionMenuRoot = ref(null)
+const visibleSections = computed(() => {
+  const secs = suggestedSections.value
+  if (secs.length <= MAX_SECTION_TABS) return secs
+  const vis = secs.slice(0, MAX_SECTION_TABS)
+  if (!vis.some(s => s.heading === activeSection.value)) {
+    const active = secs.find(s => s.heading === activeSection.value)
+    if (active) vis[MAX_SECTION_TABS - 1] = active
+  }
+  return vis
+})
+function onSectionMenuDocClick (e) {
+  if (sectionMenuRoot.value && !sectionMenuRoot.value.contains(e.target)) {
+    sectionMenuOpen.value = false
+  }
+}
+onMounted(() => document.addEventListener('click', onSectionMenuDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onSectionMenuDocClick))
 
 // Add an extra language column to the suggested-items table on the fly.
 const addingLang = ref('')
@@ -530,15 +554,39 @@ function ruleLabel (id) {
           </form>
         </div>
         <div v-if="suggestedLinks && suggestedLinks.items" class="mt-2">
-          <!-- one tab per heading (only when there is more than the default group) -->
+          <!-- one tab per heading; more than three collapse into a menu -->
           <div v-if="suggestedSections.length > 1 || suggestedSections[0]?.heading"
-               class="flex gap-1 px-3 border-b border-neutral-200 dark:border-neutral-800 overflow-x-auto">
-            <button v-for="sec in suggestedSections" :key="sec.heading" type="button"
+               class="flex items-center gap-1 px-3 border-b border-neutral-200 dark:border-neutral-800">
+            <button v-for="sec in visibleSections" :key="sec.heading" type="button"
                     class="tab" :class="{ 'tab-active': activeSection === sec.heading }"
                     @click="activeSection = sec.heading">
               {{ sec.heading || 'General' }}
               <span class="text-xs text-neutral-400 dark:text-neutral-500">({{ sec.items.length }})</span>
             </button>
+            <span class="flex-1"></span>
+            <div v-if="suggestedSections.length > MAX_SECTION_TABS"
+                 ref="sectionMenuRoot" class="relative">
+              <button type="button" class="tab !px-2" :aria-expanded="sectionMenuOpen"
+                      title="All headings" @click="sectionMenuOpen = !sectionMenuOpen">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round">
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <div v-if="sectionMenuOpen"
+                   class="absolute right-0 mt-1 w-60 card shadow-lg py-1 z-20 max-h-72 overflow-y-auto">
+                <button v-for="sec in suggestedSections" :key="sec.heading" type="button"
+                        class="block w-full text-left px-3 py-1.5 text-sm
+                               hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                        :class="activeSection === sec.heading
+                          && 'font-semibold text-blue-700 dark:text-blue-400'"
+                        @click="activeSection = sec.heading; sectionMenuOpen = false">
+                  {{ sec.heading || 'General' }}
+                  <span class="text-xs text-neutral-400 dark:text-neutral-500">
+                    ({{ sec.items.length }})</span>
+                </button>
+              </div>
+            </div>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full">

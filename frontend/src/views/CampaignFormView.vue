@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CdxTextInput, CdxTextArea } from '@wikimedia/codex'
+import { CdxDialog, CdxTextInput, CdxTextArea } from '@wikimedia/codex'
 import api, { errorMessage } from '../api'
 import LanguageSelect from '../components/LanguageSelect.vue'
 import MarksEditor from '../components/MarksEditor.vue'
@@ -165,12 +165,30 @@ function sectionsToItems () {
   return out
 }
 
-function addSection () {
-  itemSections.value.push({ heading: '', text: '' })
+// The suggested step: Wikipedia / Wikidata top tabs, heading sets as
+// sub-tabs; new sets are added through a small dialog.
+const suggestedTab = ref('wikipedia')
+const activeSetIndex = ref(0)
+const activeSet = computed(() => itemSections.value[activeSetIndex.value])
+const totalSuggestedItems = computed(() =>
+  itemSections.value.reduce((n, b) => n + splitLines(b.text).length, 0))
+
+const showAddSet = ref(false)
+const newSetName = ref('')
+function openAddSet () {
+  newSetName.value = ''
+  showAddSet.value = true
 }
-function removeSection (i) {
+function confirmAddSet () {
+  itemSections.value.push({ heading: newSetName.value.trim(), text: '' })
+  activeSetIndex.value = itemSections.value.length - 1
+  showAddSet.value = false
+}
+function removeSet (i) {
   itemSections.value.splice(i, 1)
   if (!itemSections.value.length) itemSections.value.push({ heading: '', text: '' })
+  activeSetIndex.value = Math.min(activeSetIndex.value,
+                                  itemSections.value.length - 1)
 }
 
 function buildPayload () {
@@ -470,33 +488,66 @@ async function save () {
             <RuleEditor v-model="form.rules" :default-rules="meta.default_rules.self" />
           </div>
 
-          <div v-show="section === 'suggested'" class="grid gap-4 md:grid-cols-2">
-            <div class="card p-4">
-              <label class="label">Suggested articles (one title per line)</label>
-              <textarea v-model="suggestedArticlesText" class="input font-mono" rows="10"></textarea>
-              <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-2">Submitting one earns the "suggested list" bonus rule.</p>
+          <div v-show="section === 'suggested'" class="card">
+            <!-- Wikipedia / Wikidata top tabs -->
+            <div class="flex gap-1 px-4 border-b border-neutral-200 dark:border-neutral-800">
+              <button type="button" class="tab"
+                      :class="{ 'tab-active': suggestedTab === 'wikipedia' }"
+                      @click="suggestedTab = 'wikipedia'">
+                Wikipedia articles
+                <span class="text-xs text-neutral-400 dark:text-neutral-500">
+                  ({{ splitLines(suggestedArticlesText).length }})</span>
+              </button>
+              <button type="button" class="tab"
+                      :class="{ 'tab-active': suggestedTab === 'wikidata' }"
+                      @click="suggestedTab = 'wikidata'">
+                Wikidata items
+                <span class="text-xs text-neutral-400 dark:text-neutral-500">
+                  ({{ totalSuggestedItems }})</span>
+              </button>
             </div>
-            <div class="card p-4">
-              <label class="label">Suggested Wikidata items</label>
+
+            <!-- Wikipedia articles -->
+            <div v-show="suggestedTab === 'wikipedia'" class="p-4">
+              <label class="label">Suggested articles (one title per line)</label>
+              <textarea v-model="suggestedArticlesText" class="input font-mono" rows="14"></textarea>
+              <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-2">
+                Submitting one earns the "suggested list" bonus rule.
+              </p>
+            </div>
+
+            <!-- Wikidata items: one tab per heading set -->
+            <div v-show="suggestedTab === 'wikidata'" class="p-4">
               <p class="text-xs text-neutral-600 dark:text-neutral-300 mb-3">
                 Group items under headings (e.g. "Districts", "Rivers"); each
-                heading becomes a tab on the campaign page. Leave a heading
-                empty for an unlabelled group. One QID per line.
+                heading becomes a tab on the campaign page. One QID per line.
               </p>
-              <div v-for="(block, i) in itemSections" :key="i"
-                   class="mb-3 rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
-                <div class="flex items-center gap-2 mb-2">
-                  <input v-model="block.heading" class="input !py-1"
-                         placeholder="Heading (optional)" />
-                  <button type="button" class="btn-danger !py-1 !px-2 text-xs"
-                          title="Remove this section" @click="removeSection(i)">✕</button>
+              <div class="flex items-center gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-4 overflow-x-auto">
+                <button v-for="(block, i) in itemSections" :key="i" type="button"
+                        class="tab" :class="{ 'tab-active': activeSetIndex === i }"
+                        @click="activeSetIndex = i">
+                  {{ block.heading || 'General' }}
+                  <span class="text-xs text-neutral-400 dark:text-neutral-500">
+                    ({{ splitLines(block.text).length }})</span>
+                </button>
+                <button type="button" class="btn !py-1 !px-2 text-xs ml-2 mb-1 shrink-0"
+                        @click="openAddSet">+ New set</button>
+              </div>
+              <div v-if="activeSet">
+                <div class="flex flex-wrap items-end gap-3 mb-3">
+                  <div>
+                    <label class="label">Heading</label>
+                    <cdx-text-input v-model="activeSet.heading" class="!w-72"
+                                    placeholder='Empty shows as "General"' />
+                  </div>
+                  <span class="flex-1"></span>
+                  <button type="button" class="btn-danger !py-1.5 text-xs"
+                          @click="removeSet(activeSetIndex)">Remove this set</button>
                 </div>
-                <textarea v-model="block.text" class="input font-mono" rows="5"
+                <label class="label">QIDs (one per line)</label>
+                <textarea v-model="activeSet.text" class="input font-mono" rows="12"
                           placeholder="Q42&#10;Q123"></textarea>
               </div>
-              <button type="button" class="btn text-sm" @click="addSection">
-                + Add heading
-              </button>
             </div>
           </div>
 
@@ -562,6 +613,22 @@ async function save () {
           <router-link class="btn" :to="`/campaigns/${slug}`">Cancel</router-link>
         </div>
       </form>
+
+      <!-- new heading-set popup (teleports to body) -->
+      <cdx-dialog v-model:open="showAddSet" title="New heading set"
+                  :use-close-button="true"
+                  :primary-action="{ label: 'Add set', actionType: 'progressive' }"
+                  :default-action="{ label: 'Cancel' }"
+                  @primary="confirmAddSet" @default="showAddSet = false">
+        <label class="label">Heading</label>
+        <cdx-text-input v-model="newSetName"
+                        placeholder='e.g. "Districts", "Rivers"'
+                        @keydown.enter.prevent="confirmAddSet" />
+        <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-2">
+          The heading becomes a tab on the campaign page. Leave it empty
+          for the unlabelled "General" group.
+        </p>
+      </cdx-dialog>
     </template>
   </div>
   <p v-else-if="error" class="text-red-600 dark:text-red-400">{{ error }}</p>
