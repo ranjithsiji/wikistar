@@ -154,3 +154,20 @@ def test_hybrid_mode_combines_claims_and_jury_average():
     _accept_review(sub, 3)
     bd = compute_breakdown(sub, RULES, set(), ScoringMode.hybrid)
     assert bd.total == 7  # 2 (bytes) + 2 (claim) + 3 (jury)
+
+
+def test_article_matches_suggested_item_by_sitelink():
+    # An article connected to a suggested Wikidata item earns the
+    # suggested-list bonus even though its title was not listed.
+    sub = make_submission(title="Some Local Title", bytes_added=5000,
+                          page_len=20000, wikidata_qid="Q126")
+    # keys as built by common.suggested_titles for articles: item QIDs
+    # are added uppercased alongside any suggested article titles.
+    assert total_suggested(sub, {"Q126"}) == 15  # 5 bytes + 10 suggested
+    # a different connected item does not match
+    sub2 = make_submission(title="Some Local Title", bytes_added=5000,
+                           page_len=20000, wikidata_qid="Q999")
+    assert total_suggested(sub2, {"Q126"}) == 5   # bytes only
+    # title match still works with no connected item
+    sub3 = make_submission(title="Kathakali", bytes_added=5000, page_len=20000)
+    assert total_suggested(sub3, {"kathakali"}) == 15

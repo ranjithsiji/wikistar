@@ -190,7 +190,13 @@ def compute_breakdown(
             continue
 
         if rule.rule_type == RuleType.suggested_list:
-            if submission.title.lower() in suggested_titles:
+            # Match by suggested title, or (for articles) by the connected
+            # Wikidata item: an article that is the sitelink of a suggested
+            # item earns the bonus even if its title was not listed.
+            qid = (submission.wikidata_qid or "").upper()
+            on_list = (submission.title.lower() in suggested_titles
+                       or (qid and qid in suggested_titles))
+            if on_list:
                 bd.add(PointLine(rule.id, rule.label, "auto", 1, float(rule.points)))
             continue
 

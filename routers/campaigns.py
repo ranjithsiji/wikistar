@@ -151,22 +151,30 @@ def _replace_coordinators(db: Session, campaign: Campaign,
 
 def _replace_suggested(campaign: Campaign, payload: CampaignIn) -> None:
     """Sync suggested pages in place: wholesale replacement would flush
-    the new inserts before the deletes and trip uq_suggested."""
+    the new inserts before the deletes and trip uq_suggested. Articles
+    have no section; Wikidata items carry an optional heading."""
+    articles = {t.strip(): "" for t in payload.suggested_articles if t.strip()}
+    items = {}
+    for it in payload.suggested_items:
+        qid = it.qid.strip()
+        if qid:
+            items.setdefault(qid, (it.section or "").strip())  # first wins
     wanted = (
-        [(SubmissionKind.article, t.strip())
-         for t in dict.fromkeys(payload.suggested_articles) if t.strip()]
-        + [(SubmissionKind.wikidata_item, t.strip())
-           for t in dict.fromkeys(payload.suggested_items) if t.strip()]
+        [(SubmissionKind.article, t, "") for t in articles]
+        + [(SubmissionKind.wikidata_item, q, s) for q, s in items.items()]
     )
-    wanted_keys = set(wanted)
+    wanted_keys = {(k, t) for k, t, _ in wanted}
     existing = {(p.kind, p.title): p for p in campaign.suggested_pages}
     for key, page in existing.items():
         if key not in wanted_keys:
             campaign.suggested_pages.remove(page)
-    for kind, title in wanted:
-        if (kind, title) not in existing:
+    for kind, title, section in wanted:
+        page = existing.get((kind, title))
+        if page is None:
             campaign.suggested_pages.append(
-                SuggestedPage(kind=kind, title=title))
+                SuggestedPage(kind=kind, title=title, section=section))
+        else:
+            page.section = section  # section edits apply to kept rows
 
 
 def _replace_rules(db: Session, campaign: Campaign, payload: CampaignIn) -> None:
@@ -333,18 +341,21 @@ def suggested_links(slug: str):
     # English column and English labels next to the user's languages.
     if "en" not in langs:
         langs.append("en")
-    qids = [p.title for p in campaign.suggested_pages
-            if p.kind == SubmissionKind.wikidata_item]
+    suggested = [p for p in campaign.suggested_pages
+                 if p.kind == SubmissionKind.wikidata_item]
+    qids = [p.title for p in suggested]
     try:
         entities = mediawiki.fetch_sitelinks(qids, langs)
     except Exception:
         raise HTTPException(502, "Could not reach Wikidata for sitelinks")
     items = []
-    for qid in qids:
+    for page in suggested:
+        qid = page.title
         entity = entities.get(qid) or {"label": None, "label_en": None,
                                        "links": {}}
         items.append({
             "qid": qid,
+            "section": page.section or "",
             "label": entity["label"],
             "label_en": entity.get("label_en"),
             "links": [

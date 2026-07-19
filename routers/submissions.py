@@ -158,6 +158,7 @@ def _fetch_metadata(sub: Submission, campaign: Campaign,
     sub.base_rev_id = meta.base_rev_id
     sub.bytes_added = meta.bytes_added
     sub.is_new_page = meta.is_new_page
+    sub.wikidata_qid = meta.wikidata_qid
     sub.metadata_fetched_at = datetime.now(timezone.utc)
     return meta
 

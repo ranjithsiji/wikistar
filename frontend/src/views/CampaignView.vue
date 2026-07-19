@@ -170,6 +170,30 @@ const suggestedLangs = computed(() => {
 })
 const itemLink = (item, lang) => item.links.find(l => l.lang === lang)
 
+// Suggested items grouped under their headings; each heading is a tab.
+const suggestedSections = computed(() => {
+  const order = []
+  const byHeading = new Map()
+  for (const item of suggestedLinks.value?.items || []) {
+    const h = item.section || ''
+    if (!byHeading.has(h)) { byHeading.set(h, []); order.push(h) }
+    byHeading.get(h).push(item)
+  }
+  return order.map(h => ({ heading: h, items: byHeading.get(h) }))
+})
+const activeSection = ref('')
+const shownSectionItems = computed(() => {
+  const secs = suggestedSections.value
+  if (!secs.length) return []
+  const found = secs.find(s => s.heading === activeSection.value)
+  return (found || secs[0]).items
+})
+watch(suggestedSections, (secs) => {
+  if (secs.length && !secs.some(s => s.heading === activeSection.value)) {
+    activeSection.value = secs[0].heading
+  }
+})
+
 // Add an extra language column to the suggested-items table on the fly.
 const addingLang = ref('')
 const langLoading = ref(false)
@@ -506,6 +530,16 @@ function ruleLabel (id) {
           </form>
         </div>
         <div v-if="suggestedLinks && suggestedLinks.items" class="mt-2">
+          <!-- one tab per heading (only when there is more than the default group) -->
+          <div v-if="suggestedSections.length > 1 || suggestedSections[0]?.heading"
+               class="flex gap-1 px-3 border-b border-neutral-200 dark:border-neutral-800 overflow-x-auto">
+            <button v-for="sec in suggestedSections" :key="sec.heading" type="button"
+                    class="tab" :class="{ 'tab-active': activeSection === sec.heading }"
+                    @click="activeSection = sec.heading">
+              {{ sec.heading || 'General' }}
+              <span class="text-xs text-neutral-400 dark:text-neutral-500">({{ sec.items.length }})</span>
+            </button>
+          </div>
           <div class="overflow-x-auto">
             <table class="w-full">
               <thead>
@@ -518,7 +552,7 @@ function ruleLabel (id) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in suggestedLinks.items" :key="item.qid"
+                <tr v-for="item in shownSectionItems" :key="item.qid"
                     class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
                   <td class="td pl-4">
                     <a :href="`https://www.wikidata.org/wiki/${item.qid}`" target="_blank"

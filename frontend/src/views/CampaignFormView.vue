@@ -41,7 +41,9 @@ const form = reactive({
 const juryUsers = ref([])
 const coordinatorUsers = ref([])
 const suggestedArticlesText = ref('')
-const suggestedItemsText = ref('')
+// Suggested Wikidata items grouped under headings: each block is one
+// section (empty heading = the default group).
+const itemSections = ref([{ heading: '', text: '' }])
 
 const juryWiki = computed(() =>
   form.wiki_domain || `${form.language || 'en'}.wikipedia.org`)
@@ -127,7 +129,7 @@ onMounted(async () => {
       coordinatorUsers.value = c.members.filter(m => m.role === 'organizer')
         .map(m => m.user.username)
       suggestedArticlesText.value = c.suggested_articles.join('\n')
-      suggestedItemsText.value = c.suggested_items.join('\n')
+      itemSections.value = itemsToSections(c.suggested_items)
     }
   } catch (e) {
     error.value = errorMessage(e)
@@ -138,6 +140,39 @@ function splitLines (text) {
   return text.split('\n').map(s => s.trim()).filter(Boolean)
 }
 
+// Group the flat {qid, section} list from the API into editor blocks,
+// preserving heading order (empty-heading group first).
+function itemsToSections (items) {
+  const order = []
+  const byHeading = new Map()
+  for (const it of items) {
+    const h = it.section || ''
+    if (!byHeading.has(h)) { byHeading.set(h, []); order.push(h) }
+    byHeading.get(h).push(it.qid)
+  }
+  const blocks = order.map(h => ({ heading: h, text: byHeading.get(h).join('\n') }))
+  return blocks.length ? blocks : [{ heading: '', text: '' }]
+}
+
+// Flatten the editor blocks back to a {qid, section} list for the API.
+function sectionsToItems () {
+  const out = []
+  for (const block of itemSections.value) {
+    for (const qid of splitLines(block.text)) {
+      out.push({ qid, section: block.heading.trim() })
+    }
+  }
+  return out
+}
+
+function addSection () {
+  itemSections.value.push({ heading: '', text: '' })
+}
+function removeSection (i) {
+  itemSections.value.splice(i, 1)
+  if (!itemSections.value.length) itemSections.value.push({ heading: '', text: '' })
+}
+
 function buildPayload () {
   const payload = {
     ...form,
@@ -146,7 +181,7 @@ function buildPayload () {
     jury_usernames: [...juryUsers.value],
     coordinator_usernames: [...coordinatorUsers.value],
     suggested_articles: splitLines(suggestedArticlesText.value),
-    suggested_items: splitLines(suggestedItemsText.value)
+    suggested_items: sectionsToItems()
   }
   // Never mix the two campaign types: jury campaigns carry no point
   // rules, self-assessment campaigns carry no marks config.
@@ -442,8 +477,26 @@ async function save () {
               <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-2">Submitting one earns the "suggested list" bonus rule.</p>
             </div>
             <div class="card p-4">
-              <label class="label">Suggested Wikidata items (one QID per line)</label>
-              <textarea v-model="suggestedItemsText" class="input font-mono" rows="10"></textarea>
+              <label class="label">Suggested Wikidata items</label>
+              <p class="text-xs text-neutral-600 dark:text-neutral-300 mb-3">
+                Group items under headings (e.g. "Districts", "Rivers"); each
+                heading becomes a tab on the campaign page. Leave a heading
+                empty for an unlabelled group. One QID per line.
+              </p>
+              <div v-for="(block, i) in itemSections" :key="i"
+                   class="mb-3 rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+                <div class="flex items-center gap-2 mb-2">
+                  <input v-model="block.heading" class="input !py-1"
+                         placeholder="Heading (optional)" />
+                  <button type="button" class="btn-danger !py-1 !px-2 text-xs"
+                          title="Remove this section" @click="removeSection(i)">✕</button>
+                </div>
+                <textarea v-model="block.text" class="input font-mono" rows="5"
+                          placeholder="Q42&#10;Q123"></textarea>
+              </div>
+              <button type="button" class="btn text-sm" @click="addSection">
+                + Add heading
+              </button>
             </div>
           </div>
 

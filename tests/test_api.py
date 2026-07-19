@@ -1006,3 +1006,73 @@ def test_admin_flag_survives_login(client):
         assert user.is_admin is True
     finally:
         db.close()
+
+
+def test_suggested_items_sections(client, monkeypatch):
+    def fake_sitelinks(qids, languages):
+        return {q: {"label": q, "label_en": q, "links": {}} for q in qids}
+    monkeypatch.setattr(mediawiki, "fetch_sitelinks", fake_sitelinks)
+
+    login("Alice")
+    payload = make_campaign_payload(
+        client, name="Sectioned Items",
+        suggested_items=[
+            {"qid": "Q1", "section": "Rivers"},
+            {"qid": "Q2", "section": "Rivers"},
+            {"qid": "Q3", "section": "Districts"},
+            "Q4",  # plain string -> default (empty) section, still accepted
+        ])
+    slug = client.post("/api/campaigns", json=payload).json["slug"]
+
+    # detail returns structured {qid, section} objects, order preserved
+    detail = client.get(f"/api/campaigns/{slug}").json
+    items = detail["suggested_items"]
+    assert items == [
+        {"qid": "Q1", "section": "Rivers"},
+        {"qid": "Q2", "section": "Rivers"},
+        {"qid": "Q3", "section": "Districts"},
+        {"qid": "Q4", "section": ""},
+    ]
+
+    # suggested-links carries the section through per item
+    links = client.get(f"/api/campaigns/{slug}/suggested-links").json
+    sections = {i["qid"]: i["section"] for i in links["items"]}
+    assert sections == {"Q1": "Rivers", "Q2": "Rivers",
+                        "Q3": "Districts", "Q4": ""}
+
+    # editing a QID's section updates it in place (no duplicate rows)
+    login("Alice")
+    payload["suggested_items"] = [{"qid": "Q1", "section": "Lakes"}]
+    client.put(f"/api/campaigns/{slug}", json=payload)
+    detail = client.get(f"/api/campaigns/{slug}").json
+    assert detail["suggested_items"] == [{"qid": "Q1", "section": "Lakes"}]
+
+
+def test_article_earns_bonus_via_suggested_item_sitelink(client, monkeypatch):
+    # An article whose connected Wikidata item is on the suggested-items
+    # list earns the suggested-list bonus, even when its title is not in
+    # the suggested-articles list.
+    def fetch_with_qid(domain, title, username, start, end):
+        return PageMetadata(exists=True, page_id=77, page_len=20000,
+                            current_rev_id=2, base_rev_id=1, bytes_added=5000,
+                            is_new_page=False, wikidata_qid="Q126")
+    monkeypatch.setattr(mediawiki, "fetch_page_metadata", fetch_with_qid)
+
+    login("Alice")
+    payload = make_campaign_payload(
+        client, name="Sitelink Bonus", mode="self",
+        suggested_articles=[],                    # not listed by title
+        suggested_items=[{"qid": "Q126", "section": "Rivers"}])
+    slug = client.post("/api/campaigns", json=payload).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Local Article Title", "kind": "article"}).json
+    assert sub["wikidata_qid"] == "Q126"
+    # 5 pts bytes (nearest) + 10 pts suggested-list via the connected item
+    assert sub["points"] == 15
+    assert any(l["label"] == "Article from the suggested list"
+               for l in sub["breakdown"])

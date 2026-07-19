@@ -40,6 +40,9 @@ class PageMetadata:
     is_new_page: bool = False
     creator: str | None = None
     created_at: datetime | None = None
+    # QID of the Wikidata item connected to this page (P: wikibase_item),
+    # used to match articles against suggested items by sitelink.
+    wikidata_qid: str | None = None
 
 
 _SYSOP_CACHE: dict[str, tuple[float, set[str]]] = {}
@@ -400,7 +403,8 @@ def fetch_page_metadata(
     with _client() as client:
         info = client.get(api_url(domain), params={
             "action": "query", "format": "json", "formatversion": 2,
-            "prop": "info", "titles": title,
+            "prop": "info|pageprops", "ppprop": "wikibase_item",
+            "titles": title,
         }).json()
         page = info["query"]["pages"][0]
         if page.get("missing"):
@@ -409,6 +413,7 @@ def fetch_page_metadata(
         meta.page_id = page["pageid"]
         meta.page_len = page.get("length")
         meta.current_rev_id = page.get("lastrevid")
+        meta.wikidata_qid = (page.get("pageprops") or {}).get("wikibase_item")
 
         # All revisions inside the window (oldest -> newest), plus the one
         # just before it to know the starting size.

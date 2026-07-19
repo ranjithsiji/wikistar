@@ -308,6 +308,9 @@ class Submission(Base):
     page_len: Mapped[int | None] = mapped_column(Integer)
     bytes_added: Mapped[int] = mapped_column(Integer, default=0)
     is_new_page: Mapped[bool] = mapped_column(Boolean, default=False)
+    # QID of the article's connected Wikidata item; lets an article match a
+    # suggested item by sitelink, not just by an exact suggested-title.
+    wikidata_qid: Mapped[str | None] = mapped_column(String(32))
     metadata_fetched_at: Mapped[datetime | None] = mapped_column(DateTime)
     # Bulk kinds only: counted activity, e.g. {"statements": 12, "terms": 5,
     # "eligible_qids": [...]} or {"uploads": 3, "depicts": 7}.
@@ -423,7 +426,9 @@ class SuggestedPage(Base):
         Enum(SubmissionKind), default=SubmissionKind.article
     )
     title: Mapped[str] = mapped_column(String(500))
-    note: Mapped[str | None] = mapped_column(String(500))
+    # Optional heading this page is grouped under on the campaign page
+    # (e.g. "Districts", "Rivers"); empty string = the default group.
+    section: Mapped[str] = mapped_column(String(255), default="")
 
     campaign: Mapped[Campaign] = relationship(back_populates="suggested_pages")
 

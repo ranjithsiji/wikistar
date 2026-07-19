@@ -22,6 +22,7 @@ from schemas import (
     PointLineOut,
     RuleOut,
     SubmissionOut,
+    SuggestedItemOut,
     UserOut,
 )
 from scoring import compute_breakdown
@@ -70,7 +71,15 @@ def get_or_create_user(db: Session, username: str) -> User:
 
 
 def suggested_titles(campaign: Campaign, kind: SubmissionKind) -> set[str]:
-    return {p.title.lower() for p in campaign.suggested_pages if p.kind == kind}
+    """Keys a submission of `kind` can match for the suggested-list bonus:
+    the suggested titles of that kind, plus — for articles — the suggested
+    Wikidata item QIDs, so an article that is a suggested item's sitelink
+    also matches (scoring compares the article's connected QID)."""
+    keys = {p.title.lower() for p in campaign.suggested_pages if p.kind == kind}
+    if kind == SubmissionKind.article:
+        keys |= {p.title.upper() for p in campaign.suggested_pages
+                 if p.kind == SubmissionKind.wikidata_item}
+    return keys
 
 
 def load_submissions(db: Session, campaign_id: int) -> list[Submission]:
@@ -128,8 +137,10 @@ def campaign_detail_out(db: Session, campaign: Campaign,
     out.members = [MemberOut.model_validate(m) for m in campaign.members]
     out.suggested_articles = [p.title for p in campaign.suggested_pages
                               if p.kind == SubmissionKind.article]
-    out.suggested_items = [p.title for p in campaign.suggested_pages
-                           if p.kind == SubmissionKind.wikidata_item]
+    out.suggested_items = [
+        SuggestedItemOut(qid=p.title, section=p.section or "")
+        for p in campaign.suggested_pages
+        if p.kind == SubmissionKind.wikidata_item]
     out.my_roles = sorted(campaign_roles(db, campaign, user), key=lambda r: r.value)
     return out
 

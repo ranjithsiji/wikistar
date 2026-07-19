@@ -1,7 +1,7 @@
 """Pydantic request/response schemas (API contract)."""
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from models import (
     CampaignStatus,
@@ -51,6 +51,16 @@ class RuleOut(RuleIn, ORMModel):
 
 # ---- campaigns -------------------------------------------------------------
 
+class SuggestedItemIn(BaseModel):
+    qid: str = Field(min_length=1, max_length=500)
+    section: str = Field(default="", max_length=255)
+
+
+class SuggestedItemOut(BaseModel):
+    qid: str
+    section: str = ""
+
+
 class CampaignIn(BaseModel):
     name: str = Field(min_length=3, max_length=255)
     slug: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9_-]*$",
@@ -67,7 +77,16 @@ class CampaignIn(BaseModel):
     jury_usernames: list[str] = []
     coordinator_usernames: list[str] = []  # extra organizers; creator always stays
     suggested_articles: list[str] = []
-    suggested_items: list[str] = []
+    # Accepts plain "Q42" strings or {"qid": "Q42", "section": "Rivers"};
+    # normalised to SuggestedItemIn by the validator.
+    suggested_items: list[SuggestedItemIn] = []
+
+    @field_validator("suggested_items", mode="before")
+    @classmethod
+    def _coerce_items(cls, value):
+        if not isinstance(value, list):
+            return value
+        return [{"qid": v} if isinstance(v, str) else v for v in value]
 
 
 class MemberOut(ORMModel):
@@ -103,7 +122,7 @@ class CampaignDetail(CampaignSummary):
     rules: list[RuleOut] = []
     members: list[MemberOut] = []
     suggested_articles: list[str] = []
-    suggested_items: list[str] = []
+    suggested_items: list[SuggestedItemOut] = []
     my_roles: list[MemberRole] = []
 
 
@@ -170,6 +189,7 @@ class SubmissionOut(ORMModel):
     page_len: int | None
     bytes_added: int
     is_new_page: bool
+    wikidata_qid: str | None = None    # article's connected item
     metrics: dict | None = None    # bulk kinds: counted activity
     status: SubmissionStatus
     points_override: float | None
