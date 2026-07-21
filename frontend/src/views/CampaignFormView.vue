@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { CdxDialog, CdxTextInput, CdxTextArea } from '@wikimedia/codex'
 import api, { errorMessage } from '../api'
+import AppMessage from '../components/AppMessage.vue'
 import LanguageSelect from '../components/LanguageSelect.vue'
 import MarksEditor from '../components/MarksEditor.vue'
 import RuleEditor from '../components/RuleEditor.vue'
@@ -600,8 +601,8 @@ async function save () {
           </div>
         </template>
 
-        <p v-if="error" class="text-red-600 dark:text-red-400 text-sm mt-3">{{ error }}</p>
-        <p v-else-if="notice" class="text-green-700 dark:text-green-400 text-sm mt-3">{{ notice }}</p>
+        <AppMessage v-model="error" type="error" class="mt-3" />
+        <AppMessage v-if="!error" v-model="notice" type="success" class="mt-3" />
 
         <!-- wizard footer: every Next saves; the last step activates -->
         <div v-if="isWizard" class="mt-4 flex items-center gap-2">
@@ -647,6 +648,6 @@ async function save () {
       </cdx-dialog>
     </template>
   </div>
-  <p v-else-if="error" class="text-red-600 dark:text-red-400">{{ error }}</p>
+  <AppMessage v-else-if="error" v-model="error" type="error" />
   <p v-else class="text-neutral-600 dark:text-neutral-300">Loading…</p>
 </template>

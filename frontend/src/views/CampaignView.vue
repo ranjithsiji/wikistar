@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { CdxTable } from '@wikimedia/codex'
 import api, { errorMessage } from '../api'
 import { useAuthStore } from '../store'
+import AppMessage from '../components/AppMessage.vue'
 import ClaimEditor from '../components/ClaimEditor.vue'
 import LanguageSelect from '../components/LanguageSelect.vue'
 import ParticipantDetails from '../components/ParticipantDetails.vue'
@@ -278,7 +279,7 @@ async function loadLeaderboard () {
   try {
     leaderboard.value = (await api.leaderboard(props.slug)).data
   } catch (e) {
-    notice.value = errorMessage(e)
+    error.value = errorMessage(e)
   }
 }
 onMounted(load)
@@ -371,7 +372,7 @@ function ruleLabel (id) {
 </script>
 
 <template>
-  <p v-if="!campaign && error" class="text-red-600 dark:text-red-400">{{ error }}</p>
+  <AppMessage v-if="!campaign && error" v-model="error" type="error" />
   <p v-else-if="!campaign" class="text-neutral-600 dark:text-neutral-300">Loading…</p>
   <div v-else>
     <!-- header -->
@@ -411,8 +412,8 @@ function ruleLabel (id) {
       </template>
     </p>
 
-    <p v-if="error" class="text-red-600 dark:text-red-400 text-sm mb-2">{{ error }}</p>
-    <p v-if="notice" class="text-green-700 dark:text-green-400 text-sm mb-2">{{ notice }}</p>
+    <AppMessage v-model="error" type="error" />
+    <AppMessage v-model="notice" type="success" />
 
     <div class="flex gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-4 overflow-x-auto">
       <button v-for="[key, label] in tabs" :key="key" class="tab"

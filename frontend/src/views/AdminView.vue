@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import api, { errorMessage } from '../api'
+import AppMessage from '../components/AppMessage.vue'
 import { useAuthStore } from '../store'
 
 const auth = useAuthStore()
@@ -211,7 +212,7 @@ async function deleteArticle (s) {
 <template>
   <div>
     <h1 class="text-2xl font-bold mb-4">Administration</h1>
-    <p v-if="error" class="text-red-600 dark:text-red-400 text-sm mb-3">{{ error }}</p>
+    <AppMessage v-model="error" type="error" />
 
     <div class="flex gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-5 overflow-x-auto">
       <button v-for="[key, label] in TABS" :key="key" class="tab"

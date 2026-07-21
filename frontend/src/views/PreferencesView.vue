@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import api, { errorMessage } from '../api'
+import AppMessage from '../components/AppMessage.vue'
 import LanguageSelect from '../components/LanguageSelect.vue'
 import { useAuthStore } from '../store'
 import { useTheme } from '../theme'
@@ -13,7 +14,7 @@ const homeWikis = ref([])
 const input = ref('')
 const wikiInput = ref('')
 const saving = ref(false)
-const saved = ref(false)
+const notice = ref('')
 const error = ref('')
 
 // theme.js calls the follow-the-OS mode "system"; shown here as "Auto".
@@ -81,7 +82,7 @@ function move (i, d) {
 
 async function save () {
   saving.value = true
-  saved.value = false
+  notice.value = ''
   error.value = ''
   try {
     const prefs = (await api.savePreferences({
@@ -90,7 +91,7 @@ async function save () {
     })).data
     languages.value = prefs.preferred_languages
     homeWikis.value = prefs.home_wikis || []
-    saved.value = true
+    notice.value = 'Preferences saved.'
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
@@ -196,13 +197,13 @@ async function save () {
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 mb-3">
         <button type="button" class="btn-primary" :disabled="saving" @click="save">
           {{ saving ? 'Saving…' : 'Save preferences' }}
         </button>
-        <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
-        <p v-else-if="saved" class="text-sm text-green-700 dark:text-green-400">Preferences saved.</p>
       </div>
+      <AppMessage v-model="error" type="error" />
+      <AppMessage v-if="!error" v-model="notice" type="success" />
     </template>
   </div>
 </template>

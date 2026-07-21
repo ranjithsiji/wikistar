@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { CdxDialog, CdxTable } from '@wikimedia/codex'
 import api, { errorMessage } from '../api'
+import AppMessage from './AppMessage.vue'
 
 // Modal listing one participant's submissions as a sortable Codex table
 // with live wiki details (words/bytes/dates, Wikidata item, file size),
@@ -82,7 +83,7 @@ const fmtNum = (n) => n == null ? '—' : n.toLocaleString()
               :title="user.username"
               :subtitle="`${rows ? rows.length : '…'} submissions`"
               :use-close-button="true" @update:open="$event || emit('close')">
-      <p v-if="error" class="text-red-600 dark:text-red-400 text-sm">{{ error }}</p>
+      <AppMessage v-if="error" v-model="error" type="error" />
       <p v-else-if="!rows" class="text-sm text-neutral-600 dark:text-neutral-300">
         Loading details from the wiki…
       </p>
