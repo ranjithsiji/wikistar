@@ -167,20 +167,24 @@ function sectionsToItems () {
 
 // The suggested step: Wikipedia / Wikidata top tabs, heading sets as
 // sub-tabs; new sets are added through a small dialog.
-const suggestedTab = ref('wikipedia')
+const suggestedTab = ref('wikidata')
 const activeSetIndex = ref(0)
 const activeSet = computed(() => itemSections.value[activeSetIndex.value])
 const totalSuggestedItems = computed(() =>
   itemSections.value.reduce((n, b) => n + splitLines(b.text).length, 0))
 
+// Adding a set is one self-contained popup: heading + its QIDs together,
+// rather than creating an empty set and hunting for the textarea below.
 const showAddSet = ref(false)
 const newSetName = ref('')
+const newSetText = ref('')
 function openAddSet () {
   newSetName.value = ''
+  newSetText.value = ''
   showAddSet.value = true
 }
 function confirmAddSet () {
-  itemSections.value.push({ heading: newSetName.value.trim(), text: '' })
+  itemSections.value.push({ heading: newSetName.value.trim(), text: newSetText.value })
   activeSetIndex.value = itemSections.value.length - 1
   showAddSet.value = false
 }
@@ -489,15 +493,8 @@ async function save () {
           </div>
 
           <div v-show="section === 'suggested'" class="card">
-            <!-- Wikipedia / Wikidata top tabs -->
+            <!-- Wikidata / Wikipedia top tabs -->
             <div class="flex gap-1 px-4 border-b border-neutral-200 dark:border-neutral-800">
-              <button type="button" class="tab"
-                      :class="{ 'tab-active': suggestedTab === 'wikipedia' }"
-                      @click="suggestedTab = 'wikipedia'">
-                Wikipedia articles
-                <span class="text-xs text-neutral-400 dark:text-neutral-500">
-                  ({{ splitLines(suggestedArticlesText).length }})</span>
-              </button>
               <button type="button" class="tab"
                       :class="{ 'tab-active': suggestedTab === 'wikidata' }"
                       @click="suggestedTab = 'wikidata'">
@@ -505,33 +502,39 @@ async function save () {
                 <span class="text-xs text-neutral-400 dark:text-neutral-500">
                   ({{ totalSuggestedItems }})</span>
               </button>
+              <button type="button" class="tab"
+                      :class="{ 'tab-active': suggestedTab === 'wikipedia' }"
+                      @click="suggestedTab = 'wikipedia'">
+                Wikipedia articles
+                <span class="text-xs text-neutral-400 dark:text-neutral-500">
+                  ({{ splitLines(suggestedArticlesText).length }})</span>
+              </button>
             </div>
 
-            <!-- Wikipedia articles -->
-            <div v-show="suggestedTab === 'wikipedia'" class="p-4">
-              <label class="label">Suggested articles (one title per line)</label>
-              <textarea v-model="suggestedArticlesText" class="input font-mono" rows="14"></textarea>
-              <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-2">
-                Submitting one earns the "suggested list" bonus rule.
-              </p>
-            </div>
-
-            <!-- Wikidata items: one tab per heading set -->
+            <!-- Wikidata items: one label button per heading set -->
             <div v-show="suggestedTab === 'wikidata'" class="p-4">
               <p class="text-xs text-neutral-600 dark:text-neutral-300 mb-3">
                 Group items under headings (e.g. "Districts", "Rivers"); each
                 heading becomes a tab on the campaign page. One QID per line.
               </p>
-              <div class="flex items-center gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-4 overflow-x-auto">
+              <div class="flex flex-wrap items-center gap-2 mb-2">
                 <button v-for="(block, i) in itemSections" :key="i" type="button"
-                        class="tab" :class="{ 'tab-active': activeSetIndex === i }"
+                        class="rounded-full border px-3 py-1 text-sm font-medium transition-colors"
+                        :class="activeSetIndex === i
+                          ? 'bg-blue-700 border-blue-700 text-white'
+                          : 'border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800'"
                         @click="activeSetIndex = i">
                   {{ block.heading || 'General' }}
-                  <span class="text-xs text-neutral-400 dark:text-neutral-500">
-                    ({{ splitLines(block.text).length }})</span>
+                  <span :class="activeSetIndex === i
+                          ? 'text-blue-100' : 'text-neutral-400 dark:text-neutral-500'"
+                        class="text-xs">({{ splitLines(block.text).length }})</span>
                 </button>
-                <button type="button" class="btn !py-1 !px-2 text-xs ml-2 mb-1 shrink-0"
-                        @click="openAddSet">+ New set</button>
+              </div>
+              <!-- add-set button on its own line -->
+              <div class="mb-4">
+                <button type="button" class="btn text-sm" @click="openAddSet">
+                  + New set
+                </button>
               </div>
               <div v-if="activeSet">
                 <div class="flex flex-wrap items-end gap-3 mb-3">
@@ -548,6 +551,15 @@ async function save () {
                 <textarea v-model="activeSet.text" class="input font-mono" rows="12"
                           placeholder="Q42&#10;Q123"></textarea>
               </div>
+            </div>
+
+            <!-- Wikipedia articles -->
+            <div v-show="suggestedTab === 'wikipedia'" class="p-4">
+              <label class="label">Suggested articles (one title per line)</label>
+              <textarea v-model="suggestedArticlesText" class="input font-mono" rows="14"></textarea>
+              <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-2">
+                Submitting one earns the "suggested list" bonus rule.
+              </p>
             </div>
           </div>
 
@@ -614,16 +626,20 @@ async function save () {
         </div>
       </form>
 
-      <!-- new heading-set popup (teleports to body) -->
+      <!-- new heading-set popup: title + its QIDs together, one self-
+           contained action instead of creating an empty set to fill in
+           below (teleports to body, entirely outside the campaign form) -->
       <cdx-dialog v-model:open="showAddSet" title="New heading set"
                   :use-close-button="true"
                   :primary-action="{ label: 'Add set', actionType: 'progressive' }"
                   :default-action="{ label: 'Cancel' }"
                   @primary="confirmAddSet" @default="showAddSet = false">
         <label class="label">Heading</label>
-        <cdx-text-input v-model="newSetName"
-                        placeholder='e.g. "Districts", "Rivers"'
-                        @keydown.enter.prevent="confirmAddSet" />
+        <cdx-text-input v-model="newSetName" class="mb-3"
+                        placeholder='e.g. "Districts", "Rivers"' />
+        <label class="label">QIDs (one per line)</label>
+        <textarea v-model="newSetText" class="input font-mono" rows="8"
+                  placeholder="Q42&#10;Q123 (new set)"></textarea>
         <p class="text-xs text-neutral-600 dark:text-neutral-300 mt-2">
           The heading becomes a tab on the campaign page. Leave it empty
           for the unlabelled "General" group.
