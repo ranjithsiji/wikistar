@@ -326,7 +326,10 @@ def join_campaign(slug: str):
 def suggested_links(slug: str):
     """Suggested Wikidata items resolved to per-language wikilinks via
     their sitelinks. Languages: ?languages=ml,ta — else the logged-in
-    user's preferred languages — else the campaign's language."""
+    user's preferred languages — else the campaign's language.
+    Optional ?qids=Q1,Q2 restricts which suggested items are resolved
+    (e.g. just the active heading tab), so adding a language to a large
+    suggested list doesn't refetch sitelinks for every item every time."""
     db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
     raw = request.args.get("languages", "")
@@ -343,6 +346,10 @@ def suggested_links(slug: str):
         langs.append("en")
     suggested = [p for p in campaign.suggested_pages
                  if p.kind == SubmissionKind.wikidata_item]
+    qid_filter = request.args.get("qids", "")
+    if qid_filter:
+        wanted = {q.strip().upper() for q in qid_filter.split(",") if q.strip()}
+        suggested = [p for p in suggested if p.title.upper() in wanted]
     qids = [p.title for p in suggested]
     try:
         entities = mediawiki.fetch_sitelinks(qids, langs)

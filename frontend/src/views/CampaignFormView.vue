@@ -368,7 +368,7 @@ async function save () {
         project (self-assessment); otherwise a wiki admin must approve.
       </p>
 
-      <div class="flex gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-4 overflow-x-auto">
+      <div class="tab-group mb-4 w-fit max-w-full overflow-x-auto">
         <button v-for="([key, label], i) in sections" :key="key" type="button" class="tab"
                 :class="{ 'tab-active': section === key,
                           'opacity-40 !cursor-default': isWizard && i > maxVisited }"
@@ -495,7 +495,7 @@ async function save () {
 
           <div v-show="section === 'suggested'" class="card">
             <!-- Wikidata / Wikipedia top tabs -->
-            <div class="flex gap-1 px-4 border-b border-neutral-200 dark:border-neutral-800">
+            <div class="tab-group m-3">
               <button type="button" class="tab"
                       :class="{ 'tab-active': suggestedTab === 'wikidata' }"
                       @click="suggestedTab = 'wikidata'">

@@ -64,7 +64,7 @@ const STATUS_BADGE = {
     </p>
 
     <template v-else>
-      <div class="flex gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-5 overflow-x-auto">
+      <div class="tab-group mb-5 w-fit max-w-full overflow-x-auto">
         <button v-for="t in TABS" :key="t.key" class="tab"
                 :class="{ 'tab-active': tab === t.key }" @click="tab = t.key">
           {{ t.label }}

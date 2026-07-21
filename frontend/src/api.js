@@ -44,8 +44,11 @@ export default {
   removeMember: (slug, memberId) => http.delete(`/api/campaigns/${slug}/members/${memberId}`),
   leaderboard: (slug) => http.get(`/api/campaigns/${slug}/leaderboard`),
   participantDetails: (slug, userId) => http.get(`/api/campaigns/${slug}/participants/${userId}/details`),
-  suggestedLinks: (slug, languages) => http.get(`/api/campaigns/${slug}/suggested-links`,
-    { params: languages ? { languages: languages.join(',') } : {} }),
+  suggestedLinks: (slug, languages, qids) => http.get(`/api/campaigns/${slug}/suggested-links`,
+    { params: {
+      ...(languages ? { languages: languages.join(',') } : {}),
+      ...(qids ? { qids: qids.join(',') } : {})
+    } }),
   campaignStats: (slug) => http.get(`/api/campaigns/${slug}/stats`),
 
   // submissions

@@ -214,7 +214,7 @@ async function deleteArticle (s) {
     <h1 class="text-2xl font-bold mb-4">Administration</h1>
     <AppMessage v-model="error" type="error" />
 
-    <div class="flex gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-5 overflow-x-auto">
+    <div class="tab-group mb-5 w-fit max-w-full overflow-x-auto">
       <button v-for="[key, label] in TABS" :key="key" class="tab"
               :class="{ 'tab-active': tab === key }" @click="tab = key">
         {{ label }}

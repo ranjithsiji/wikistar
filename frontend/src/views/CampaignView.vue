@@ -45,6 +45,7 @@ function onLbSort (newSort) {
   const active = Object.entries(newSort).find(([, dir]) => dir !== 'none')
   lbSort.value = active ? { [active[0]]: active[1] } : {}
 }
+const leaderboardPreview = computed(() => leaderboard.value.slice(0, 5))
 const stats = ref(null)
 const detailsUser = ref(null)   // leaderboard row whose popup is open
 const error = ref('')
@@ -161,39 +162,71 @@ const tabs = computed(() => {
 })
 
 const canApprove = ref(false)
-const suggestedLinks = ref(null)   // resolved Wikidata sitelinks
 
-// Suggested-items table: English first, then the preference languages
-// (the backend always includes "en" in the response).
-const suggestedLangs = computed(() => {
-  const langs = suggestedLinks.value?.languages || []
-  return ['en', ...langs.filter(l => l !== 'en')]
-})
-const itemLink = (item, lang) => item.links.find(l => l.lang === lang)
-
-// Suggested items grouped under their headings; each heading is a tab.
+// Tab structure (heading -> QIDs) comes straight from the campaign
+// payload — already loaded, no Wikidata round-trip needed just to know
+// what headings exist. Sitelinks (labels/links, the slow part) are
+// fetched lazily, one heading at a time, only for the section being
+// viewed — a big suggested list no longer means resolving every item on
+// every visit or on every "add language" click.
 const suggestedSections = computed(() => {
   const order = []
   const byHeading = new Map()
-  for (const item of suggestedLinks.value?.items || []) {
+  for (const item of campaign.value?.suggested_items || []) {
     const h = item.section || ''
     if (!byHeading.has(h)) { byHeading.set(h, []); order.push(h) }
-    byHeading.get(h).push(item)
+    byHeading.get(h).push(item.qid)
   }
-  return order.map(h => ({ heading: h, items: byHeading.get(h) }))
+  return order.map(h => ({ heading: h, qids: byHeading.get(h) }))
 })
 const activeSection = ref('')
-const shownSectionItems = computed(() => {
-  const secs = suggestedSections.value
-  if (!secs.length) return []
-  const found = secs.find(s => s.heading === activeSection.value)
-  return (found || secs[0]).items
-})
 watch(suggestedSections, (secs) => {
   if (secs.length && !secs.some(s => s.heading === activeSection.value)) {
     activeSection.value = secs[0].heading
   }
 })
+
+// Resolved sitelinks per heading: { languages, items } | 'loading' | 'error'.
+const sectionCache = ref({})
+const activeSectionData = computed(() => {
+  const v = sectionCache.value[activeSection.value]
+  return (v && v !== 'loading' && v !== 'error') ? v : null
+})
+const activeSectionLoading = computed(() =>
+  sectionCache.value[activeSection.value] === 'loading')
+const activeSectionFailed = computed(() =>
+  sectionCache.value[activeSection.value] === 'error')
+
+async function loadSection (heading, extraLangs = []) {
+  const sec = suggestedSections.value.find(s => s.heading === heading)
+  if (!sec) return
+  const prior = sectionCache.value[heading]
+  const priorLangs = (prior && prior !== 'loading' && prior !== 'error')
+    ? prior.languages : []
+  const langs = [...new Set([...priorLangs, ...extraLangs])]
+  sectionCache.value = { ...sectionCache.value, [heading]: 'loading' }
+  try {
+    const { data } = await api.suggestedLinks(props.slug,
+      langs.length ? langs : null, sec.qids)
+    sectionCache.value = { ...sectionCache.value, [heading]: data }
+  } catch (e) {
+    sectionCache.value = { ...sectionCache.value, [heading]: 'error' }
+    error.value = errorMessage(e)
+  }
+}
+// Fetch whichever heading becomes active, the first time it's viewed.
+watch(activeSection, (h) => {
+  if (h && !sectionCache.value[h]) loadSection(h)
+}, { immediate: true })
+
+// Suggested-items table: English first, then the preference languages
+// (the backend always includes "en" in the response).
+const suggestedLangs = computed(() => {
+  const langs = activeSectionData.value?.languages || []
+  return ['en', ...langs.filter(l => l !== 'en')]
+})
+const itemLink = (item, lang) => item.links.find(l => l.lang === lang)
+const shownSectionItems = computed(() => activeSectionData.value?.items || [])
 
 // Two heading layouts, user-switchable (remembered per device):
 //   all      — every heading as a wrapped label button (default)
@@ -224,24 +257,15 @@ function onSectionMenuDocClick (e) {
 onMounted(() => document.addEventListener('click', onSectionMenuDocClick))
 onBeforeUnmount(() => document.removeEventListener('click', onSectionMenuDocClick))
 
-// Add an extra language column to the suggested-items table on the fly.
+// Add an extra language column to the suggested-items table on the fly —
+// re-resolves only the active heading's items, not the whole suggested
+// list, so this stays fast even with many headings/items.
 const addingLang = ref('')
-const langLoading = ref(false)
 async function addSuggestedLang () {
   const code = addingLang.value
-  if (!code) return
-  const langs = [...(suggestedLinks.value?.languages || [])]
-  if (!langs.includes(code)) langs.push(code)
-  langLoading.value = true
-  error.value = ''
-  try {
-    suggestedLinks.value = (await api.suggestedLinks(props.slug, langs)).data
-    addingLang.value = ''
-  } catch (e) {
-    error.value = errorMessage(e)
-  } finally {
-    langLoading.value = false
-  }
+  if (!code || !activeSection.value) return
+  addingLang.value = ''
+  await loadSection(activeSection.value, [code])
 }
 // Red-link style "start this article" URL, prefilled with the English title.
 function createUrl (item, lang) {
@@ -257,6 +281,10 @@ async function load () {
     api.campaignStats(props.slug)
       .then(r => { stats.value = r.data })
       .catch(() => {})
+    // Leaderboard preview on Overview; silent if private (403) or empty.
+    api.leaderboard(props.slug)
+      .then(r => { leaderboard.value = r.data })
+      .catch(() => {})
     if (!newLanguage.value) newLanguage.value = campaign.value.language
     // Fountain model: approval needs on-wiki admin rights (jury: sysop on
     // the target wiki; self: sysop on any Wikipedia), or site admin.
@@ -265,12 +293,8 @@ async function load () {
     } else {
       canApprove.value = false
     }
-    // Suggested QIDs -> wikilinks in the viewer's preferred languages
-    if (campaign.value.suggested_items.length && suggestedLinks.value === null) {
-      try {
-        suggestedLinks.value = (await api.suggestedLinks(props.slug)).data
-      } catch { suggestedLinks.value = false }
-    }
+    // Suggested items' sitelinks load lazily per active heading — see the
+    // `activeSection` watcher — once `suggestedSections` picks one up.
   } catch (e) {
     error.value = errorMessage(e)
   }
@@ -415,7 +439,7 @@ function ruleLabel (id) {
     <AppMessage v-model="error" type="error" />
     <AppMessage v-model="notice" type="success" />
 
-    <div class="flex gap-1 border-b border-neutral-200 dark:border-neutral-800 mb-4 overflow-x-auto">
+    <div class="tab-group mb-4 w-fit max-w-full overflow-x-auto">
       <button v-for="[key, label] in tabs" :key="key" class="tab"
               :class="{ 'tab-active': tab === key }"
               @click="tab = key; if (key === 'leaderboard') loadLeaderboard()">
@@ -511,6 +535,33 @@ function ruleLabel (id) {
         </div>
       </div>
 
+      <!-- leaderboard preview: top 5, link through to the full tab -->
+      <div class="card p-4" v-if="leaderboardPreview.length">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="font-semibold text-sm">Leaderboard</h4>
+          <button type="button" class="text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline"
+                  @click="tab = 'leaderboard'; loadLeaderboard()">
+            View full leaderboard →
+          </button>
+        </div>
+        <table class="w-full">
+          <tbody>
+            <tr v-for="row in leaderboardPreview" :key="row.user.id"
+                class="border-t border-neutral-100 dark:border-neutral-800 first:border-0
+                       cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+                title="Show this participant's submissions"
+                @click="detailsUser = row.user">
+              <td class="td pl-0 tabular-nums text-neutral-500 dark:text-neutral-400 w-8">{{ row.rank }}</td>
+              <td class="td font-medium text-blue-700 dark:text-blue-400">{{ row.user.username }}</td>
+              <td class="td text-right text-xs text-neutral-500 dark:text-neutral-400">
+                {{ row.submission_count }} submission{{ row.submission_count === 1 ? '' : 's' }}
+              </td>
+              <td class="td pr-0 text-right tabular-nums font-semibold">{{ row.points }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="grid md:grid-cols-2 gap-4">
         <div class="card p-4 md:col-span-2">
           <h4 class="font-semibold text-sm mb-2">Scoring rules</h4>
@@ -548,18 +599,36 @@ function ruleLabel (id) {
         </ul>
       </div>
       <div class="card" v-if="campaign.suggested_items.length">
-        <div class="flex flex-wrap items-center gap-3 px-4 pt-4">
-          <h4 class="font-semibold text-sm flex-1">Suggested Wikidata items (bonus points)</h4>
-          <form v-if="suggestedLinks && suggestedLinks.items" class="flex gap-2"
-                @submit.prevent="addSuggestedLang">
+        <div class="px-4 pt-4">
+          <h4 class="font-semibold text-sm">Suggested Wikidata items (bonus points)</h4>
+        </div>
+
+        <!-- separate, highlighted block: add a language to check article coverage -->
+        <div class="mx-4 mt-3 rounded-lg border border-blue-200 dark:border-blue-900
+                    bg-blue-50 dark:bg-blue-950/40 p-3">
+          <p class="text-xs text-blue-900 dark:text-blue-200 mb-2">
+            Add a language to check whether an article on each suggested item
+            in the current tab already exists in that language, and get a
+            direct link to create it if not.
+          </p>
+          <form class="flex flex-wrap items-center gap-2" @submit.prevent="addSuggestedLang">
             <LanguageSelect v-model="addingLang" class="!w-56" placeholder="Add a language…" />
-            <button class="btn"
-                    :disabled="!addingLang || langLoading || suggestedLinks.languages.length >= 10">
-              {{ langLoading ? 'Loading…' : 'Add language' }}
+            <button class="btn-primary"
+                    :disabled="!addingLang || activeSectionLoading
+                      || (activeSectionData?.languages.length || 0) >= 10">
+              Add language
             </button>
+            <span v-if="activeSectionLoading"
+                  class="inline-flex items-center gap-1.5 text-xs text-blue-800 dark:text-blue-300">
+              <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Checking Wikidata for this tab…
+            </span>
           </form>
         </div>
-        <div v-if="suggestedLinks && suggestedLinks.items" class="mt-2">
+        <div class="mt-2">
           <!-- heading picker: all headings as buttons (default), or a
                compact bar with a hamburger menu on the left -->
           <template v-if="suggestedSections.length > 1 || suggestedSections[0]?.heading">
@@ -576,7 +645,7 @@ function ruleLabel (id) {
                 {{ sec.heading || 'General' }}
                 <span :class="activeSection === sec.heading
                         ? 'text-blue-100' : 'text-neutral-400 dark:text-neutral-500'"
-                      class="text-xs">({{ sec.items.length }})</span>
+                      class="text-xs">({{ sec.qids.length }})</span>
               </button>
               <span class="flex-1"></span>
               <button type="button" class="btn !px-2 !py-1 shrink-0"
@@ -610,7 +679,7 @@ function ruleLabel (id) {
                           @click="activeSection = sec.heading; sectionMenuOpen = false">
                     {{ sec.heading || 'General' }}
                     <span class="text-xs text-neutral-400 dark:text-neutral-500">
-                      ({{ sec.items.length }})</span>
+                      ({{ sec.qids.length }})</span>
                   </button>
                 </div>
               </div>
@@ -618,7 +687,7 @@ function ruleLabel (id) {
                       class="tab" :class="{ 'tab-active': activeSection === sec.heading }"
                       @click="activeSection = sec.heading">
                 {{ sec.heading || 'General' }}
-                <span class="text-xs text-neutral-400 dark:text-neutral-500">({{ sec.items.length }})</span>
+                <span class="text-xs text-neutral-400 dark:text-neutral-500">({{ sec.qids.length }})</span>
               </button>
               <span class="flex-1"></span>
               <button type="button" class="btn !px-2 !py-1 shrink-0"
@@ -633,66 +702,84 @@ function ruleLabel (id) {
               </button>
             </div>
           </template>
-          <div class="overflow-x-auto">
-            <table class="w-full">
-              <thead>
-                <tr class="border-b border-neutral-200 dark:border-neutral-800">
-                  <th class="th pl-4">Item</th>
-                  <th class="th">Label (English)</th>
-                  <th v-for="lang in suggestedLangs" :key="lang" class="th text-center">
-                    {{ lang }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in shownSectionItems" :key="item.qid"
-                    class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-                  <td class="td pl-4">
-                    <a :href="`https://www.wikidata.org/wiki/${item.qid}`" target="_blank"
-                       class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">
-                      {{ item.qid }}
-                    </a>
-                  </td>
-                  <td class="td font-medium">{{ item.label_en || item.label || '—' }}</td>
-                  <td v-for="lang in suggestedLangs" :key="lang" class="td text-center">
-                    <!-- exists: link to the article -->
-                    <a v-if="itemLink(item, lang)" :href="itemLink(item, lang).url"
-                       target="_blank" :title="`${itemLink(item, lang).title} — read on ${lang}.wikipedia.org`"
-                       class="inline-flex items-center justify-center w-6 h-6 rounded-full
-                              bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300
-                              hover:ring-2 hover:ring-green-400">
-                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                           stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m5 13 4 4L19 7" />
-                      </svg>
-                    </a>
-                    <!-- missing: start it -->
-                    <a v-else :href="createUrl(item, lang)" target="_blank"
-                       :title="`Not on ${lang}.wikipedia.org yet — start this article`"
-                       class="inline-flex items-center justify-center w-6 h-6 rounded-full
-                              bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400
-                              hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-950 dark:hover:text-blue-300">
-                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                           stroke-width="3" stroke-linecap="round">
-                        <path d="M12 5v14m-7-7h14" />
-                      </svg>
-                    </a>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <!-- loading: this heading's sitelinks are being resolved -->
+          <div v-if="activeSectionLoading" class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300 p-4">
+            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Checking Wikidata and Wikipedia for this tab…
           </div>
-          <p class="text-xs text-neutral-500 dark:text-neutral-400 px-4 py-3">
-            ✓ the article exists — click to read it; + it is missing — click to
-            start it. Language columns come from
-            <router-link to="/preferences" class="text-blue-600 dark:text-blue-400 hover:underline">
-              your preferred languages</router-link>.
-          </p>
-        </div>
-        <div v-else class="flex flex-wrap gap-1.5 p-4">
-          <a v-for="t in campaign.suggested_items" :key="t" target="_blank"
-             :href="`https://www.wikidata.org/wiki/${t}`"
-             class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">{{ t }}</a>
+
+          <!-- error: fall back to plain QID links for this heading -->
+          <div v-else-if="activeSectionFailed" class="p-4 space-y-2">
+            <p class="text-xs text-red-600 dark:text-red-400">
+              Could not check article coverage for this tab. Showing the raw items instead.
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <a v-for="qid in (suggestedSections.find(s => s.heading === activeSection)?.qids || [])"
+                 :key="qid" target="_blank" :href="`https://www.wikidata.org/wiki/${qid}`"
+                 class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">{{ qid }}</a>
+            </div>
+          </div>
+
+          <template v-else>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead>
+                  <tr class="border-b border-neutral-200 dark:border-neutral-800">
+                    <th class="th pl-4">Item</th>
+                    <th class="th">Label (English)</th>
+                    <th v-for="lang in suggestedLangs" :key="lang" class="th text-center">
+                      {{ lang }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in shownSectionItems" :key="item.qid"
+                      class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+                    <td class="td pl-4">
+                      <a :href="`https://www.wikidata.org/wiki/${item.qid}`" target="_blank"
+                         class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300 hover:underline">
+                        {{ item.qid }}
+                      </a>
+                    </td>
+                    <td class="td font-medium">{{ item.label_en || item.label || '—' }}</td>
+                    <td v-for="lang in suggestedLangs" :key="lang" class="td text-center">
+                      <!-- exists: link to the article -->
+                      <a v-if="itemLink(item, lang)" :href="itemLink(item, lang).url"
+                         target="_blank" :title="`${itemLink(item, lang).title} — read on ${lang}.wikipedia.org`"
+                         class="inline-flex items-center justify-center w-6 h-6 rounded-full
+                                bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300
+                                hover:ring-2 hover:ring-green-400">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="m5 13 4 4L19 7" />
+                        </svg>
+                      </a>
+                      <!-- missing: start it -->
+                      <a v-else :href="createUrl(item, lang)" target="_blank"
+                         :title="`Not on ${lang}.wikipedia.org yet — start this article`"
+                         class="inline-flex items-center justify-center w-6 h-6 rounded-full
+                                bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400
+                                hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-950 dark:hover:text-blue-300">
+                          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                               stroke-width="3" stroke-linecap="round">
+                            <path d="M12 5v14m-7-7h14" />
+                          </svg>
+                        </a>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 px-4 py-3">
+              ✓ the article exists — click to read it; + it is missing — click to
+              start it. Language columns come from
+              <router-link to="/preferences" class="text-blue-600 dark:text-blue-400 hover:underline">
+                your preferred languages</router-link>.
+            </p>
+          </template>
         </div>
       </div>
     </div>

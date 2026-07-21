@@ -1048,6 +1048,49 @@ def test_suggested_items_sections(client, monkeypatch):
     assert detail["suggested_items"] == [{"qid": "Q1", "section": "Lakes"}]
 
 
+def test_suggested_links_qids_filter(client, monkeypatch):
+    # ?qids= restricts sitelink resolution to just those items (e.g. the
+    # active heading tab), instead of resolving the whole suggested list —
+    # the frontend uses this so adding a language stays fast regardless
+    # of how many suggested items the campaign has overall.
+    seen_qids = []
+
+    def fake_sitelinks(qids, languages):
+        seen_qids.append(list(qids))
+        return {q: {"label": q, "label_en": q, "links": {}} for q in qids}
+    monkeypatch.setattr(mediawiki, "fetch_sitelinks", fake_sitelinks)
+
+    login("Alice")
+    payload = make_campaign_payload(
+        client, name="Qid Filter Contest",
+        suggested_items=[
+            {"qid": "Q10", "section": "Rivers"},
+            {"qid": "Q20", "section": "Rivers"},
+            {"qid": "Q30", "section": "Districts"},
+        ])
+    slug = client.post("/api/campaigns", json=payload).json["slug"]
+
+    # no filter: every suggested item is resolved
+    seen_qids.clear()
+    data = client.get(f"/api/campaigns/{slug}/suggested-links").json
+    assert sorted(seen_qids[0]) == ["Q10", "Q20", "Q30"]
+    assert {i["qid"] for i in data["items"]} == {"Q10", "Q20", "Q30"}
+
+    # filtered to one heading's QIDs: only those are resolved and returned
+    seen_qids.clear()
+    data = client.get(
+        f"/api/campaigns/{slug}/suggested-links?qids=Q10,Q20").json
+    assert seen_qids[0] == ["Q10", "Q20"]
+    assert {i["qid"] for i in data["items"]} == {"Q10", "Q20"}
+
+    # filtering to a single QID from a different heading
+    seen_qids.clear()
+    data = client.get(
+        f"/api/campaigns/{slug}/suggested-links?qids=Q30").json
+    assert seen_qids[0] == ["Q30"]
+    assert {i["qid"] for i in data["items"]} == {"Q30"}
+
+
 def test_article_earns_bonus_via_suggested_item_sitelink(client, monkeypatch):
     # An article whose connected Wikidata item is on the suggested-items
     # list earns the suggested-list bonus, even when its title is not in

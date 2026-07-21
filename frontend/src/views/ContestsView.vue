@@ -29,7 +29,7 @@ onMounted(async () => {
   <div>
     <div class="flex items-center justify-between mb-4">
       <h1 class="text-2xl font-bold">Contests</h1>
-      <div class="flex gap-1">
+      <div class="tab-group">
         <button v-for="f in filters" :key="f" class="tab" :class="{ 'tab-active': filter === f }"
                 @click="filter = f">{{ f }}</button>
       </div>
