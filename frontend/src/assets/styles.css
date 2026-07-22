@@ -119,7 +119,7 @@
   .label {
     @apply block text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:text-neutral-300 mb-1;
   }
-  .btn, .btn-primary, .btn-danger {
+  .btn, .btn-primary, .btn-danger, .btn-success, .btn-warning {
     @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium border transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer;
   }
   .btn {
@@ -132,6 +132,14 @@
   .btn-danger {
     @apply bg-red-50 text-red-700 border-red-200 hover:bg-red-100 hover:border-red-300
            dark:bg-red-950/50 dark:text-red-300 dark:border-red-900 dark:hover:bg-red-900/50;
+  }
+  .btn-success {
+    @apply bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:border-green-300
+           dark:bg-green-950/50 dark:text-green-300 dark:border-green-900 dark:hover:bg-green-900/50;
+  }
+  .btn-warning {
+    @apply bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 hover:border-amber-300
+           dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-900 dark:hover:bg-amber-900/50;
   }
   .badge {
     @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;

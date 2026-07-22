@@ -970,9 +970,9 @@ function ruleLabel (id) {
             <button v-if="auth.user?.username === s.user.username && campaign.status === 'active'"
                     class="btn-danger" @click="withdraw(s)">Withdraw</button>
             <template v-if="isOrganizer">
-              <button class="btn" @click="moderateSub(s, 'accepted')">Accept</button>
+              <button class="btn-success" @click="moderateSub(s, 'accepted')">Accept</button>
               <button class="btn-danger" @click="moderateSub(s, 'rejected')">Reject</button>
-              <button class="btn" @click="overrideSub(s)">Override points</button>
+              <button class="btn-warning" @click="overrideSub(s)">Override points</button>
               <button class="btn" title="Refetch wiki data and rescore from the campaign rules, clearing any override"
                       @click="recalculate(s)">Recalculate points</button>
             </template>
