@@ -35,7 +35,8 @@ router.afterEach(() => { menuOpen.value = false })
 <template>
   <nav class="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
     <div class="max-w-6xl mx-auto px-4 h-14 flex items-center gap-4">
-      <router-link to="/" class="font-bold text-lg tracking-tight">
+      <router-link to="/" class="font-bold text-lg tracking-tight flex items-center gap-1.5">
+        <span aria-hidden="true">🌟</span>
         Wiki<span class="text-blue-600 dark:text-blue-400">STAR</span>
       </router-link>
       <div class="flex items-center gap-1 ml-2">

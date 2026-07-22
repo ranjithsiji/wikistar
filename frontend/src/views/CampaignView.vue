@@ -155,11 +155,17 @@ const participantNames = computed(() =>
     .filter(m => m.role === 'participant')
     .map(m => m.user.username))])
 
+const tileClasses = {
+  blue: 'border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400',
+  green: 'border-green-400 dark:border-green-700 text-green-600 dark:text-green-400',
+  violet: 'border-violet-400 dark:border-violet-700 text-violet-600 dark:text-violet-400',
+  amber: 'border-amber-400 dark:border-amber-700 text-amber-600 dark:text-amber-400'
+}
 const overviewTiles = computed(() => [
-  { label: 'Submissions', value: stats.value?.submissions },
-  { label: 'Participants', value: stats.value?.participants },
-  { label: 'Total points', value: stats.value?.total_points },
-  { label: 'Reviews', value: stats.value?.reviews }
+  { label: 'Submissions', value: stats.value?.submissions, color: 'blue' },
+  { label: 'Participants', value: stats.value?.participants, color: 'green' },
+  { label: 'Total points', value: stats.value?.total_points, color: 'violet' },
+  { label: 'Reviews', value: stats.value?.reviews, color: 'amber' }
 ])
 
 const tabs = computed(() => {
@@ -414,7 +420,13 @@ function ruleLabel (id) {
       <a v-if="logoUrl" :href="logoPageUrl" target="_blank" class="shrink-0" title="Campaign logo (Wikimedia Commons)">
         <img :src="logoUrl" alt="" class="h-14 w-14 object-contain rounded" />
       </a>
-      <h1 class="text-2xl font-bold">{{ campaign.name }}</h1>
+      <h1 class="text-2xl font-bold">
+        <a v-if="campaign.settings.campaign_page_url"
+           :href="campaign.settings.campaign_page_url" target="_blank" rel="noopener"
+           class="text-blue-700 dark:text-blue-400 hover:underline"
+           title="Open the campaign page">{{ campaign.name }}</a>
+        <template v-else>{{ campaign.name }}</template>
+      </h1>
       <span class="badge mt-1.5" :class="statusStyles[campaign.status]">{{ campaign.status }}</span>
       <span class="badge mt-1.5 bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300">
         {{ { jury: 'Jury scoring', self: 'Self-assessment', hybrid: 'Hybrid' }[campaign.scoring_mode] }}
@@ -440,18 +452,17 @@ function ruleLabel (id) {
       </div>
     </div>
     <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
-      {{ campaign.start_date }} → {{ campaign.end_date }} · {{ campaign.wiki_domain }}
+      <span class="font-semibold text-neutral-900 dark:text-neutral-100">
+        {{ campaign.start_date }} → {{ campaign.end_date }}
+      </span>
+      <template v-if="!campaign.settings.multi_language"> · {{ campaign.wiki_domain }}</template>
       · {{ campaign.submission_count }} submissions · {{ campaign.participant_count }} participants
-      <template v-if="campaign.settings.campaign_page_url">
-        · <a :href="campaign.settings.campaign_page_url" target="_blank"
-             class="text-blue-600 dark:text-blue-400 hover:underline">Campaign page ↗</a>
-      </template>
     </p>
 
     <AppMessage v-model="error" type="error" />
     <AppMessage v-model="notice" type="success" />
 
-    <div class="tab-group mb-4 w-fit max-w-full overflow-x-auto">
+    <div class="tab-group w-fit max-w-full overflow-x-auto">
       <button v-for="[key, label] in tabs" :key="key" class="tab"
               :class="{ 'tab-active': tab === key }"
               @click="tab = key; if (key === 'leaderboard') loadLeaderboard()">
@@ -459,6 +470,7 @@ function ruleLabel (id) {
       </button>
     </div>
 
+    <div class="tab-panel p-4">
     <!-- submit form: on the campaign home page and the submissions tab -->
     <template v-if="tab === 'overview' || tab === 'submissions'">
       <div v-if="auth.isLoggedIn && campaign.status === 'active'" class="card p-4 mb-4">
@@ -510,9 +522,10 @@ function ruleLabel (id) {
     <div v-if="tab === 'overview'" class="space-y-4">
       <!-- headline statistics -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div v-for="t in overviewTiles" :key="t.label" class="card p-4">
-          <div class="text-2xl font-bold tabular-nums">{{ t.value ?? '—' }}</div>
-          <div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">{{ t.label }}</div>
+        <div v-for="t in overviewTiles" :key="t.label" class="card border-2 p-4 text-center"
+             :class="tileClasses[t.color]">
+          <div class="text-2xl font-extrabold tabular-nums">{{ t.value ?? '—' }}</div>
+          <div class="text-xs font-medium mt-1">{{ t.label }}</div>
         </div>
       </div>
 
@@ -989,6 +1002,7 @@ function ruleLabel (id) {
 
     <!-- STATISTICS -->
     <StatsTab v-if="tab === 'stats'" :slug="slug" />
+    </div>
 
     <ParticipantDetails v-if="detailsUser" :slug="slug" :user="detailsUser"
                         @close="detailsUser = null" />

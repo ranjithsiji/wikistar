@@ -136,20 +136,27 @@
   .badge {
     @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
   }
-  /* Codex-style tab list: a bordered, filled group with a raised active
-     tab, closer to CdxTabs' visual language than the old plain underline. */
+  /* Folder-tab look: tabs sit directly on the content panel below them —
+     the active tab's bottom border merges into the panel's top border, so
+     tab bar + panel read as one connected box (not floating pills over a
+     separate stack of cards). .tab-panel is the box the tabbed content
+     lives in; pair it with .tab-group right above it. */
   .tab-group {
-    @apply flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-800
-           bg-neutral-100 dark:bg-neutral-800/60 p-1;
+    @apply flex items-end gap-1 -mb-px;
   }
   .tab {
-    @apply px-3 py-1.5 rounded-md text-sm font-medium text-neutral-600 dark:text-neutral-300
-           hover:bg-white/70 dark:hover:bg-neutral-700/60 hover:text-neutral-900 dark:hover:text-neutral-100
+    @apply px-4 py-2 rounded-t-lg border border-b-0 border-transparent text-sm font-medium
+           text-neutral-600 dark:text-neutral-300
+           hover:bg-white/60 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-neutral-100
            cursor-pointer whitespace-nowrap transition-colors;
   }
   .tab-active {
-    @apply bg-white dark:bg-neutral-900 text-blue-700 dark:text-blue-400 shadow-sm
-           font-semibold;
+    @apply bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800
+           text-blue-700 dark:text-blue-400 font-semibold;
+  }
+  .tab-panel {
+    @apply bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800
+           rounded-xl rounded-tl-none;
   }
   .th {
     @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400;
