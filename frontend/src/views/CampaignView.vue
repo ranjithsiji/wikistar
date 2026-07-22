@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CdxTable } from '@wikimedia/codex'
+import { CdxButton, CdxTable } from '@wikimedia/codex'
 import api, { errorMessage } from '../api'
 import { useAuthStore } from '../store'
 import AppMessage from '../components/AppMessage.vue'
@@ -46,6 +46,16 @@ function onLbSort (newSort) {
   lbSort.value = active ? { [active[0]]: active[1] } : {}
 }
 const leaderboardPreview = computed(() => leaderboard.value.slice(0, 5))
+const lbPreviewColumns = [
+  { id: 'rank', label: '#', textAlign: 'number' },
+  { id: 'username', label: 'Participant' },
+  { id: 'submission_count', label: 'Submissions', textAlign: 'number' },
+  { id: 'points', label: 'Points', textAlign: 'number' }
+]
+const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
+  rank: r.rank, username: r.user.username,
+  submission_count: r.submission_count, points: r.points, user: r.user
+})))
 const stats = ref(null)
 const detailsUser = ref(null)   // leaderboard row whose popup is open
 const error = ref('')
@@ -411,20 +421,22 @@ function ruleLabel (id) {
       </span>
       <div class="flex-1"></div>
       <div class="flex gap-2 flex-wrap">
-        <button v-if="auth.isLoggedIn && campaign.status === 'active' && !isParticipant"
-                class="btn-primary" @click="join">Join campaign</button>
+        <cdx-button v-if="auth.isLoggedIn && campaign.status === 'active' && !isParticipant"
+                    action="progressive" weight="primary" @click="join">Join campaign</cdx-button>
         <router-link v-if="isJury && campaign.scoring_mode !== 'self'
                             && ['active', 'finished'].includes(campaign.status)"
                      class="btn-primary" :to="`/campaigns/${slug}/judge`">
           ⚖ Judge
         </router-link>
         <router-link v-if="isOrganizer" class="btn" :to="`/campaigns/${slug}/edit`">Edit</router-link>
-        <button v-if="canApprove && campaign.status === 'draft'" class="btn-primary" @click="approve">Approve</button>
-        <button v-if="canApprove && campaign.status === 'draft'" class="btn-danger" @click="reject">Reject</button>
-        <button v-if="isOrganizer && campaign.status === 'active'"
-                class="btn-danger" @click="deactivate">Deactivate</button>
-        <button v-if="isOrganizer && (campaign.status === 'draft' || auth.isAdmin)"
-                class="btn-danger" @click="remove">Delete</button>
+        <cdx-button v-if="canApprove && campaign.status === 'draft'"
+                    action="progressive" weight="primary" @click="approve">Approve</cdx-button>
+        <cdx-button v-if="canApprove && campaign.status === 'draft'"
+                    action="destructive" weight="primary" @click="reject">Reject</cdx-button>
+        <cdx-button v-if="isOrganizer && campaign.status === 'active'"
+                    action="destructive" weight="primary" @click="deactivate">Deactivate</cdx-button>
+        <cdx-button v-if="isOrganizer && (campaign.status === 'draft' || auth.isAdmin)"
+                    action="destructive" weight="primary" @click="remove">Delete</cdx-button>
       </div>
     </div>
     <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
@@ -539,27 +551,22 @@ function ruleLabel (id) {
       <div class="card p-4" v-if="leaderboardPreview.length">
         <div class="flex items-center justify-between mb-2">
           <h4 class="font-semibold text-sm">Leaderboard</h4>
-          <button type="button" class="text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline"
-                  @click="tab = 'leaderboard'; loadLeaderboard()">
+          <cdx-button action="progressive" weight="quiet" size="small"
+                      @click="tab = 'leaderboard'; loadLeaderboard()">
             View full leaderboard →
-          </button>
+          </cdx-button>
         </div>
-        <table class="w-full">
-          <tbody>
-            <tr v-for="row in leaderboardPreview" :key="row.user.id"
-                class="border-t border-neutral-100 dark:border-neutral-800 first:border-0
-                       cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
-                title="Show this participant's submissions"
-                @click="detailsUser = row.user">
-              <td class="td pl-0 tabular-nums text-neutral-500 dark:text-neutral-400 w-8">{{ row.rank }}</td>
-              <td class="td font-medium text-blue-700 dark:text-blue-400">{{ row.user.username }}</td>
-              <td class="td text-right text-xs text-neutral-500 dark:text-neutral-400">
-                {{ row.submission_count }} submission{{ row.submission_count === 1 ? '' : 's' }}
-              </td>
-              <td class="td pr-0 text-right tabular-nums font-semibold">{{ row.points }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <cdx-table caption="Top participants" :hide-caption="true"
+                   :columns="lbPreviewColumns" :data="lbPreviewRows">
+          <template #item-username="{ item, row }">
+            <button type="button" title="Show this participant's submissions"
+                    class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
+                    @click="detailsUser = row.user">{{ item }}</button>
+          </template>
+          <template #item-points="{ item }">
+            <span class="tabular-nums font-semibold">{{ item }}</span>
+          </template>
+        </cdx-table>
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">

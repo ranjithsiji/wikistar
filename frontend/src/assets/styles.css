@@ -5,24 +5,26 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* --------------------------------------------------------------------------
-   Wikimedia palette (Codex raw colour tokens).
-   Tailwind's blue / red / green / neutral scales are remapped to the
-   Codex "wikimedia-ui" palette so every existing utility class
-   (blue-600, neutral-200, red-700, …) renders in Wikimedia colours, and
-   Codex components sit alongside our own UI in one consistent palette.
-   Values from @wikimedia/codex-design-tokens.
+   WikiSTAR palette — warm editorial red/terracotta on cream, matching the
+   tool's star-in-circle mark. "blue" stays the Tailwind/Codex slot name
+   used throughout the app for the primary/progressive accent (links,
+   primary buttons, active tab, focus ring); it now renders terracotta, not
+   blue. "red" is reserved for destructive actions and error messages, one
+   step deeper/more saturated than the primary accent so the two read as
+   distinct. Dark mode keeps the previous Wikimedia-blue-derived neutrals —
+   only the light palette was redesigned for this pass.
    -------------------------------------------------------------------------- */
 @theme {
-  --color-blue-50:  #e8eeff;
-  --color-blue-100: #d9e2ff;
-  --color-blue-200: #b6d4fb;
-  --color-blue-300: #a6bbf5;
-  --color-blue-400: #88a3e8;
-  --color-blue-500: #6485d1;
-  --color-blue-600: #4b77d6;
-  --color-blue-700: #3366cc; /* Wikimedia progressive blue (#36c) */
-  --color-blue-800: #3056a9;
-  --color-blue-900: #233566;
+  --color-blue-50:  #fdf1ea;
+  --color-blue-100: #fbe1d1;
+  --color-blue-200: #f4bd9c;
+  --color-blue-300: #e89b71;
+  --color-blue-400: #dd7e4f;
+  --color-blue-500: #cf5f37;
+  --color-blue-600: #c2492a;
+  --color-blue-700: #b03a22; /* primary terracotta accent */
+  --color-blue-800: #8f2f1c;
+  --color-blue-900: #5c2015;
   --color-blue-950: #1b223d;
 
   --color-red-50:  #ffe9e5;
@@ -32,9 +34,9 @@
   --color-red-400: #fd7865;
   --color-red-500: #f54739;
   --color-red-600: #d74032;
-  --color-red-700: #bf3c2c; /* Wikimedia destructive red */
-  --color-red-800: #9f3526;
-  --color-red-900: #612419;
+  --color-red-700: #a3241a; /* destructive red — deeper than the accent */
+  --color-red-800: #861d15;
+  --color-red-900: #52130e;
   --color-red-950: #3c1a13;
 
   --color-green-50:  #dff2eb;
@@ -49,15 +51,15 @@
   --color-green-900: #153d31;
   --color-green-950: #132821;
 
-  /* neutral scale = Codex gray ramp (light 50 → dark 1000) */
-  --color-neutral-50:  #f8f9fa;
-  --color-neutral-100: #eaecf0;
-  --color-neutral-200: #dadde3;
-  --color-neutral-300: #c8ccd1;
-  --color-neutral-400: #a2a9b1;
-  --color-neutral-500: #72777d;
-  --color-neutral-600: #54595d;
-  --color-neutral-700: #404244;
+  /* neutral scale = warm parchment ramp (light 50 → dark 1000) */
+  --color-neutral-50:  #f8f5ee;
+  --color-neutral-100: #efe9db;
+  --color-neutral-200: #e2d9c4;
+  --color-neutral-300: #cfc2a4;
+  --color-neutral-400: #a99d80;
+  --color-neutral-500: #7d7259;
+  --color-neutral-600: #5c5340;
+  --color-neutral-700: #443d2f;
   --color-neutral-800: #27292d;
   --color-neutral-900: #202122;
   --color-neutral-950: #101418;
@@ -88,12 +90,12 @@
   --color-violet-950: #23203b;
 }
 
-/* Data-viz series colour follows the Codex progressive token so charts
-   match the theme (and flip in dark mode automatically). */
+/* Data-viz series colour follows the primary accent so charts match the
+   theme (and flip in dark mode automatically). */
 :root {
-  --viz-series: #3366cc;
+  --viz-series: #b03a22;
   --viz-surface: #ffffff;
-  --viz-ink-2: #54595d;
+  --viz-ink-2: #5c5340;
 }
 :root.dark {
   --viz-series: #88a3e8;
