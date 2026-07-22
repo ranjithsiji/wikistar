@@ -52,6 +52,20 @@ const lbPreviewColumns = [
   { id: 'submission_count', label: 'Submissions', textAlign: 'number' },
   { id: 'points', label: 'Points', textAlign: 'number' }
 ]
+const ruleColumns = [
+  { id: 'label', label: 'Rule' },
+  { id: 'applies_to', label: 'Type' },
+  { id: 'points', label: 'Points', textAlign: 'number' }
+]
+const ruleFormat = (r) => {
+  if (r.rule_type === 'per_unit') return `${r.points} / ${r.unit_size}`
+  if (['flat_bonus', 'suggested_list'].includes(r.rule_type)) return `+${r.points}`
+  return '—'
+}
+const ruleRows = computed(() => (campaign.value?.rules || []).map(r => ({
+  label: r.label, applies_to: r.applies_to.replace('_', ' '),
+  points: ruleFormat(r)
+})))
 const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
   rank: r.rank, username: r.user.username,
   submission_count: r.submission_count, points: r.points, user: r.user
@@ -594,20 +608,12 @@ function ruleLabel (id) {
           <p v-if="!campaign.rules.length" class="text-sm text-neutral-600 dark:text-neutral-300">
             Points are given by the jury.
           </p>
-          <table v-else class="w-full">
-            <tbody>
-              <tr v-for="r in campaign.rules" :key="r.id"
-                  class="border-t border-neutral-100 dark:border-neutral-800 first:border-0">
-                <td class="td pl-0">{{ r.label }}</td>
-                <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ r.applies_to.replace('_', ' ') }}</td>
-                <td class="td pr-0 text-right tabular-nums">
-                  <template v-if="r.rule_type === 'per_unit'">{{ r.points }} / {{ r.unit_size }}</template>
-                  <template v-else-if="['flat_bonus', 'suggested_list'].includes(r.rule_type)">+{{ r.points }}</template>
-                  <template v-else>—</template>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <cdx-table v-else caption="Scoring rules" :hide-caption="true"
+                     :columns="ruleColumns" :data="ruleRows">
+            <template #item-points="{ item }">
+              <span class="tabular-nums font-semibold">{{ item }}</span>
+            </template>
+          </cdx-table>
         </div>
       </div>
     </div>
