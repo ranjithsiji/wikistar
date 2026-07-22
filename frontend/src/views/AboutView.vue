@@ -1,14 +1,21 @@
+<script setup>
+import wikistarLogo from '../assets/Wikistar.svg'
+</script>
+
 <template>
   <div class="max-w-3xl mx-auto space-y-8">
-    <header>
-      <h1 class="text-3xl font-bold tracking-tight">
-        About Wiki<span class="text-blue-600 dark:text-blue-400">STAR</span>
-      </h1>
-      <p class="mt-3 text-neutral-600 dark:text-neutral-300">
-        WikiSTAR is a submission, review and self-assessment tool for
-        Wikipedia and Wikidata editathons and writing contests, running on
-        Wikimedia Toolforge.
-      </p>
+    <header class="flex items-center gap-4">
+      <img :src="wikistarLogo" alt="WikiSTAR" class="h-16 w-16 shrink-0" />
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">
+          About Wiki<span class="text-blue-600 dark:text-blue-400">STAR</span>
+        </h1>
+        <p class="mt-3 text-neutral-600 dark:text-neutral-300">
+          WikiSTAR is a submission, review and self-assessment tool for
+          Wikipedia and Wikidata editathons and writing contests, running on
+          Wikimedia Toolforge.
+        </p>
+      </div>
     </header>
 
     <section class="card p-5 space-y-3">
