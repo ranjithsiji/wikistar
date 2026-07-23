@@ -97,6 +97,10 @@ async function toggleExpanded (s) {
   }
 }
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleString() : '—'
+// Descriptive long-form date, e.g. "21 July 2026, 10:31 pm".
+const fmtDateLong = (iso) => iso ? new Date(iso).toLocaleString('en-GB', {
+  day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit'
+}) : '—'
 const newTitle = ref('')
 const newKind = ref('article')
 const newLanguage = ref('')
@@ -973,32 +977,52 @@ function ruleLabel (id) {
                class="text-sm text-neutral-600 dark:text-neutral-300">
               Not found on the wiki.
             </p>
-            <dl v-else-if="submissionDetails[s.id]" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-              <div>
-                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Total bytes</dt>
-                <dd class="tabular-nums">{{ (submissionDetails[s.id].bytes ?? submissionDetails[s.id].size)?.toLocaleString() ?? '—' }}</dd>
+            <div v-else-if="submissionDetails[s.id]" class="grid sm:grid-cols-2 gap-3">
+              <!-- creation: words, who, when -->
+              <div class="rounded-lg border border-blue-200 dark:border-blue-900
+                          bg-blue-50 dark:bg-blue-950/40 p-3 grid grid-cols-3 gap-2 text-sm">
+                <div v-if="submissionDetails[s.id].words != null">
+                  <dt class="text-xs text-blue-800 dark:text-blue-300">Words</dt>
+                  <dd class="tabular-nums font-semibold text-blue-900 dark:text-blue-100">
+                    {{ submissionDetails[s.id].words.toLocaleString() }}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-blue-800 dark:text-blue-300">Created by</dt>
+                  <dd class="font-semibold text-blue-900 dark:text-blue-100">
+                    {{ submissionDetails[s.id].created_by || submissionDetails[s.id].uploader || '—' }}
+                  </dd>
+                </div>
+                <div class="col-span-3 sm:col-span-1">
+                  <dt class="text-xs text-blue-800 dark:text-blue-300">Created on</dt>
+                  <dd class="font-semibold text-blue-900 dark:text-blue-100">
+                    {{ fmtDateLong(submissionDetails[s.id].created_at || submissionDetails[s.id].uploaded_at) }}
+                  </dd>
+                </div>
               </div>
-              <div>
-                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Created</dt>
-                <dd>{{ fmtDate(submissionDetails[s.id].created_at || submissionDetails[s.id].uploaded_at) }}</dd>
+              <!-- latest state: total bytes, who, when -->
+              <div class="rounded-lg border border-green-200 dark:border-green-900
+                          bg-green-50 dark:bg-green-950/40 p-3 grid grid-cols-3 gap-2 text-sm">
+                <div>
+                  <dt class="text-xs text-green-800 dark:text-green-300">Total bytes</dt>
+                  <dd class="tabular-nums font-semibold text-green-900 dark:text-green-100">
+                    {{ (submissionDetails[s.id].bytes ?? submissionDetails[s.id].size)?.toLocaleString() ?? '—' }}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-green-800 dark:text-green-300">Last updated by</dt>
+                  <dd class="font-semibold text-green-900 dark:text-green-100">
+                    {{ submissionDetails[s.id].last_updated_by || '—' }}
+                  </dd>
+                </div>
+                <div class="col-span-3 sm:col-span-1">
+                  <dt class="text-xs text-green-800 dark:text-green-300">Updated on</dt>
+                  <dd class="font-semibold text-green-900 dark:text-green-100">
+                    {{ fmtDateLong(submissionDetails[s.id].last_updated) }}
+                  </dd>
+                </div>
               </div>
-              <div>
-                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Created by</dt>
-                <dd>{{ submissionDetails[s.id].created_by || submissionDetails[s.id].uploader || '—' }}</dd>
-              </div>
-              <div>
-                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Last updated</dt>
-                <dd>{{ fmtDate(submissionDetails[s.id].last_updated) }}</dd>
-              </div>
-              <div>
-                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Last updated by</dt>
-                <dd>{{ submissionDetails[s.id].last_updated_by || '—' }}</dd>
-              </div>
-              <div v-if="submissionDetails[s.id].words != null">
-                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Words</dt>
-                <dd class="tabular-nums">{{ submissionDetails[s.id].words.toLocaleString() }}</dd>
-              </div>
-            </dl>
+            </div>
           </div>
 
           <!-- bulk submission over the auto-scoring cap: manual points only -->
@@ -1016,16 +1040,21 @@ function ruleLabel (id) {
           <!-- points breakdown -->
           <div v-if="s.breakdown.length">
             <h5 class="label">Points breakdown</h5>
-            <table class="w-full text-sm">
-              <tbody>
-                <tr v-for="(line, i) in s.breakdown" :key="i"
-                    class="border-t border-neutral-100 dark:border-neutral-800 first:border-0">
-                  <td class="td pl-0">{{ line.label }}</td>
-                  <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ line.source }}<template v-if="line.status"> · {{ line.status }}</template></td>
-                  <td class="td pr-0 text-right tabular-nums">{{ line.points }}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div v-for="(line, i) in s.breakdown" :key="i"
+                   class="rounded-lg border border-violet-200 dark:border-violet-900
+                          bg-violet-50 dark:bg-violet-950/40 p-3 flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium text-violet-900 dark:text-violet-100 truncate">{{ line.label }}</div>
+                  <div class="text-xs text-violet-700 dark:text-violet-400">
+                    {{ line.source }}<template v-if="line.status"> · {{ line.status }}</template>
+                  </div>
+                </div>
+                <div class="text-lg font-extrabold tabular-nums text-violet-900 dark:text-violet-100 shrink-0">
+                  {{ line.points }}
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- reviews -->
