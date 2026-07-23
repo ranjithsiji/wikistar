@@ -170,6 +170,15 @@ def _check_eligibility(sub: Submission, campaign: Campaign, user: User,
     Checks that need metadata are skipped when the fetch failed — the
     organizer can still reject after a manual refresh."""
     if sub.metadata_fetched_at is not None:
+        # Always enforced, not settings-gated: a submitter with zero
+        # detected bytes_added who didn't create the page made no
+        # verifiable contribution to it — without this, anyone could
+        # submit any page/item (in particular one on the suggested list)
+        # they never touched and still collect its auto-scored bonuses.
+        if not sub.is_new_page and not sub.bytes_added:
+            raise HTTPException(
+                400, "No edits by you were found on this page during the "
+                     "campaign period")
         if (settings.get("require_page_created_during_campaign")
                 and not sub.is_new_page):
             raise HTTPException(

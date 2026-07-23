@@ -193,10 +193,14 @@ def compute_breakdown(
             # Match by suggested title, or (for articles) by the connected
             # Wikidata item: an article that is the sitelink of a suggested
             # item earns the bonus even if its title was not listed.
+            # Gated on the submitter having a verifiable contribution —
+            # otherwise anyone could submit a page/item they never touched
+            # just because it happens to be on the suggested list.
             qid = (submission.wikidata_qid or "").upper()
             on_list = (submission.title.lower() in suggested_titles
                        or (qid and qid in suggested_titles))
-            if on_list:
+            contributed = submission.is_new_page or bool(submission.bytes_added)
+            if on_list and contributed:
                 bd.add(PointLine(rule.id, rule.label, "auto", 1, float(rule.points)))
             continue
 

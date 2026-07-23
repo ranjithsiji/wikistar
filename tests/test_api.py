@@ -47,6 +47,12 @@ def fake_mediawiki(monkeypatch):
             return PageMetadata(exists=True, page_id=13, page_len=300,
                                 current_rev_id=5, base_rev_id=4,
                                 bytes_added=120, is_new_page=False)
+        if title == "Untouched":
+            # Page exists but this user made no detected edit to it and
+            # didn't create it -- the no-real-contribution case.
+            return PageMetadata(exists=True, page_id=14, page_len=14472,
+                                current_rev_id=9, base_rev_id=8,
+                                bytes_added=0, is_new_page=False)
         return PageMetadata(exists=True, page_id=12, page_len=4100,
                             current_rev_id=4, base_rev_id=None,
                             bytes_added=4100, is_new_page=True)
@@ -781,6 +787,30 @@ def test_reject_submission_with_reason(client):
     r = client.post(f"/api/submissions/{sub['id']}/moderate",
                     json={"moderation_note": "   "})
     assert r.json["moderation_note"] is None
+
+
+def test_submission_rejected_when_submitter_has_no_detected_contribution(client):
+    # A page/item the user neither created nor edited (0 bytes_added,
+    # not new) must be refused at submission time -- otherwise anyone
+    # could submit any page, in particular one on the suggested list,
+    # and collect its bonus without having touched it.
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="No Contribution Contest",
+        suggested_articles=["Untouched"])).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Untouched", "kind": "article"})
+    assert r.status_code == 400
+    assert "No edits by you" in r.json["detail"]
+
+    # confirm it really wasn't created
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    assert not any(s["title"] == "Untouched" for s in subs)
 
 
 def test_wikidata_bulk_submission(client, monkeypatch):

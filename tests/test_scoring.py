@@ -109,7 +109,11 @@ def test_5_labels_is_1_point_and_references_are_per_unit():
 
 
 def test_suggested_item_created_with_10_statements_is_10_points():
-    sub = make_submission(kind=SubmissionKind.wikidata_item, title="Q126")
+    # is_new_page=True stands in for the fetched-metadata evidence that
+    # the submitter actually created this item (the suggested-list bonus
+    # requires a verifiable contribution, not just a claim).
+    sub = make_submission(kind=SubmissionKind.wikidata_item, title="Q126",
+                          is_new_page=True)
     claim(sub, "New Wikidata item created")
     claim(sub, "Statements added", quantity=10)
     assert total_suggested(sub, {"q126"}) == 10  # 3 + 5 + 2
