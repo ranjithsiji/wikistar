@@ -562,6 +562,11 @@ def campaign_stats(slug: str):
     subs = load_submissions(db, campaign.id)
 
     timeline = Counter(s.submitted_at.date().isoformat() for s in subs)
+    # Language is the Wikipedia subdomain prefix, only meaningful for
+    # article submissions (Wikidata/Commons/bulk kinds aren't a language).
+    by_language = Counter(
+        s.wiki_domain.split(".")[0] for s in subs
+        if s.kind == SubmissionKind.article)
     total_points = 0.0
     reviews = claims = pending_claims = unreviewed = 0
     for sub in subs:
@@ -580,6 +585,7 @@ def campaign_stats(slug: str):
     return respond(CampaignStats(
         submissions=len(subs),
         participants=len({s.user_id for s in subs}),
+        languages=len(by_language),
         reviews=reviews,
         claims=claims,
         pending_claims=pending_claims,
@@ -589,6 +595,7 @@ def campaign_stats(slug: str):
         new_pages=sum(1 for s in subs if s.is_new_page),
         by_kind=dict(Counter(s.kind.value for s in subs)),
         by_status=dict(Counter(s.status.value for s in subs)),
+        by_language=dict(by_language),
         timeline=[{"date": d, "submissions": n}
                   for d, n in sorted(timeline.items())],
         top_contributors=compute_leaderboard(db, campaign)[:10],

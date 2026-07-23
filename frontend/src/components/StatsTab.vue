@@ -43,6 +43,14 @@ const maxTimeline = computed(() =>
 const maxPoints = computed(() =>
   Math.max(1, ...(stats.value?.top_contributors || []).map(r => r.points)))
 
+// By-language breakdown: most submissions first.
+const languageRows = computed(() =>
+  Object.entries(stats.value?.by_language || {})
+    .map(([lang, count]) => ({ lang, count }))
+    .sort((a, b) => b.count - a.count))
+const maxLanguageCount = computed(() =>
+  Math.max(1, ...languageRows.value.map(r => r.count)))
+
 // Top-contributors donut: fixed categorical order (validated for CVD/
 // contrast), top 4 direct-labeled + an "Other" slice in neutral gray for
 // the rest — never a generated hue per contributor.
@@ -116,12 +124,20 @@ const timelineArea = computed(() => {
   <p v-if="error" class="text-red-600 dark:text-red-400 text-sm">{{ error }}</p>
   <div v-else-if="!stats" class="text-neutral-600 dark:text-neutral-300">Loading…</div>
   <div v-else class="space-y-6">
-    <!-- hero total -->
-    <div v-if="totalTile" class="card p-5 text-center">
-      <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-        {{ totalTile.label }}
+    <!-- hero: total submissions + total languages side by side -->
+    <div class="grid grid-cols-2 gap-3">
+      <div v-if="totalTile" class="card p-5 text-center">
+        <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          {{ totalTile.label }}
+        </div>
+        <div class="text-4xl font-extrabold tabular-nums mt-1">{{ totalTile.value }}</div>
       </div>
-      <div class="text-4xl font-extrabold tabular-nums mt-1">{{ totalTile.value }}</div>
+      <div class="card p-5 text-center">
+        <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Total languages
+        </div>
+        <div class="text-4xl font-extrabold tabular-nums mt-1">{{ stats.languages }}</div>
+      </div>
     </div>
 
     <!-- accent-bar tiles: icon chip + caption + colored value -->
@@ -260,6 +276,22 @@ const timelineArea = computed(() => {
             </div>
             <span class="col-span-2 tabular-nums text-right font-semibold">{{ row.points }}</span>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- by language: submission counts per Wikipedia language, as a bar chart -->
+    <div class="card p-4" v-if="languageRows.length">
+      <h4 class="font-semibold text-sm mb-3">By language</h4>
+      <div class="space-y-2">
+        <div v-for="row in languageRows" :key="row.lang"
+             class="grid grid-cols-12 items-center gap-2 text-sm">
+          <span class="col-span-3 sm:col-span-2 font-medium uppercase">{{ row.lang }}</span>
+          <div class="col-span-7 sm:col-span-8 h-4 rounded bg-neutral-100 dark:bg-neutral-800">
+            <div class="h-4 rounded bg-amber-500 dark:bg-amber-500"
+                 :style="{ width: `${(row.count / maxLanguageCount) * 100}%` }"></div>
+          </div>
+          <span class="col-span-2 tabular-nums text-right font-semibold">{{ row.count }}</span>
         </div>
       </div>
     </div>

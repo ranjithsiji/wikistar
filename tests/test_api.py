@@ -203,6 +203,8 @@ def test_full_self_assessment_flow(client):
     assert stats["participants"] == 1
     assert stats["total_points"] == 16
     assert stats["by_kind"] == {"article": 1}
+    assert stats["languages"] == 1
+    assert stats["by_language"] == {"ml": 1}
     assert stats["top_contributors"][0]["user"]["username"] == "Carol"
     assert len(stats["timeline"]) == 1
 

@@ -22,7 +22,7 @@ const overviewTiles = computed(() => [
   { label: 'Participants', value: props.stats?.participants, color: 'green' },
   { label: 'Total points', value: props.stats?.total_points, color: 'violet' },
   { label: 'Bytes added', value: props.stats?.total_bytes_added?.toLocaleString(), color: 'red' },
-  { label: 'Reviews', value: props.stats?.reviews, color: 'amber' }
+  { label: 'Languages', value: props.stats?.languages, color: 'amber' }
 ])
 
 const leaderboardPreview = computed(() => props.leaderboard.slice(0, 5))

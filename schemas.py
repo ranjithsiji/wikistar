@@ -234,6 +234,7 @@ class LeaderboardRow(BaseModel):
 class CampaignStats(BaseModel):
     submissions: int
     participants: int
+    languages: int
     reviews: int
     claims: int
     pending_claims: int
@@ -243,5 +244,6 @@ class CampaignStats(BaseModel):
     new_pages: int
     by_kind: dict[str, int]
     by_status: dict[str, int]
+    by_language: dict[str, int]
     timeline: list[dict]        # [{date, submissions}]
     top_contributors: list[LeaderboardRow]

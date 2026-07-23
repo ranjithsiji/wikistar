@@ -45,10 +45,19 @@ const submitterNames = computed(() =>
   [...new Set(props.submissions.map(s => s.user.username))]
     .sort((a, b) => a.localeCompare(b)))
 
+// Language filter: the Wikipedia subdomain prefix, only meaningful for
+// article submissions — only shown when the campaign actually spans more
+// than one language.
+const submissionLang = (s) => s.kind === 'article' ? s.wiki_domain.split('.')[0] : ''
+const filterLang = ref('')
+const availableLangs = computed(() =>
+  [...new Set(props.submissions.map(submissionLang).filter(Boolean))].sort())
+
 const shownSubmissions = computed(() => {
   let list = props.submissions
   if (onlyMine.value) list = list.filter(s => s.user.username === props.currentUsername)
   if (filterUser.value) list = list.filter(s => s.user.username === filterUser.value)
+  if (filterLang.value) list = list.filter(s => submissionLang(s) === filterLang.value)
   return list
 })
 
@@ -116,7 +125,15 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
           <option v-for="n in submitterNames" :key="n" :value="n">{{ n }}</option>
         </select>
       </label>
-      <span v-if="filterUser" class="text-xs text-neutral-600 dark:text-neutral-300">
+      <!-- language filter: only worth showing once more than one language is in play -->
+      <label v-if="availableLangs.length > 1" class="flex items-center gap-2 text-sm">
+        Language
+        <select v-model="filterLang" class="input !w-40 !py-1">
+          <option value="">All languages</option>
+          <option v-for="l in availableLangs" :key="l" :value="l">{{ l }}</option>
+        </select>
+      </label>
+      <span v-if="filterUser || filterLang" class="text-xs text-neutral-600 dark:text-neutral-300">
         {{ shownSubmissions.length }} of {{ submissions.length }} submissions
       </span>
     </div>
