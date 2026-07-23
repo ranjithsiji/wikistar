@@ -136,7 +136,7 @@ def test_full_self_assessment_flow(client):
     assert r.status_code == 201, r.text
     sub = r.json
     assert sub["bytes_added"] == 5000
-    # 5 pts bytes (nearest) + 10 pts suggested list
+    # 5 pts bytes (floor) + 10 pts suggested list
     assert sub["points"] == 15
 
     # duplicate blocked

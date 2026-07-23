@@ -59,10 +59,17 @@ def test_new_translation_4100_bytes_is_4_points():
     assert total(sub) == 4
 
 
-def test_3900_bytes_plus_improvement_is_6_points():
+def test_3900_bytes_plus_improvement_is_5_points():
     sub = make_submission(bytes_added=3900, page_len=12000, is_new_page=False)
     claim(sub, "Substantial improvement")
-    assert total(sub) == 6  # 4 (nearest rounding) + 2
+    assert total(sub) == 5  # 3 (bytes, floor) + 2
+
+
+def test_bytes_rule_floors_not_rounds():
+    # 6,550 bytes -> 6 points, not 7: the byte rule takes the lower whole
+    # unit (floor), it does not round to the nearest thousand.
+    sub = make_submission(bytes_added=6550, page_len=6550, is_new_page=True)
+    assert total(sub) == 6
 
 
 def test_suggested_article_5000_bytes_improved_is_17_points():
@@ -137,7 +144,7 @@ def test_jury_mode_counts_campaign_rules_plus_jury_average():
     sub = make_submission(bytes_added=5000, page_len=20000)
     _accept_review(sub, 7)
     bd = compute_breakdown(sub, RULES, {"example"}, ScoringMode.jury)
-    # 5 (bytes, nearest) + 10 (suggested list) + 7 (jury average)
+    # 5 (bytes, floor) + 10 (suggested list) + 7 (jury average)
     assert bd.total == 22
     assert {l.source for l in bd.lines} == {"auto", "jury"}
 

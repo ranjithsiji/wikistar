@@ -102,9 +102,9 @@ def rule_applies(rule: ScoringRule, submission: Submission) -> bool:
 def per_unit_points(rule: ScoringRule, value: float) -> tuple[int, float]:
     """Return (units, points) for a per_unit rule.
 
-    params.rounding: "floor" (default) or "nearest". The documented byte
-    rule rounds to nearest (3,900 bytes -> 4 points), count-based metrics
-    like statements use floor.
+    params.rounding: "floor" (default) or "nearest". Floor takes the lower
+    whole-unit count (3,900 bytes -> 3 points at unit_size 1000); "nearest"
+    is opt-in per rule for organizers who want the older rounding.
     """
     if rule.unit_size <= 0:
         return 0, 0.0
@@ -269,8 +269,7 @@ def default_self_assessment_rules() -> list[dict]:
     ANY = RuleApplies.any.value
     return [
         dict(rule_type="per_unit", applies_to=A, label="Content added",
-             metric="bytes_added", unit_size=1000, points=1, is_auto=True,
-             params={"rounding": "nearest"}),
+             metric="bytes_added", unit_size=1000, points=1, is_auto=True),
         dict(rule_type="threshold", applies_to=A, label="New article minimum size",
              params={"min_new_article_bytes": 3500}),
         dict(rule_type="flat_bonus", applies_to=A, label="Substantial improvement",
