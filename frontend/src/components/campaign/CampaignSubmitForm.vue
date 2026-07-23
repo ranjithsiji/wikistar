@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import api from '../../api'
 import LanguageSelect from '../LanguageSelect.vue'
 import TitleAutocomplete from '../TitleAutocomplete.vue'
@@ -29,6 +29,12 @@ const vUsername = computed({ get: () => props.newUsername, set: v => emit('updat
 const vLanguage = computed({ get: () => props.newLanguage, set: v => emit('update:newLanguage', v) })
 const vKind = computed({ get: () => props.newKind, set: v => emit('update:newKind', v) })
 const vTitle = computed({ get: () => props.newTitle, set: v => emit('update:newTitle', v) })
+
+// Fast client-side existence check from TitleAutocomplete: null = unknown
+// (never blocks), true/false = confirmed. Only blocks the button on a
+// confirmed miss — the server is still the real, authoritative check.
+const titleExists = ref(null)
+watch(() => [props.newTitle, props.newKind, props.submitWiki], () => { titleExists.value = null })
 </script>
 
 <template>
@@ -70,14 +76,19 @@ const vTitle = computed({ get: () => props.newTitle, set: v => emit('update:newT
         <label class="label">{{ { article: 'Article title', wikidata_item: 'Item QID', commons_file: 'File name' }[newKind] }}</label>
         <TitleAutocomplete v-model="vTitle" required
                            :wiki="submitWiki" :kind="newKind"
-                           :placeholder="{ article: 'Start typing or paste the article title…', wikidata_item: 'Q… or search by label', commons_file: 'File:Example.jpg' }[newKind]" />
+                           :placeholder="{ article: 'Start typing or paste the article title…', wikidata_item: 'Q… or search by label', commons_file: 'File:Example.jpg' }[newKind]"
+                           @update:exists="titleExists = $event" />
       </div>
       <p v-else class="flex-1 min-w-48 text-xs text-neutral-600 dark:text-neutral-300 self-center">
         {{ newKind === 'wikidata_edits'
            ? 'Counts the statements and label/description/alias edits made on eligible items during the campaign.'
            : 'Counts the files uploaded and depicts statements added during the campaign.' }}
       </p>
-      <button class="btn-primary" type="submit">Submit your contribution</button>
+      <button class="btn-primary" type="submit"
+              :disabled="!isBulkKind && titleExists === false"
+              :title="!isBulkKind && titleExists === false ? 'This title was not found on the selected wiki' : ''">
+        Submit your contribution
+      </button>
     </form>
   </div>
   <p v-else-if="!isLoggedIn && campaign.status === 'active'"

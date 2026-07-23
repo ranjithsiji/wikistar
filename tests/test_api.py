@@ -53,6 +53,10 @@ def fake_mediawiki(monkeypatch):
             return PageMetadata(exists=True, page_id=14, page_len=14472,
                                 current_rev_id=9, base_rev_id=8,
                                 bytes_added=0, is_new_page=False)
+        if title == "Nonexistent":
+            # e.g. a title that exists on a different wiki than the one
+            # actually selected in a multi-language campaign.
+            return PageMetadata(exists=False)
         return PageMetadata(exists=True, page_id=12, page_len=4100,
                             current_rev_id=4, base_rev_id=None,
                             bytes_added=4100, is_new_page=True)
@@ -811,6 +815,26 @@ def test_submission_rejected_when_submitter_has_no_detected_contribution(client)
     # confirm it really wasn't created
     subs = client.get(f"/api/campaigns/{slug}/submissions").json
     assert not any(s["title"] == "Untouched" for s in subs)
+
+
+def test_submission_rejected_when_page_does_not_exist_on_the_wiki(client):
+    # e.g. a multi-language campaign where the user picks the wrong
+    # project and the title only exists on a different wiki.
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Wrong Wiki Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Nonexistent", "kind": "article"})
+    assert r.status_code == 400
+    assert "does not exist" in r.json["detail"]
+
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    assert not any(s["title"] == "Nonexistent" for s in subs)
 
 
 def test_wikidata_bulk_submission(client, monkeypatch):

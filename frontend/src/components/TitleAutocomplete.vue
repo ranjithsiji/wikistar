@@ -4,6 +4,11 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 // Page-title input with live suggestions from the target wiki
 // (prefixsearch; wbsearchentities for Wikidata items). v-model is the
 // raw title — typing, pasting and picking a suggestion all update it.
+// Also fires a debounced existence check against the same wiki, so a
+// title that doesn't exist there (e.g. picked for the wrong project in
+// a multi-language campaign) surfaces a warning before the user submits
+// — this is a fast, client-side hint only; the server still verifies
+// and is the real gate.
 const model = defineModel({ type: String, default: '' })
 const props = defineProps({
   wiki: { type: String, required: true },       // target wiki domain
@@ -11,6 +16,7 @@ const props = defineProps({
   placeholder: { type: String, default: '' },
   required: { type: Boolean, default: false }
 })
+const emit = defineEmits(['update:exists'])
 
 const suggestions = ref([])   // [{title, description?}]
 const open = ref(false)
@@ -18,6 +24,32 @@ const active = ref(0)
 const root = ref(null)
 let timer = null
 let controller = null
+
+// null = unknown/not checked yet, true/false = confirmed.
+const exists = ref(null)
+let existsController = null
+async function checkExists () {
+  const title = model.value.trim()
+  existsController?.abort()
+  if (!title) { exists.value = null; emit('update:exists', null); return }
+  existsController = new AbortController()
+  try {
+    let url
+    if (props.kind === 'wikidata_item') {
+      url = 'https://www.wikidata.org/w/api.php?action=wbgetentities'
+        + `&ids=${encodeURIComponent(title.toUpperCase())}&props=info&format=json&origin=*`
+    } else {
+      url = `https://${props.wiki}/w/api.php?action=query`
+        + `&titles=${encodeURIComponent(title)}&format=json&origin=*`
+    }
+    const data = await (await fetch(url, { signal: existsController.signal })).json()
+    const found = props.kind === 'wikidata_item'
+      ? !(data.entities?.[title.toUpperCase()]?.missing !== undefined)
+      : !Object.values(data.query?.pages || {}).some(p => p.missing !== undefined)
+    exists.value = found
+    emit('update:exists', found)
+  } catch { /* aborted or offline — stay unknown, don't block the user */ }
+}
 
 async function fetchSuggestions () {
   const q = model.value.trim()
@@ -46,18 +78,30 @@ async function fetchSuggestions () {
 watch(() => [props.wiki, props.kind], () => {
   suggestions.value = []
   open.value = false
+  exists.value = null
+  emit('update:exists', null)
+  if (model.value.trim()) checkExists()
 })
 
+let existsTimer = null
 function onInput (e) {
   model.value = e.target.value
+  exists.value = null
+  emit('update:exists', null)
   clearTimeout(timer)
+  clearTimeout(existsTimer)
   timer = setTimeout(fetchSuggestions, 250)
+  existsTimer = setTimeout(checkExists, 400)
 }
 
 function pick (s) {
   model.value = s.title
   suggestions.value = []
   open.value = false
+  // Picked straight from suggestions pulled from this same wiki — no
+  // need for a separate existence round-trip.
+  exists.value = true
+  emit('update:exists', true)
 }
 
 function onKeydown (e) {
@@ -80,7 +124,11 @@ function onDocumentClick (e) {
   if (root.value && !root.value.contains(e.target)) open.value = false
 }
 onMounted(() => document.addEventListener('click', onDocumentClick))
-onBeforeUnmount(() => { document.removeEventListener('click', onDocumentClick); clearTimeout(timer) })
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  clearTimeout(timer)
+  clearTimeout(existsTimer)
+})
 </script>
 
 <template>
@@ -99,5 +147,10 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocumentClick); 
           — {{ s.description }}</span>
       </button>
     </div>
+    <p v-if="exists === false" class="text-xs text-red-600 dark:text-red-400 mt-1">
+      {{ kind === 'wikidata_item'
+         ? `${model.trim()} was not found on Wikidata.`
+         : `"${model.trim()}" was not found on ${wiki}. Check the project/title.` }}
+    </p>
   </div>
 </template>

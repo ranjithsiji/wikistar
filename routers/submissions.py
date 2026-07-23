@@ -169,6 +169,13 @@ def _check_eligibility(sub: Submission, campaign: Campaign, user: User,
     """Fountain-style eligibility rules, checked against fetched metadata.
     Checks that need metadata are skipped when the fetch failed — the
     organizer can still reject after a manual refresh."""
+    # A confirmed "page does not exist on this wiki" is unambiguous and
+    # always rejected — this is the guard against e.g. submitting a title
+    # against the wrong project's domain in a multi-language campaign
+    # (the title exists on one wiki, not the one actually selected).
+    if meta is not None and not meta.exists:
+        raise HTTPException(
+            400, f"{sub.title!r} does not exist on {sub.wiki_domain}")
     if sub.metadata_fetched_at is not None:
         # Always enforced, not settings-gated: a submitter with zero
         # detected bytes_added who didn't create the page made no
