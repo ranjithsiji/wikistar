@@ -353,6 +353,7 @@ const statusStyles = {
     <!-- LEADERBOARD -->
     <CampaignLeaderboardTab v-if="tab === 'leaderboard'"
                         :leaderboard="leaderboard" :current-username="auth.user?.username || ''"
+                        :show-podium="campaign.settings.show_leaderboard_podium"
                         @show-details="detailsUser = $event" />
 
     <!-- STATISTICS -->

@@ -139,6 +139,11 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
     "show_leaderboard": dict(
         type="bool", default=True, category="display",
         label="Public leaderboard"),
+    "show_leaderboard_podium": dict(
+        type="bool", default=True, category="display",
+        label="Podium on the leaderboard",
+        help="Show the top-3 podium above the standings table. Turn off "
+             "to go straight to the table."),
     "show_points_during_campaign": dict(
         type="bool", default=True, category="display",
         label="Show points while the campaign runs"),

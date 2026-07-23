@@ -5,7 +5,8 @@ import UserAvatar from '../UserAvatar.vue'
 
 const props = defineProps({
   leaderboard: { type: Array, required: true },
-  currentUsername: { type: String, default: '' }
+  currentUsername: { type: String, default: '' },
+  showPodium: { type: Boolean, default: true }
 })
 const emit = defineEmits(['show-details'])
 
@@ -37,6 +38,8 @@ function onLbSort (newSort) {
 }
 const myLeaderboardRow = computed(() =>
   props.leaderboard.find(r => r.user.username === props.currentUsername) || null)
+const maxSubmissions = computed(() =>
+  Math.max(1, ...props.leaderboard.map(r => r.submission_count)))
 
 // Podium: top 3, ordered 2nd / 1st / 3rd for the visual layout.
 const podium = computed(() => {
@@ -57,7 +60,7 @@ const leadMargin = computed(() => {
 
     <template v-else>
       <!-- podium: top 3, 1st raised and highlighted in the middle -->
-      <div class="grid grid-cols-3 gap-3 items-end">
+      <div v-if="showPodium" class="grid grid-cols-3 gap-3 items-end">
         <div v-for="row in podium" :key="row.user.id"
              class="card p-4 text-center cursor-pointer hover:border-blue-300 dark:hover:border-blue-700"
              :class="row.rank === 1
@@ -83,7 +86,7 @@ const leadMargin = computed(() => {
       </div>
 
       <!-- lead margin: a real, computed summary — never a fabricated trend -->
-      <div v-if="leadMargin" class="card p-4 flex items-center gap-3">
+      <div v-if="showPodium && leadMargin" class="card p-4 flex items-center gap-3">
         <span class="inline-flex items-center justify-center w-9 h-9 rounded-full shrink-0
                      bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -144,6 +147,15 @@ const leadMargin = computed(() => {
               <UserAvatar :username="item" size="sm" />
               {{ item }}
             </button>
+          </template>
+          <template #item-submission_count="{ item }">
+            <div class="flex items-center gap-2 justify-end">
+              <div class="w-16 h-2 rounded bg-neutral-100 dark:bg-neutral-800 shrink-0">
+                <div class="h-2 rounded bg-blue-600 dark:bg-blue-500"
+                     :style="{ width: `${(item / maxSubmissions) * 100}%` }"></div>
+              </div>
+              <span class="tabular-nums w-4 text-right">{{ item }}</span>
+            </div>
           </template>
           <template #item-bytes_added="{ item }">
             <span class="tabular-nums">{{ item.toLocaleString() }}</span>

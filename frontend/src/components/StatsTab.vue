@@ -191,11 +191,13 @@ const timelineArea = computed(() => {
       </div>
     </div>
 
-    <!-- top contributors: donut (share of total points) + ranked bar list -->
-    <div class="card p-4" v-if="stats.top_contributors.length">
-      <h4 class="font-semibold text-sm mb-3">Top contributors</h4>
-      <div class="grid sm:grid-cols-[12rem_1fr] gap-4 items-center">
-        <div class="relative w-40 h-40 mx-auto">
+    <!-- top contributors: donut (share of total points) in its own column,
+         ranked bar list in a wider one — the donut gets a fixed card
+         width so it's never cramped/clipped at narrow viewports. -->
+    <div class="grid sm:grid-cols-[16rem_1fr] gap-4 items-start" v-if="stats.top_contributors.length">
+      <div class="card p-4">
+        <h4 class="font-semibold text-sm mb-3">Points share</h4>
+        <div class="relative w-48 h-48 mx-auto">
           <svg viewBox="0 0 33.83 33.83" class="w-full h-full -rotate-90">
             <circle cx="16.91" cy="16.91" :r="DONUT_R" fill="none"
                     class="stroke-neutral-100 dark:stroke-neutral-800" stroke-width="4" />
@@ -211,7 +213,10 @@ const timelineArea = computed(() => {
             <div class="text-xl font-extrabold tabular-nums">{{ donutTotal }}</div>
           </div>
         </div>
+      </div>
 
+      <div class="card p-4">
+        <h4 class="font-semibold text-sm mb-3">Top contributors</h4>
         <div class="space-y-2">
           <div v-for="row in stats.top_contributors" :key="row.user.id"
                class="grid grid-cols-12 items-center gap-2 text-sm"
