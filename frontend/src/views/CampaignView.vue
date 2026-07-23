@@ -193,12 +193,13 @@ const participantNames = computed(() =>
     .filter(m => m.role === 'participant')
     .map(m => m.user.username))])
 
+// Stat tile accent colors: a bottom bar plus a matching value color.
 const tileClasses = {
-  blue: 'border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400',
-  green: 'border-green-400 dark:border-green-700 text-green-600 dark:text-green-400',
-  violet: 'border-violet-400 dark:border-violet-700 text-violet-600 dark:text-violet-400',
-  amber: 'border-amber-400 dark:border-amber-700 text-amber-600 dark:text-amber-400',
-  red: 'border-red-400 dark:border-red-700 text-red-600 dark:text-red-400'
+  blue: { bar: 'bg-blue-600 dark:bg-blue-500', text: 'text-blue-700 dark:text-blue-400' },
+  green: { bar: 'bg-green-600 dark:bg-green-500', text: 'text-green-700 dark:text-green-400' },
+  violet: { bar: 'bg-violet-600 dark:bg-violet-500', text: 'text-violet-700 dark:text-violet-400' },
+  amber: { bar: 'bg-amber-500 dark:bg-amber-500', text: 'text-amber-700 dark:text-amber-400' },
+  red: { bar: 'bg-red-700 dark:bg-red-600', text: 'text-red-700 dark:text-red-500' }
 }
 const overviewTiles = computed(() => [
   { label: 'Submissions', value: stats.value?.submissions, color: 'blue' },
@@ -540,9 +541,18 @@ function ruleLabel (id) {
     </div>
 
     <div class="tab-panel p-4">
-    <!-- submit form: on the campaign home page and the submissions tab -->
+    <!-- submit form: on the campaign home page and the submissions tab.
+         The Overview tab gets a highlighted "Contribute" CTA card; the
+         Submissions tab keeps the plain working-list styling. -->
     <template v-if="tab === 'overview' || tab === 'submissions'">
-      <div v-if="auth.isLoggedIn && campaign.status === 'active'" class="card p-4 mb-4">
+      <div v-if="auth.isLoggedIn && campaign.status === 'active'"
+           class="mb-4"
+           :class="tab === 'overview'
+             ? 'rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-5'
+             : 'card p-4'">
+        <h4 v-if="tab === 'overview'" class="text-lg font-bold text-blue-900 dark:text-blue-100 mb-3">
+          Contribute to {{ campaign.name }}
+        </h4>
         <form class="flex flex-wrap gap-2 items-end" @submit.prevent="submit">
           <!-- coordinators submit on behalf of a participant -->
           <div v-if="isOrganizer" class="w-56">
@@ -589,69 +599,94 @@ function ruleLabel (id) {
 
     <!-- OVERVIEW -->
     <div v-if="tab === 'overview'" class="space-y-4">
-      <!-- headline statistics -->
+      <!-- headline statistics: left-aligned, bottom accent bar per tile -->
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div v-for="t in overviewTiles" :key="t.label" class="card border-2 p-4 text-center"
-             :class="tileClasses[t.color]">
-          <div class="text-2xl font-extrabold tabular-nums">{{ t.value ?? '—' }}</div>
-          <div class="text-xs font-medium mt-1">{{ t.label }}</div>
-        </div>
-      </div>
-
-      <div class="card p-4" v-if="campaign.description">
-        <p class="text-sm whitespace-pre-wrap">{{ campaign.description }}</p>
-      </div>
-
-      <!-- people: one row, groups side by side -->
-      <div class="card p-4">
-        <h4 class="font-semibold text-sm mb-2">People</h4>
-        <div class="flex flex-wrap gap-x-10 gap-y-2 text-sm">
-          <div class="flex flex-wrap items-baseline gap-1.5">
-            <b>Organizers:</b>
-            <template v-if="campaign.members.some(m => m.role === 'organizer')">
-              <span v-for="m in campaign.members.filter(m => m.role === 'organizer')" :key="m.id"
-                    class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                {{ m.user.username }}
-              </span>
-            </template>
-            <span v-else>—</span>
+        <div v-for="t in overviewTiles" :key="t.label" class="card overflow-hidden">
+          <div class="p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+              {{ t.label }}
+            </div>
+            <div class="text-3xl font-extrabold tabular-nums mt-1" :class="tileClasses[t.color].text">
+              {{ t.value ?? '—' }}
+            </div>
           </div>
-          <div class="flex flex-wrap items-baseline gap-1.5">
-            <b>Jury:</b>
-            <template v-if="campaign.members.some(m => m.role === 'jury')">
-              <span v-for="m in campaign.members.filter(m => m.role === 'jury')" :key="m.id"
-                    class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300">
-                {{ m.user.username }}
-              </span>
-            </template>
-            <span v-else>—</span>
-          </div>
+          <div class="h-1" :class="tileClasses[t.color].bar"></div>
         </div>
       </div>
 
-      <!-- leaderboard preview: top 5, link through to the full tab -->
-      <div class="card p-4" v-if="leaderboardPreview.length">
-        <div class="flex items-center justify-between mb-2">
-          <h4 class="font-semibold text-sm">Leaderboard</h4>
-          <cdx-button action="progressive" weight="quiet" size="small"
-                      @click="tab = 'leaderboard'; loadLeaderboard()">
-            View full leaderboard →
-          </cdx-button>
+      <!-- sidebar (about + people) + leaderboard preview -->
+      <div class="grid lg:grid-cols-[20rem_1fr] gap-4 items-start">
+        <div class="card p-4 space-y-4">
+          <div>
+            <h4 class="font-semibold text-base mb-2">About campaign</h4>
+            <p v-if="campaign.description" class="text-sm whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">
+              {{ campaign.description }}
+            </p>
+            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">No description yet.</p>
+          </div>
+          <div class="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+            <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-1.5">
+              Organizers
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <template v-if="campaign.members.some(m => m.role === 'organizer')">
+                <span v-for="m in campaign.members.filter(m => m.role === 'organizer')" :key="m.id"
+                      class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                  {{ m.user.username }}
+                </span>
+              </template>
+              <span v-else class="text-sm text-neutral-500 dark:text-neutral-400">—</span>
+            </div>
+          </div>
+          <div class="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+            <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-1.5">
+              Jury
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <template v-if="campaign.members.some(m => m.role === 'jury')">
+                <span v-for="m in campaign.members.filter(m => m.role === 'jury')" :key="m.id"
+                      class="badge bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-300">
+                  {{ m.user.username }}
+                </span>
+              </template>
+              <span v-else class="text-sm text-neutral-500 dark:text-neutral-400">—</span>
+            </div>
+          </div>
         </div>
-        <cdx-table caption="Top participants" :hide-caption="true"
-                   :columns="lbPreviewColumns" :data="lbPreviewRows">
-          <template #item-username="{ item, row }">
-            <button type="button" title="Show this participant's submissions"
-                    class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
-                    @click="detailsUser = row.user">{{ item }}</button>
-          </template>
-          <template #item-bytes_added="{ item }">
-            <span class="tabular-nums">{{ item.toLocaleString() }}</span>
-          </template>
-          <template #item-points="{ item }">
-            <span class="tabular-nums font-semibold">{{ item }}</span>
-          </template>
-        </cdx-table>
+
+        <!-- leaderboard preview: top 5, link through to the full tab -->
+        <div class="card p-4" v-if="leaderboardPreview.length">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-semibold text-base">Leaderboard preview</h4>
+            <cdx-button action="progressive" weight="quiet" size="small"
+                        @click="tab = 'leaderboard'; loadLeaderboard()">
+              View full leaderboard →
+            </cdx-button>
+          </div>
+          <cdx-table caption="Top participants" :hide-caption="true"
+                     :columns="lbPreviewColumns" :data="lbPreviewRows">
+            <template #item-rank="{ item }">
+              <span v-if="item === 1"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full
+                           bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300
+                           text-xs font-bold tabular-nums">{{ item }}</span>
+              <span v-else class="tabular-nums text-neutral-500 dark:text-neutral-400">{{ item }}</span>
+            </template>
+            <template #item-username="{ item, row }">
+              <button type="button" title="Show this participant's submissions"
+                      class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
+                      @click="detailsUser = row.user">{{ item }}</button>
+            </template>
+            <template #item-bytes_added="{ item }">
+              <span class="tabular-nums">{{ item.toLocaleString() }}</span>
+            </template>
+            <template #item-points="{ item, row }">
+              <span v-if="row.rank === 1"
+                    class="badge bg-green-600 text-white font-bold tabular-nums">{{ item }}</span>
+              <span v-else class="tabular-nums font-semibold">{{ item }}</span>
+            </template>
+          </cdx-table>
+        </div>
       </div>
     </div>
 
