@@ -642,6 +642,46 @@ def test_participant_details_popup(client, monkeypatch):
     assert article["details"] is None
 
 
+def test_submission_details_endpoint(client, monkeypatch):
+    from datetime import datetime, timezone
+
+    monkeypatch.setattr(
+        mediawiki, "fetch_article_details",
+        lambda domain, title: {
+            "bytes": 20000, "words": 3100,
+            "created_at": datetime(2020, 1, 2, tzinfo=timezone.utc),
+            "created_by": "FirstEditor",
+            "last_updated": datetime(2026, 7, 1, tzinfo=timezone.utc),
+            "last_updated_by": "LatestEditor",
+            "qid": "Q1359020",
+        })
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Submission Details Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Kathakali", "kind": "article"}).json
+
+    logout()  # public, like the participant-details popup
+    details = client.get(f"/api/submissions/{sub['id']}/details").json
+    assert details["created_by"] == "FirstEditor"
+    assert details["last_updated_by"] == "LatestEditor"
+    assert details["bytes"] == 20000
+
+    assert client.get("/api/submissions/999999/details").status_code == 404
+
+    def boom(domain, title):
+        raise RuntimeError("wiki down")
+    monkeypatch.setattr(mediawiki, "fetch_article_details", boom)
+    assert client.get(
+        f"/api/submissions/{sub['id']}/details").status_code == 502
+
+
 def test_coordinator_submits_on_behalf(client):
     login("Alice")
     slug = client.post("/api/campaigns", json=make_campaign_payload(

@@ -55,6 +55,7 @@ export default {
   listSubmissions: (slug) => http.get(`/api/campaigns/${slug}/submissions`),
   createSubmission: (slug, data) => http.post(`/api/campaigns/${slug}/submissions`, data),
   deleteSubmission: (id) => http.delete(`/api/submissions/${id}`),
+  submissionDetails: (id) => http.get(`/api/submissions/${id}/details`),
   refreshSubmission: (id) => http.post(`/api/submissions/${id}/refresh`),
   recalculateSubmission: (id) => http.post(`/api/submissions/${id}/recalculate`),
   moderateSubmission: (id, data) => http.post(`/api/submissions/${id}/moderate`, data),

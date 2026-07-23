@@ -150,6 +150,18 @@ def _first_revision(client: httpx.Client, domain: str, page_id: int) -> dict:
     return {}
 
 
+def _latest_revision(client: httpx.Client, domain: str, page_id: int) -> dict:
+    data = client.get(api_url(domain), params={
+        "action": "query", "format": "json", "formatversion": 2,
+        "prop": "revisions", "pageids": page_id,
+        "rvprop": "timestamp|user", "rvdir": "older", "rvlimit": 1,
+    }).json()
+    pages = data.get("query", {}).get("pages", [])
+    if pages and pages[0].get("revisions"):
+        return pages[0]["revisions"][0]
+    return {}
+
+
 def add_page_template(domain: str, title: str, template: str,
                       on_talk: bool, access_token: str) -> bool:
     """Prepend {{template}} to the article (or its talk page) with the
@@ -308,9 +320,10 @@ def fetch_commons_user_activity(username: str, start: date, end: date,
 
 
 def fetch_article_details(domain: str, title: str) -> dict | None:
-    """Live per-article facts for the participant popup: size, word count,
-    creation/last-edit dates and the connected Wikidata item. Returns None
-    for a missing page; network errors raise httpx.HTTPError."""
+    """Live per-article facts for the participant popup and submission card:
+    size, word count, creation/last-edit dates and editors, and the
+    connected Wikidata item. Returns None for a missing page; network
+    errors raise httpx.HTTPError."""
     with _client() as client:
         data = client.get(api_url(domain), params={
             "action": "query", "format": "json", "formatversion": 2,
@@ -321,6 +334,7 @@ def fetch_article_details(domain: str, title: str) -> dict | None:
         if page.get("missing"):
             return None
         first = _first_revision(client, domain, page["pageid"])
+        latest = _latest_revision(client, domain, page["pageid"])
         extract = client.get(api_url(domain), params={
             "action": "query", "format": "json", "formatversion": 2,
             "prop": "extracts", "explaintext": 1, "exlimit": 1,
@@ -331,7 +345,9 @@ def fetch_article_details(domain: str, title: str) -> dict | None:
         "bytes": page.get("length"),
         "words": len(text.split()),
         "created_at": _parse_ts(first.get("timestamp")),
+        "created_by": first.get("user"),
         "last_updated": _parse_ts(page.get("touched")),
+        "last_updated_by": latest.get("user"),
         "qid": (page.get("pageprops") or {}).get("wikibase_item"),
     }
 
@@ -348,6 +364,7 @@ def fetch_wikidata_details(qid: str) -> dict | None:
         if page.get("missing") or page.get("invalid"):
             return None
         first = _first_revision(client, domain, page["pageid"])
+        latest = _latest_revision(client, domain, page["pageid"])
         # "mul" holds the default-for-all-languages label Wikidata uses
         # when no language-specific one exists.
         entity = client.get(api_url(domain), params={
@@ -362,7 +379,9 @@ def fetch_wikidata_details(qid: str) -> dict | None:
         "label": label,
         "bytes": page.get("length"),
         "created_at": _parse_ts(first.get("timestamp")),
+        "created_by": first.get("user"),
         "last_updated": _parse_ts(page.get("touched")),
+        "last_updated_by": latest.get("user"),
     }
 
 

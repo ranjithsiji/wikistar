@@ -351,6 +351,28 @@ def delete_submission(submission_id: int):
     return respond(None, 204)
 
 
+@bp.get("/submissions/<int:submission_id>/details")
+def submission_details(submission_id: int):
+    """Live per-article facts for the expanded submission card: size,
+    word count, creation/last-edit dates and editors. Fetched on demand
+    (only while the card is expanded) rather than eagerly for every
+    submission in the list."""
+    db = get_db()
+    sub = _get_submission_or_404(db, submission_id)
+    try:
+        if sub.kind == SubmissionKind.article:
+            details = mediawiki.fetch_article_details(sub.wiki_domain, sub.title)
+        elif sub.kind == SubmissionKind.wikidata_item:
+            details = mediawiki.fetch_wikidata_details(sub.title)
+        elif sub.kind == SubmissionKind.commons_file:
+            details = mediawiki.fetch_commons_details(sub.title)
+        else:
+            details = sub.metrics
+    except Exception:
+        raise HTTPException(502, "Could not fetch details from the wiki")
+    return respond(details)
+
+
 @bp.post("/submissions/<int:submission_id>/refresh")
 def refresh_metadata(submission_id: int):
     db, user = get_db(), require_user()

@@ -81,6 +81,22 @@ const notice = ref('')
 const tab = ref('overview')
 const onlyMine = ref(false)
 const expanded = ref(null)
+// Article details (created/updated dates + editors, bytes, words) for the
+// expanded submission card — fetched from the wiki on demand, once per
+// submission, and cached: 'loading' | 'error' | the details payload.
+const submissionDetails = ref({})
+async function toggleExpanded (s) {
+  expanded.value = expanded.value === s.id ? null : s.id
+  if (expanded.value !== s.id || submissionDetails.value[s.id]) return
+  submissionDetails.value = { ...submissionDetails.value, [s.id]: 'loading' }
+  try {
+    const { data } = await api.submissionDetails(s.id)
+    submissionDetails.value = { ...submissionDetails.value, [s.id]: data || 'missing' }
+  } catch (e) {
+    submissionDetails.value = { ...submissionDetails.value, [s.id]: 'error' }
+  }
+}
+const fmtDate = (iso) => iso ? new Date(iso).toLocaleString() : '—'
 const newTitle = ref('')
 const newKind = ref('article')
 const newLanguage = ref('')
@@ -344,9 +360,16 @@ async function loadLeaderboard () {
 }
 onMounted(load)
 
-async function run (fn, successMsg = '') {
+// Tracks which per-submission action button is mid-flight, e.g.
+// "42:refresh", so only that button shows a spinner and disables itself.
+const pendingAction = ref('')
+const isPending = (s, action) => pendingAction.value === `${s.id}:${action}`
+const isCampaignPending = (action) => pendingAction.value === `campaign:${action}`
+
+async function run (fn, successMsg = '', pendingKey = '') {
   error.value = ''
   notice.value = ''
+  if (pendingKey) pendingAction.value = pendingKey
   try {
     await fn()
     notice.value = successMsg
@@ -354,25 +377,31 @@ async function run (fn, successMsg = '') {
     if (tab.value === 'leaderboard') await loadLeaderboard()
   } catch (e) {
     error.value = errorMessage(e)
+  } finally {
+    if (pendingKey) pendingAction.value = ''
   }
 }
 
-const join = () => run(() => api.joinCampaign(props.slug), 'You joined the campaign.')
-const approve = () => run(() => api.approveCampaign(props.slug), 'Campaign approved.')
+const join = () => run(() => api.joinCampaign(props.slug), 'You joined the campaign.', 'campaign:join')
+const approve = () => run(() => api.approveCampaign(props.slug), 'Campaign approved.', 'campaign:approve')
 const deactivate = () => {
   if (!confirm('Deactivate this campaign? It goes back to draft, stops accepting submissions and is hidden from the public until approved again.')) return
-  return run(() => api.deactivateCampaign(props.slug), 'Campaign deactivated.')
+  return run(() => api.deactivateCampaign(props.slug), 'Campaign deactivated.', 'campaign:deactivate')
 }
 const reject = () => {
   const reason = prompt('Reason for rejection?') || ''
-  return run(() => api.rejectCampaign(props.slug, reason))
+  return run(() => api.rejectCampaign(props.slug, reason), '', 'campaign:reject')
 }
 const remove = async () => {
   if (!confirm('Delete this campaign and all its submissions?')) return
+  pendingAction.value = 'campaign:delete'
   try {
     await api.deleteCampaign(props.slug)
     router.push('/')
-  } catch (e) { error.value = errorMessage(e) }
+  } catch (e) {
+    error.value = errorMessage(e)
+    pendingAction.value = ''
+  }
 }
 const submit = () => run(async () => {
   const payload = { title: isBulkKind.value ? '' : newTitle.value, kind: newKind.value }
@@ -385,23 +414,23 @@ const submit = () => run(async () => {
 }, 'Submission added.')
 const withdraw = (s) => {
   if (!confirm(`Withdraw "${s.title}"?`)) return
-  return run(() => api.deleteSubmission(s.id))
+  return run(() => api.deleteSubmission(s.id), '', `${s.id}:withdraw`)
 }
-const refresh = (s) => run(() => api.refreshSubmission(s.id), 'Wiki metadata refreshed.')
+const refresh = (s) => run(() => api.refreshSubmission(s.id), 'Wiki metadata refreshed.', `${s.id}:refresh`)
 const recalculate = (s) => {
   if (s.points_override != null && !confirm(
     'This clears the manual points override and recomputes the points '
     + 'from fresh wiki data and the campaign rules. Continue?')) return
-  return run(() => api.recalculateSubmission(s.id), 'Points recalculated.')
+  return run(() => api.recalculateSubmission(s.id), 'Points recalculated.', `${s.id}:recalculate`)
 }
 const saveReview = (s, review) => run(() => api.submitReview(s.id, review), 'Review saved.')
 const saveClaims = (s, claims) => run(() => api.saveClaims(s.id, claims), 'Claims saved.')
-const moderateSub = (s, status) => run(() => api.moderateSubmission(s.id, { status }))
+const moderateSub = (s, status) => run(() => api.moderateSubmission(s.id, { status }), '', `${s.id}:${status}`)
 const overrideSub = (s) => {
   const v = prompt('Final points for this submission (empty to clear the override):')
   if (v === null) return
   const payload = v === '' ? { clear_override: true } : { points_override: Number(v) }
-  return run(() => api.moderateSubmission(s.id, payload))
+  return run(() => api.moderateSubmission(s.id, payload), '', `${s.id}:override`)
 }
 const moderateClaim = (claim, status) => {
   let points_final = null
@@ -460,7 +489,9 @@ function ruleLabel (id) {
       <div class="flex-1"></div>
       <div class="flex gap-2 flex-wrap">
         <cdx-button v-if="auth.isLoggedIn && campaign.status === 'active' && !isParticipant"
-                    action="progressive" weight="primary" @click="join">Join campaign</cdx-button>
+                    action="progressive" weight="primary" :disabled="isCampaignPending('join')" @click="join">
+          {{ isCampaignPending('join') ? 'Joining…' : 'Join campaign' }}
+        </cdx-button>
         <router-link v-if="isJury && campaign.scoring_mode !== 'self'
                             && ['active', 'finished'].includes(campaign.status)"
                      class="btn-primary" :to="`/campaigns/${slug}/judge`">
@@ -468,13 +499,21 @@ function ruleLabel (id) {
         </router-link>
         <router-link v-if="isOrganizer" class="btn" :to="`/campaigns/${slug}/edit`">Edit</router-link>
         <cdx-button v-if="canApprove && campaign.status === 'draft'"
-                    action="progressive" weight="primary" @click="approve">Approve</cdx-button>
+                    action="progressive" weight="primary" :disabled="isCampaignPending('approve')" @click="approve">
+          {{ isCampaignPending('approve') ? 'Approving…' : 'Approve' }}
+        </cdx-button>
         <cdx-button v-if="canApprove && campaign.status === 'draft'"
-                    action="destructive" weight="primary" @click="reject">Reject</cdx-button>
+                    action="destructive" weight="primary" :disabled="isCampaignPending('reject')" @click="reject">
+          {{ isCampaignPending('reject') ? 'Rejecting…' : 'Reject' }}
+        </cdx-button>
         <cdx-button v-if="isOrganizer && campaign.status === 'active'"
-                    action="destructive" weight="primary" @click="deactivate">Deactivate</cdx-button>
+                    action="destructive" weight="primary" :disabled="isCampaignPending('deactivate')" @click="deactivate">
+          {{ isCampaignPending('deactivate') ? 'Deactivating…' : 'Deactivate' }}
+        </cdx-button>
         <cdx-button v-if="isOrganizer && (campaign.status === 'draft' || auth.isAdmin)"
-                    action="destructive" weight="primary" @click="remove">Delete</cdx-button>
+                    action="destructive" weight="primary" :disabled="isCampaignPending('delete')" @click="remove">
+          {{ isCampaignPending('delete') ? 'Deleting…' : 'Delete' }}
+        </cdx-button>
       </div>
     </div>
     <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
@@ -881,7 +920,7 @@ function ruleLabel (id) {
         <div v-if="!g.user || isUserExpanded(g.user.username)" :class="g.user && 'pl-6 mb-1'">
           <div v-for="s in g.subs" :key="s.id" class="card mb-2">
         <div class="p-3 flex flex-wrap items-center gap-3 cursor-pointer"
-             @click="expanded = expanded === s.id ? null : s.id">
+             @click="toggleExpanded(s)">
           <div class="flex-1 min-w-40">
             <a :href="s.url" target="_blank" class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
                @click.stop>{{ s.title }}</a>
@@ -915,6 +954,53 @@ function ruleLabel (id) {
         </div>
 
         <div v-if="expanded === s.id" class="border-t border-neutral-100 dark:border-neutral-800 p-3 space-y-4">
+          <!-- live wiki details: created/updated dates and editors, bytes -->
+          <div v-if="!['wikidata_edits', 'commons_edits'].includes(s.kind)">
+            <h5 class="label">Article details</h5>
+            <div v-if="submissionDetails[s.id] === 'loading'"
+                 class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+              <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Fetching details from the wiki…
+            </div>
+            <p v-else-if="submissionDetails[s.id] === 'error'"
+               class="text-sm text-red-600 dark:text-red-400">
+              Could not fetch details from the wiki.
+            </p>
+            <p v-else-if="submissionDetails[s.id] === 'missing'"
+               class="text-sm text-neutral-600 dark:text-neutral-300">
+              Not found on the wiki.
+            </p>
+            <dl v-else-if="submissionDetails[s.id]" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+              <div>
+                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Total bytes</dt>
+                <dd class="tabular-nums">{{ (submissionDetails[s.id].bytes ?? submissionDetails[s.id].size)?.toLocaleString() ?? '—' }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Created</dt>
+                <dd>{{ fmtDate(submissionDetails[s.id].created_at || submissionDetails[s.id].uploaded_at) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Created by</dt>
+                <dd>{{ submissionDetails[s.id].created_by || submissionDetails[s.id].uploader || '—' }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Last updated</dt>
+                <dd>{{ fmtDate(submissionDetails[s.id].last_updated) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Last updated by</dt>
+                <dd>{{ submissionDetails[s.id].last_updated_by || '—' }}</dd>
+              </div>
+              <div v-if="submissionDetails[s.id].words != null">
+                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Words</dt>
+                <dd class="tabular-nums">{{ submissionDetails[s.id].words.toLocaleString() }}</dd>
+              </div>
+            </dl>
+          </div>
+
           <!-- bulk submission over the auto-scoring cap: manual points only -->
           <p v-if="s.metrics && s.metrics.over_limit"
              class="text-sm rounded-lg px-3 py-2 bg-amber-50 text-amber-800
@@ -986,15 +1072,52 @@ function ruleLabel (id) {
 
           <!-- actions -->
           <div class="flex flex-wrap gap-2 pt-1">
-            <button class="btn" @click="refresh(s)">Refresh wiki data</button>
+            <button class="btn" :disabled="isPending(s, 'refresh')" @click="refresh(s)">
+              <svg v-if="isPending(s, 'refresh')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Refresh wiki data
+            </button>
             <button v-if="auth.user?.username === s.user.username && campaign.status === 'active'"
-                    class="btn-danger" @click="withdraw(s)">Withdraw</button>
+                    class="btn-danger" :disabled="isPending(s, 'withdraw')" @click="withdraw(s)">
+              <svg v-if="isPending(s, 'withdraw')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Withdraw
+            </button>
             <template v-if="isOrganizer">
-              <button class="btn-success" @click="moderateSub(s, 'accepted')">Accept</button>
-              <button class="btn-danger" @click="moderateSub(s, 'rejected')">Reject</button>
-              <button class="btn-warning" @click="overrideSub(s)">Override points</button>
-              <button class="btn" title="Refetch wiki data and rescore from the campaign rules, clearing any override"
-                      @click="recalculate(s)">Recalculate points</button>
+              <button class="btn-success" :disabled="isPending(s, 'accepted')" @click="moderateSub(s, 'accepted')">
+                <svg v-if="isPending(s, 'accepted')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Accept
+              </button>
+              <button class="btn-danger" :disabled="isPending(s, 'rejected')" @click="moderateSub(s, 'rejected')">
+                <svg v-if="isPending(s, 'rejected')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Reject
+              </button>
+              <button class="btn-warning" :disabled="isPending(s, 'override')" @click="overrideSub(s)">
+                <svg v-if="isPending(s, 'override')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Override points
+              </button>
+              <button class="btn" :disabled="isPending(s, 'recalculate')"
+                      title="Refetch wiki data and rescore from the campaign rules, clearing any override"
+                      @click="recalculate(s)">
+                <svg v-if="isPending(s, 'recalculate')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Recalculate points
+              </button>
             </template>
           </div>
         </div>
