@@ -53,10 +53,17 @@ const donutTotal = computed(() =>
 const donutSlices = computed(() => {
   const rows = stats.value?.top_contributors || []
   const top = rows.slice(0, 4).map((r, i) => ({
-    label: r.user.username, points: r.points, color: DONUT_COLORS[i]
+    label: r.user.username, points: r.points,
+    submissions: r.submission_count, color: DONUT_COLORS[i]
   }))
-  const rest = rows.slice(4).reduce((sum, r) => sum + r.points, 0)
-  if (rest > 0) top.push({ label: 'Other', points: rest, color: DONUT_OTHER })
+  const rest = rows.slice(4)
+  if (rest.length) {
+    top.push({
+      label: 'Other', points: rest.reduce((sum, r) => sum + r.points, 0),
+      submissions: rest.reduce((sum, r) => sum + r.submission_count, 0),
+      color: DONUT_OTHER
+    })
+  }
   return top
 })
 // SVG donut built from stroke-dasharray arcs on a circle (r=15.9155 puts
@@ -72,6 +79,7 @@ const donutArcs = computed(() => {
     return arc
   })
 })
+const hoveredArc = ref(null)
 
 // Line chart geometry for the submissions-per-day timeline: a fixed-height
 // SVG with one point per day, x spaced evenly across the viewBox width so
@@ -198,19 +206,35 @@ const timelineArea = computed(() => {
       <div class="card p-4">
         <h4 class="font-semibold text-sm mb-3">Points share</h4>
         <div class="relative w-48 h-48 mx-auto">
-          <svg viewBox="0 0 33.83 33.83" class="w-full h-full -rotate-90">
-            <circle cx="16.91" cy="16.91" :r="DONUT_R" fill="none"
+          <!-- viewBox is wider than the ring's own diameter (2*18) so the
+               4-unit stroke width doesn't get clipped at the edges — the
+               ring needs 2 extra units of margin on every side. -->
+          <svg viewBox="0 0 36 36" class="w-full h-full -rotate-90">
+            <circle cx="18" cy="18" :r="DONUT_R" fill="none"
                     class="stroke-neutral-100 dark:stroke-neutral-800" stroke-width="4" />
             <circle v-for="a in donutArcs" :key="a.label"
-                    cx="16.91" cy="16.91" :r="DONUT_R" fill="none"
-                    :stroke="a.color" stroke-width="4"
-                    :stroke-dasharray="a.dasharray" :stroke-dashoffset="a.dashoffset">
-              <title>{{ a.label }}: {{ a.points }} points ({{ a.pct.toFixed(0) }}%)</title>
+                    cx="18" cy="18" :r="DONUT_R" fill="none"
+                    :stroke="a.color" stroke-width="4" class="cursor-pointer transition-opacity"
+                    :opacity="hoveredArc && hoveredArc.label !== a.label ? 0.35 : 1"
+                    :stroke-dasharray="a.dasharray" :stroke-dashoffset="a.dashoffset"
+                    @mouseenter="hoveredArc = a" @mouseleave="hoveredArc = null">
+              <title>{{ a.label }}: {{ a.points }} points, {{ a.submissions }} submission{{ a.submissions === 1 ? '' : 's' }} ({{ a.pct.toFixed(0) }}%)</title>
             </circle>
           </svg>
-          <div class="absolute inset-0 flex flex-col items-center justify-center">
-            <div class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">Total</div>
-            <div class="text-xl font-extrabold tabular-nums">{{ donutTotal }}</div>
+          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-4 text-center">
+            <template v-if="hoveredArc">
+              <div class="text-xs font-semibold truncate max-w-full" :style="{ color: hoveredArc.color }">
+                {{ hoveredArc.label }}
+              </div>
+              <div class="text-lg font-extrabold tabular-nums">{{ hoveredArc.points }}<span class="text-xs font-normal text-neutral-500 dark:text-neutral-400"> pts</span></div>
+              <div class="text-xs text-neutral-500 dark:text-neutral-400">
+                {{ hoveredArc.submissions }} submission{{ hoveredArc.submissions === 1 ? '' : 's' }}
+              </div>
+            </template>
+            <template v-else>
+              <div class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">Total</div>
+              <div class="text-xl font-extrabold tabular-nums">{{ donutTotal }}</div>
+            </template>
           </div>
         </div>
       </div>
@@ -219,8 +243,10 @@ const timelineArea = computed(() => {
         <h4 class="font-semibold text-sm mb-3">Top contributors</h4>
         <div class="space-y-2">
           <div v-for="row in stats.top_contributors" :key="row.user.id"
-               class="grid grid-cols-12 items-center gap-2 text-sm"
-               :title="`${row.user.username}: ${row.points} points, ${row.submission_count} submissions`">
+               class="grid grid-cols-12 items-center gap-2 text-sm rounded transition-colors"
+               :class="hoveredArc && hoveredArc.label === row.user.username ? 'bg-neutral-50 dark:bg-neutral-800/60' : ''"
+               :title="`${row.user.username}: ${row.points} points, ${row.submission_count} submissions`"
+               @mouseenter="hoveredArc = donutArcs[row.rank - 1] || null" @mouseleave="hoveredArc = null">
             <span class="col-span-5 sm:col-span-4 truncate flex items-center gap-1.5">
               <span class="inline-block w-2 h-2 rounded-full shrink-0"
                     :style="{ background: donutArcs[row.rank - 1]?.color || DONUT_OTHER }"></span>
