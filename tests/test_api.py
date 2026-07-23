@@ -754,6 +754,35 @@ def test_coordinator_recalculates_points(client):
     assert r.json["points"] == 15  # computed from rules and fresh metadata
 
 
+def test_reject_submission_with_reason(client):
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Reject Reason Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Kathakali", "kind": "article"}).json
+
+    login("Alice")
+    r = client.post(f"/api/submissions/{sub['id']}/moderate",
+                    json={"status": "rejected",
+                          "moderation_note": "  Duplicate of an earlier submission.  "})
+    assert r.status_code == 200
+    assert r.json["status"] == "rejected"
+    assert r.json["moderation_note"] == "Duplicate of an earlier submission."
+
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    assert subs[0]["moderation_note"] == "Duplicate of an earlier submission."
+
+    # clearing the note: an empty string is stored as null, not ""
+    r = client.post(f"/api/submissions/{sub['id']}/moderate",
+                    json={"moderation_note": "   "})
+    assert r.json["moderation_note"] is None
+
+
 def test_wikidata_bulk_submission(client, monkeypatch):
     monkeypatch.setattr(
         mediawiki, "fetch_wikidata_user_activity",

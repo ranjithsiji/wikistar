@@ -192,6 +192,7 @@ class SubmissionOut(ORMModel):
     wikidata_qid: str | None = None    # article's connected item
     metrics: dict | None = None    # bulk kinds: counted activity
     status: SubmissionStatus
+    moderation_note: str | None = None
     points_override: float | None
     submitted_at: datetime
     reviews: list[ReviewOut] = []
@@ -219,6 +220,7 @@ class SubmissionModerationIn(BaseModel):
     status: SubmissionStatus | None = None
     points_override: float | None = None
     clear_override: bool = False
+    moderation_note: str | None = None
 
 
 # ---- leaderboard / statistics ----------------------------------------------

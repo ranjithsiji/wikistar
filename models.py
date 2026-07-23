@@ -319,6 +319,9 @@ class Submission(Base):
     status: Mapped[SubmissionStatus] = mapped_column(
         Enum(SubmissionStatus), default=SubmissionStatus.submitted
     )
+    # Why an organizer rejected (or otherwise moderated) this submission,
+    # shown to the participant alongside the status badge.
+    moderation_note: Mapped[str | None] = mapped_column(String(1000))
     # Organizers' final say: overrides every computed value when set.
     points_override: Mapped[float | None] = mapped_column(Numeric(8, 2))
     submitted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

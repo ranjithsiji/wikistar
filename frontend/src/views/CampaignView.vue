@@ -211,7 +211,15 @@ const recalculate = (s) => {
 }
 const saveReview = (s, review) => run(() => api.submitReview(s.id, review), 'Review saved.')
 const saveClaims = (s, claims) => run(() => api.saveClaims(s.id, claims), 'Claims saved.')
-const moderateSub = (s, status) => run(() => api.moderateSubmission(s.id, { status }), '', `${s.id}:${status}`)
+const moderateSub = (s, status) => {
+  let moderation_note
+  if (status === 'rejected') {
+    moderation_note = prompt('Reason for rejecting this submission (shown to the participant):')
+    if (moderation_note === null) return
+    moderation_note = moderation_note.trim()
+  }
+  return run(() => api.moderateSubmission(s.id, { status, moderation_note }), '', `${s.id}:${status}`)
+}
 const overrideSub = (s) => {
   const v = prompt('Final points for this submission (empty to clear the override):')
   if (v === null) return

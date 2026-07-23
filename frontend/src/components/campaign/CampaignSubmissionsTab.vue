@@ -201,6 +201,10 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
               · over {{ s.metrics.limit }} edits — needs manual scoring
             </span>
           </div>
+          <p v-if="s.status === 'rejected' && s.moderation_note"
+             class="text-xs text-red-700 dark:text-red-400 mt-1">
+            Reason: {{ s.moderation_note }}
+          </p>
         </div>
         <span v-if="s.status !== 'submitted'" class="badge" :class="statusStyles[s.status === 'accepted' ? 'active' : 'rejected']">
           {{ s.status }}

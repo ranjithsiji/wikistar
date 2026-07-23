@@ -422,6 +422,8 @@ def moderate_submission(submission_id: int):
     require_organizer(db, campaign, user)
     if payload.status is not None:
         sub.status = payload.status
+    if payload.moderation_note is not None:
+        sub.moderation_note = payload.moderation_note.strip() or None
     if payload.clear_override:
         sub.points_override = None
     elif payload.points_override is not None:
@@ -429,6 +431,7 @@ def moderate_submission(submission_id: int):
     audit(db, user, "moderate", "submission", sub.id,
           {"campaign": campaign.slug, "title": sub.title,
            "status": sub.status.value,
+           "moderation_note": sub.moderation_note,
            "points_override": (float(sub.points_override)
                                if sub.points_override is not None else None)})
     db.commit()
