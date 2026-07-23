@@ -103,7 +103,7 @@ const fmtNum = (n) => n == null ? '—' : n.toLocaleString()
           <div class="text-xs mt-0.5 space-x-2">
             <a v-if="s.kind === 'article' && s.details?.qid"
                :href="`https://www.wikidata.org/wiki/${s.details.qid}`" target="_blank"
-               class="text-violet-700 dark:text-violet-400 hover:underline">{{ s.details.qid }} ↗</a>
+               class="text-blue-700 dark:text-blue-400 hover:underline">{{ s.details.qid }} ↗</a>
             <span v-if="s.kind === 'wikidata_item' && s.details?.label"
                   class="text-neutral-600 dark:text-neutral-300">{{ s.details.label }}</span>
             <span v-if="s.kind === 'commons_file' && s.details?.uploader"
