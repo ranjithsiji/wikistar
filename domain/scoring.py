@@ -35,7 +35,7 @@ eligibility     documentation of topical constraints shown to
 """
 from dataclasses import dataclass, field
 
-from models import (
+from domain.models import (
     Claim,
     ClaimStatus,
     ReviewDecision,

@@ -13,10 +13,11 @@ import re
 from flask import Blueprint, request
 from sqlalchemy.orm import selectinload
 
-import wiki_rights
+from integrations import wiki_rights
 from auth import campaign_roles, require_user
-from db import get_db
-from models import (
+from core.db import get_db
+from core.webutil import HTTPException, jsonable, respond
+from domain.models import (
     Campaign,
     CampaignMember,
     CampaignStatus,
@@ -25,7 +26,6 @@ from models import (
     Submission,
 )
 from routers.common import campaign_summary, compute_leaderboard
-from webutil import HTTPException, jsonable, respond
 
 bp = Blueprint("dashboard", __name__, url_prefix="/api/me")
 

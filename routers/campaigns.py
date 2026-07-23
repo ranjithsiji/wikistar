@@ -16,17 +16,17 @@ from flask import Blueprint, request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-import mediawiki
-import settings_registry
-import wiki_rights
+from integrations import mediawiki, wiki_rights
+from domain import settings_registry
 from auth import (
     campaign_roles,
     get_current_user,
     require_organizer,
     require_user,
 )
-from db import get_db
-from models import (
+from core.db import get_db
+from core.webutil import HTTPException, parse, respond
+from domain.models import (
     Campaign,
     CampaignMember,
     CampaignStatus,
@@ -51,9 +51,8 @@ from routers.common import (
     suggested_titles,
     unique_slug,
 )
-from schemas import CampaignIn, CampaignStats, MemberAddIn
-from scoring import compute_breakdown, default_self_assessment_rules
-from webutil import HTTPException, parse, respond
+from domain.schemas import CampaignIn, CampaignStats, MemberAddIn
+from domain.scoring import compute_breakdown, default_self_assessment_rules
 
 bp = Blueprint("campaigns", __name__, url_prefix="/api")
 
@@ -180,7 +179,7 @@ def _replace_suggested(campaign: Campaign, payload: CampaignIn) -> None:
 def _replace_rules(db: Session, campaign: Campaign, payload: CampaignIn) -> None:
     """Upsert rules by id. Removed rules are deleted unless claims
     reference them, in which case they are deactivated to keep history."""
-    from models import Claim
+    from domain.models import Claim
 
     existing = {r.id: r for r in campaign.rules}
     kept_ids: set[int] = set()

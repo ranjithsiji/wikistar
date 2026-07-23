@@ -2,8 +2,8 @@
 from flask import Blueprint, redirect, request, session, url_for
 
 from auth import fetch_profile, get_current_user, oauth, upsert_user
-from config import settings
-from db import get_db
+from core.config import settings
+from core.db import get_db
 
 bp = Blueprint("auth", __name__)
 

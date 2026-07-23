@@ -3,9 +3,9 @@ import re
 
 from sqlalchemy.orm import Session, selectinload
 
-from webutil import HTTPException
+from core.webutil import HTTPException
 
-from models import (
+from domain.models import (
     AuditLog,
     Campaign,
     CampaignStatus,
@@ -14,7 +14,7 @@ from models import (
     SubmissionKind,
     User,
 )
-from schemas import (
+from domain.schemas import (
     CampaignDetail,
     CampaignSummary,
     LeaderboardRow,
@@ -25,7 +25,7 @@ from schemas import (
     SuggestedItemOut,
     UserOut,
 )
-from scoring import compute_breakdown
+from domain.scoring import compute_breakdown
 
 
 def audit(db: Session, user: User | None, action: str,
@@ -159,7 +159,7 @@ def can_see_campaign(db: Session, campaign: Campaign, user: User | None) -> bool
     # Drafts awaiting approval are visible to whoever could approve them
     # (jury: the target wiki's sysops; multi-language/self: any sysop).
     if campaign.status == CampaignStatus.draft:
-        import wiki_rights
+        from integrations import wiki_rights
 
         return wiki_rights.can_approve_campaign(user, campaign)[0]
     return False

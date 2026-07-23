@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import DeclarativeBase, scoped_session, sessionmaker
 from sqlalchemy.schema import CreateColumn
 
-from config import settings
+from core.config import settings
 
 
 class Base(DeclarativeBase):

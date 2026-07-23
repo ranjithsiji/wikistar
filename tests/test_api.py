@@ -7,11 +7,11 @@ from datetime import date, timedelta
 
 import pytest
 
-import mediawiki
+from integrations import mediawiki
 from app import app
-from db import Base, SessionLocal, engine
-from mediawiki import PageMetadata
-from models import User
+from core.db import Base, SessionLocal, engine
+from integrations.mediawiki import PageMetadata
+from domain.models import User
 
 TODAY = date.today()
 
@@ -1121,7 +1121,7 @@ def test_admin_panel_controls(client):
 
 def test_admin_flag_survives_login(client):
     from auth import upsert_user
-    from db import SessionLocal
+    from core.db import SessionLocal
 
     db = SessionLocal()
     try:

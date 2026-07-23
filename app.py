@@ -10,11 +10,11 @@ from flask import Flask, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from auth import oauth
-from config import ROOT_DIR, settings
-from db import Base, db_session, engine, sync_schema
+from core.config import ROOT_DIR, settings
+from core.db import Base, db_session, engine, sync_schema
+from core.webutil import register_errors
 from routers import (admin, auth as auth_routes, campaigns, claims, dashboard,
                      reviews, submissions)
-from webutil import register_errors
 
 app = Flask(__name__)
 app.secret_key = settings.secret_key

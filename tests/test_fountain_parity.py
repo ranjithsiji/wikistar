@@ -1,13 +1,13 @@
 """Fountain-ported behaviour: marks config totals, consensual vote,
 tie ranking."""
-from models import (
+from domain.models import (
     Review,
     ReviewDecision,
     ScoringMode,
     Submission,
     SubmissionKind,
 )
-from scoring import compute_breakdown, review_total
+from domain.scoring import compute_breakdown, review_total
 
 CRITERIA = [
     {"key": "quality", "title": "Quality", "type": "radio",

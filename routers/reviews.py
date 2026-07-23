@@ -9,12 +9,12 @@ from flask import Blueprint
 from sqlalchemy.orm import Session
 
 from auth import require_jury, require_user
-from db import get_db
-from models import CampaignStatus, Review, Submission
+from core.db import get_db
+from core.webutil import HTTPException, parse, respond
+from domain.models import CampaignStatus, Review, Submission
 from routers.common import audit
-from schemas import ReviewIn, ReviewOut
-from scoring import review_total
-from webutil import HTTPException, parse, respond
+from domain.schemas import ReviewIn, ReviewOut
+from domain.scoring import review_total
 
 bp = Blueprint("reviews", __name__, url_prefix="/api")
 

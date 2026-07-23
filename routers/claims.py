@@ -12,8 +12,9 @@ from flask import Blueprint
 from sqlalchemy.orm import Session
 
 from auth import require_jury, require_user
-from db import get_db
-from models import (
+from core.db import get_db
+from core.webutil import HTTPException, parse, respond
+from domain.models import (
     CampaignStatus,
     Claim,
     ClaimStatus,
@@ -22,9 +23,8 @@ from models import (
     Submission,
 )
 from routers.common import audit, submission_out
-from schemas import ClaimIn, ClaimModeration, ClaimOut
-from scoring import AUTO_METRICS, claim_points
-from webutil import HTTPException, parse, respond
+from domain.schemas import ClaimIn, ClaimModeration, ClaimOut
+from domain.scoring import AUTO_METRICS, claim_points
 
 bp = Blueprint("claims", __name__, url_prefix="/api")
 

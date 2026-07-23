@@ -12,8 +12,8 @@ Who may approve (publish) a campaign:
 Creators who hold the required right get their campaign approved
 automatically at creation time.
 """
-import mediawiki
-from models import Campaign, ScoringMode, User
+from integrations import mediawiki
+from domain.models import Campaign, ScoringMode, User
 
 
 def can_approve_campaign(user: User, campaign: Campaign) -> tuple[bool, str]:

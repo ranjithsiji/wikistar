@@ -10,17 +10,23 @@ Two modes:
     (default)       drop and recreate the whole database. Needs an account
                     with CREATE/DROP DATABASE rights (local dev).
 
-Usage:
-    uv run python reset_db.py                    # local, asks to confirm
-    uv run python reset_db.py --yes              # local, no prompt
-    uv run python reset_db.py --tables-only      # Toolforge, asks to confirm
-    uv run python reset_db.py --tables-only --yes
+Usage (from the project root):
+    uv run python scripts/reset_db.py                    # local, asks to confirm
+    uv run python scripts/reset_db.py --yes              # local, no prompt
+    uv run python scripts/reset_db.py --tables-only      # Toolforge, asks to confirm
+    uv run python scripts/reset_db.py --tables-only --yes
 """
 import sys
+from pathlib import Path
 
 from sqlalchemy import create_engine, text
 
-from config import settings
+# Run as a plain script (not `python -m`), so the project root — one
+# level up from this file — needs to be on sys.path explicitly for the
+# absolute `core.*` / `domain.*` imports below to resolve.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from core.config import settings
 
 
 def main() -> None:
@@ -35,8 +41,8 @@ def main() -> None:
             print("Aborted.")
             sys.exit(1)
 
-    import models  # noqa: F401  (registers every table on Base.metadata)
-    from db import Base, engine
+    from domain import models  # noqa: F401  (registers every table on Base.metadata)
+    from core.db import Base, engine
 
     if tables_only:
         # Toolforge-safe: recreate tables inside the existing database.

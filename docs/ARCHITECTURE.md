@@ -168,28 +168,36 @@ The default preset (`backend/scoring.py:default_self_assessment_rules`)
 encodes the documented rule set and is fully editable per campaign.
 `tests/test_scoring.py` pins the engine to every worked example from the
 documentation (4,100-byte translation → 4 pts; 3,900 bytes + improvement
-→ 6 pts; suggested + 5,000 bytes + improvement → 17 pts; suggested item
+→ 5 pts; suggested + 5,000 bytes + improvement → 17 pts; suggested item
 + 10 statements → 10 pts; …).
 
 ## Backend layout
 
-Python files live at the repository root because Toolforge's classic
+`app.py` lives at the repository root because Toolforge's classic
 python webservice serves directly from `~/www/python/src` and expects
-`app.py` there. `app.py` exposes the Flask WSGI app as `app` (uwsgi's
-default callable name), with `application` as an alias.
+it there. It exposes the Flask WSGI app as `app` (uwsgi's default
+callable name), with `application` as an alias. Everything else is
+grouped into packages by role:
 
 ```
 app.py         entry point: app assembly, session middleware, SPA serving
-config.py      config.toml + env vars
-db.py          engine / session / Base
-models.py      the schema above (SQLAlchemy 2.0 typed mappings)
-schemas.py     pydantic request/response models (API contract)
 auth.py        OAuth 2.0 flow + require_user/require_admin/
-               require_organizer/require_jury dependencies
-scoring.py     rule engine + default preset
-mediawiki.py   read-only MW API client (page info, byte deltas,
-               new-page detection)
-settings_registry.py  typed per-campaign settings registry
+               require_organizer/require_jury dependencies (imports
+               core + domain; routers and integrations import it back,
+               so it stays at the root rather than in either package)
+core/
+  config.py      config.toml + env vars, ROOT_DIR
+  db.py          engine / session / Base / sync_schema
+  webutil.py     Flask<->pydantic glue: parse/respond/HTTPException
+domain/
+  models.py      the schema above (SQLAlchemy 2.0 typed mappings)
+  schemas.py     pydantic request/response models (API contract)
+  scoring.py     rule engine + default preset
+  settings_registry.py  typed per-campaign settings registry
+integrations/
+  mediawiki.py   read-only MW API client (page info, byte deltas,
+                 new-page detection)
+  wiki_rights.py CentralAuth sysop-rights lookups (campaign approval)
 routers/
   auth.py         /api/login /oauth-callback /api/logout /api/me
   campaigns.py    /api/meta, CRUD, join, approve/reject, lifecycle,
@@ -200,6 +208,8 @@ routers/
   claims.py       claim upsert + verification/adjustment
   admin.py        stats, audit log, user admin
   common.py       serializers, leaderboard, audit helper
+scripts/
+  reset_db.py    drop/recreate the schema (dev, or --tables-only on Toolforge)
 ```
 
 ## Design system (Codex)

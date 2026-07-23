@@ -1,6 +1,6 @@
 """The scoring engine must reproduce every worked example from the
 self-assessment rule documentation."""
-from models import (
+from domain.models import (
     Claim,
     ClaimStatus,
     ScoringMode,
@@ -8,7 +8,7 @@ from models import (
     Submission,
     SubmissionKind,
 )
-from scoring import compute_breakdown, default_self_assessment_rules
+from domain.scoring import compute_breakdown, default_self_assessment_rules
 
 
 def make_rules() -> list[ScoringRule]:
@@ -40,7 +40,7 @@ def make_submission(kind=SubmissionKind.article, **kw) -> Submission:
 def claim(sub: Submission, label: str, quantity: int = 1,
           status=ClaimStatus.claimed) -> None:
     rule = rule_by_label(label)
-    from scoring import claim_points
+    from domain.scoring import claim_points
     sub.claims.append(Claim(submission_id=sub.id, rule_id=rule.id,
                             rule=rule, quantity=quantity, status=status,
                             points_claimed=claim_points(rule, quantity)))
@@ -139,7 +139,7 @@ def test_organizer_override_wins():
 # ---- rule-based points in jury / hybrid modes ------------------------------
 
 def _accept_review(sub: Submission, total: float, reviewer_id: int = 10) -> None:
-    from models import Review, ReviewDecision
+    from domain.models import Review, ReviewDecision
     sub.reviews.append(Review(submission_id=sub.id, reviewer_id=reviewer_id,
                               total=total, decision=ReviewDecision.accept))
 

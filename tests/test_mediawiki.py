@@ -1,5 +1,5 @@
-"""Pure-function tests for mediawiki.py's revision-delta math."""
-from mediawiki import _bytes_added
+"""Pure-function tests for integrations/mediawiki.py's revision-delta math."""
+from integrations.mediawiki import _bytes_added
 
 
 def test_clean_creation_sums_to_final_size():

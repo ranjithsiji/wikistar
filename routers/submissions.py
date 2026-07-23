@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 from flask import Blueprint
 from sqlalchemy.orm import Session
 
-import mediawiki
+from integrations import mediawiki
 from auth import (
     campaign_roles,
     get_current_user,
@@ -18,8 +18,9 @@ from auth import (
     require_organizer,
     require_user,
 )
-from db import get_db
-from models import (
+from core.db import get_db
+from core.webutil import HTTPException, parse, respond
+from domain.models import (
     Campaign,
     CampaignMember,
     CampaignStatus,
@@ -31,7 +32,7 @@ from models import (
     SubmissionKind,
     User,
 )
-from scoring import BULK_KIND_METRICS
+from domain.scoring import BULK_KIND_METRICS
 from routers.common import (
     audit,
     get_campaign_or_404,
@@ -39,8 +40,7 @@ from routers.common import (
     load_submissions,
     submission_out,
 )
-from schemas import SubmissionIn, SubmissionModerationIn
-from webutil import HTTPException, parse, respond
+from domain.schemas import SubmissionIn, SubmissionModerationIn
 
 bp = Blueprint("submissions", __name__, url_prefix="/api")
 

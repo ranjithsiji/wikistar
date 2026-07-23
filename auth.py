@@ -14,10 +14,10 @@ from authlib.integrations.flask_client import OAuth
 from flask import session
 from sqlalchemy.orm import Session
 
-from config import settings
-from db import get_db
-from models import Campaign, CampaignMember, MemberRole, User
-from webutil import HTTPException
+from core.config import settings
+from core.db import get_db
+from core.webutil import HTTPException
+from domain.models import Campaign, CampaignMember, MemberRole, User
 
 USER_AGENT = "WikiSTAR/2.0 (https://wikistar.toolforge.org)"
 

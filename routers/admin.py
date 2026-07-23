@@ -2,13 +2,13 @@
 from flask import Blueprint, request
 from sqlalchemy import desc, func
 
-import mediawiki
+from integrations import mediawiki
 from auth import require_admin
-from db import get_db
-from models import (AuditLog, Campaign, CampaignStatus, Claim, Review,
-                    Submission, SubmissionKind, User)
+from core.db import get_db
+from core.webutil import HTTPException, jsonable, respond
+from domain.models import (AuditLog, Campaign, CampaignStatus, Claim, Review,
+                           Submission, SubmissionKind, User)
 from routers.common import audit, campaign_summary, submission_out
-from webutil import HTTPException, jsonable, respond
 
 bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 

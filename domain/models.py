@@ -31,7 +31,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from db import Base
+from core.db import Base
 
 
 def utcnow() -> datetime:
@@ -176,7 +176,7 @@ class Campaign(Base):
     @property
     def effective_settings(self) -> dict:
         """Registry defaults merged with this campaign's overrides."""
-        from settings_registry import defaults
+        from domain.settings_registry import defaults
 
         merged = defaults()
         for row in self.settings_rows:
