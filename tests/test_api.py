@@ -196,6 +196,7 @@ def test_full_self_assessment_flow(client):
     board = client.get(f"/api/campaigns/{slug}/leaderboard").json
     assert board[0]["user"]["username"] == "Carol"
     assert board[0]["points"] == 16
+    assert board[0]["bytes_added"] == 5000
 
     stats = client.get(f"/api/campaigns/{slug}/stats").json
     assert stats["submissions"] == 1
@@ -333,6 +334,9 @@ def test_personal_dashboard(client):
     me_rows = [r for r in rows if r["me"]]
     assert len(me_rows) == 1 and me_rows[0]["username"] == "Carol"
     assert me_rows[0]["points"] > 0
+    assert part[0]["mine"]["submission_count"] == 1
+    assert part[0]["mine"]["bytes_added"] == 5000
+    assert part[0]["mine"]["points"] == me_rows[0]["points"]
 
     # JuryBob is on the jury of both campaigns; the jury-mode one has
     # Dave's submission which JuryBob already reviewed -> missing == 0,

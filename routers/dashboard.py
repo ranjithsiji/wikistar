@@ -91,17 +91,20 @@ def participation():
                   and not (user.is_admin or MemberRole.organizer
                            in campaign_roles(db, c, user)))
         rows = []
+        mine = None
         if not hidden:
             board = compute_leaderboard(db, c)
             me = next((r for r in board if r.user.id == user.id), None)
             if me is not None:
+                mine = {"submission_count": me.submission_count,
+                        "bytes_added": me.bytes_added, "points": me.points}
                 rows = [
                     {"rank": r.rank, "username": r.user.username,
                      "points": r.points, "me": r.user.id == user.id}
                     for r in board
                     if me.rank - 1 <= r.rank <= me.rank + 1
                 ]
-        out.append({**_summary(c), "hidden_marks": hidden, "rows": rows})
+        out.append({**_summary(c), "hidden_marks": hidden, "rows": rows, "mine": mine})
     return respond(out)
 
 

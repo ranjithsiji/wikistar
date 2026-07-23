@@ -24,13 +24,14 @@ const lbColumns = [
   { id: 'rank', label: '#', textAlign: 'number' },
   { id: 'username', label: 'Participant', allowSort: true },
   { id: 'submission_count', label: 'Submissions', textAlign: 'number', allowSort: true },
+  { id: 'bytes_added', label: 'Bytes', textAlign: 'number', allowSort: true },
   { id: 'points', label: 'Points', textAlign: 'number', allowSort: true }
 ]
 const lbSort = ref({})
 const lbRows = computed(() => {
   const rows = leaderboard.value.map(r => ({
-    rank: r.rank, username: r.user.username,
-    submission_count: r.submission_count, points: r.points, user: r.user
+    rank: r.rank, username: r.user.username, submission_count: r.submission_count,
+    bytes_added: r.bytes_added, points: r.points, user: r.user
   }))
   const [key, dir] = Object.entries(lbSort.value)[0] || []
   if (!key) return rows  // server order (ranked) when no explicit sort
@@ -46,10 +47,13 @@ function onLbSort (newSort) {
   lbSort.value = active ? { [active[0]]: active[1] } : {}
 }
 const leaderboardPreview = computed(() => leaderboard.value.slice(0, 5))
+const myLeaderboardRow = computed(() =>
+  leaderboard.value.find(r => r.user.username === auth.user?.username) || null)
 const lbPreviewColumns = [
   { id: 'rank', label: '#', textAlign: 'number' },
   { id: 'username', label: 'Participant' },
   { id: 'submission_count', label: 'Submissions', textAlign: 'number' },
+  { id: 'bytes_added', label: 'Bytes', textAlign: 'number' },
   { id: 'points', label: 'Points', textAlign: 'number' }
 ]
 const ruleColumns = [
@@ -67,8 +71,8 @@ const ruleRows = computed(() => (campaign.value?.rules || []).map(r => ({
   points: ruleFormat(r)
 })))
 const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
-  rank: r.rank, username: r.user.username,
-  submission_count: r.submission_count, points: r.points, user: r.user
+  rank: r.rank, username: r.user.username, submission_count: r.submission_count,
+  bytes_added: r.bytes_added, points: r.points, user: r.user
 })))
 const stats = ref(null)
 const detailsUser = ref(null)   // leaderboard row whose popup is open
@@ -173,12 +177,14 @@ const tileClasses = {
   blue: 'border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400',
   green: 'border-green-400 dark:border-green-700 text-green-600 dark:text-green-400',
   violet: 'border-violet-400 dark:border-violet-700 text-violet-600 dark:text-violet-400',
-  amber: 'border-amber-400 dark:border-amber-700 text-amber-600 dark:text-amber-400'
+  amber: 'border-amber-400 dark:border-amber-700 text-amber-600 dark:text-amber-400',
+  red: 'border-red-400 dark:border-red-700 text-red-600 dark:text-red-400'
 }
 const overviewTiles = computed(() => [
   { label: 'Submissions', value: stats.value?.submissions, color: 'blue' },
   { label: 'Participants', value: stats.value?.participants, color: 'green' },
   { label: 'Total points', value: stats.value?.total_points, color: 'violet' },
+  { label: 'Bytes added', value: stats.value?.total_bytes_added?.toLocaleString(), color: 'red' },
   { label: 'Reviews', value: stats.value?.reviews, color: 'amber' }
 ])
 
@@ -187,7 +193,7 @@ const tabs = computed(() => {
   if (campaign.value?.suggested_articles.length || campaign.value?.suggested_items.length) {
     t.push(['suggested', 'Suggested articles'])
   }
-  t.push(['leaderboard', 'Leaderboard'], ['stats', 'Statistics'])
+  t.push(['leaderboard', 'Leaderboard'], ['rules', 'Scoring rules'], ['stats', 'Statistics'])
   return t
 })
 
@@ -528,7 +534,7 @@ function ruleLabel (id) {
                ? 'Counts the statements and label/description/alias edits made on eligible items during the campaign.'
                : 'Counts the files uploaded and depicts statements added during the campaign.' }}
           </p>
-          <button class="btn-primary" type="submit">Submit contribution</button>
+          <button class="btn-primary" type="submit">Submit your contribution</button>
         </form>
       </div>
       <p v-else-if="!auth.isLoggedIn && campaign.status === 'active'"
@@ -541,7 +547,7 @@ function ruleLabel (id) {
     <!-- OVERVIEW -->
     <div v-if="tab === 'overview'" class="space-y-4">
       <!-- headline statistics -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div v-for="t in overviewTiles" :key="t.label" class="card border-2 p-4 text-center"
              :class="tileClasses[t.color]">
           <div class="text-2xl font-extrabold tabular-nums">{{ t.value ?? '—' }}</div>
@@ -596,26 +602,28 @@ function ruleLabel (id) {
                     class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
                     @click="detailsUser = row.user">{{ item }}</button>
           </template>
+          <template #item-bytes_added="{ item }">
+            <span class="tabular-nums">{{ item.toLocaleString() }}</span>
+          </template>
           <template #item-points="{ item }">
             <span class="tabular-nums font-semibold">{{ item }}</span>
           </template>
         </cdx-table>
       </div>
+    </div>
 
-      <div class="grid md:grid-cols-2 gap-4">
-        <div class="card p-4 md:col-span-2">
-          <h4 class="font-semibold text-sm mb-2">Scoring rules</h4>
-          <p v-if="!campaign.rules.length" class="text-sm text-neutral-600 dark:text-neutral-300">
-            Points are given by the jury.
-          </p>
-          <cdx-table v-else caption="Scoring rules" :hide-caption="true"
-                     :columns="ruleColumns" :data="ruleRows">
-            <template #item-points="{ item }">
-              <span class="tabular-nums font-semibold">{{ item }}</span>
-            </template>
-          </cdx-table>
-        </div>
-      </div>
+    <!-- SCORING RULES -->
+    <div v-if="tab === 'rules'" class="card p-4">
+      <h4 class="font-semibold text-sm mb-2">Scoring rules</h4>
+      <p v-if="!campaign.rules.length" class="text-sm text-neutral-600 dark:text-neutral-300">
+        Points are given by the jury.
+      </p>
+      <cdx-table v-else caption="Scoring rules" :hide-caption="true"
+                 :columns="ruleColumns" :data="ruleRows">
+        <template #item-points="{ item }">
+          <span class="tabular-nums font-semibold">{{ item }}</span>
+        </template>
+      </cdx-table>
     </div>
 
     <!-- SUGGESTED ARTICLES -->
@@ -996,7 +1004,32 @@ function ruleLabel (id) {
     </div>
 
     <!-- LEADERBOARD -->
-    <div v-if="tab === 'leaderboard'">
+    <div v-if="tab === 'leaderboard'" class="space-y-4">
+      <!-- personal stats: the logged-in user's own row, pulled out front -->
+      <div v-if="myLeaderboardRow" class="card border-2 p-4 text-center border-blue-400 dark:border-blue-700">
+        <h4 class="font-semibold text-sm mb-3 text-neutral-900 dark:text-neutral-100">Your statistics</h4>
+        <div class="grid grid-cols-3 divide-x divide-neutral-200 dark:divide-neutral-800">
+          <div>
+            <div class="text-2xl font-extrabold tabular-nums text-blue-700 dark:text-blue-400">
+              {{ myLeaderboardRow.submission_count }}
+            </div>
+            <div class="text-xs font-medium mt-1">Contributions</div>
+          </div>
+          <div>
+            <div class="text-2xl font-extrabold tabular-nums text-blue-700 dark:text-blue-400">
+              {{ myLeaderboardRow.points }}
+            </div>
+            <div class="text-xs font-medium mt-1">Points</div>
+          </div>
+          <div>
+            <div class="text-2xl font-extrabold tabular-nums text-blue-700 dark:text-blue-400">
+              {{ myLeaderboardRow.bytes_added.toLocaleString() }}
+            </div>
+            <div class="text-xs font-medium mt-1">Bytes</div>
+          </div>
+        </div>
+      </div>
+
       <p v-if="!leaderboard.length" class="text-neutral-600 dark:text-neutral-300">No points yet.</p>
       <cdx-table v-else caption="Leaderboard" :hide-caption="true"
                  :columns="lbColumns" :data="lbRows"
@@ -1005,6 +1038,9 @@ function ruleLabel (id) {
           <button type="button" title="Show this participant's submissions"
                   class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
                   @click="detailsUser = row.user">{{ item }}</button>
+        </template>
+        <template #item-bytes_added="{ item }">
+          <span class="tabular-nums">{{ item.toLocaleString() }}</span>
         </template>
         <template #item-points="{ item }">
           <span class="tabular-nums font-semibold">{{ item }}</span>

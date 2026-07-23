@@ -228,6 +228,7 @@ class LeaderboardRow(BaseModel):
     user: UserOut
     submission_count: int
     points: float
+    bytes_added: int = 0
 
 
 class CampaignStats(BaseModel):

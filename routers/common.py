@@ -175,9 +175,11 @@ def compute_leaderboard(db: Session, campaign: Campaign) -> list[LeaderboardRow]
                                suggested_titles(campaign, sub.kind),
                                campaign.scoring_mode, settings)
         entry = totals.setdefault(
-            sub.user_id, {"user": sub.user, "submission_count": 0, "points": 0.0})
+            sub.user_id, {"user": sub.user, "submission_count": 0,
+                         "points": 0.0, "bytes_added": 0})
         entry["submission_count"] += 1
         entry["points"] = round(entry["points"] + bd.total, 2)
+        entry["bytes_added"] += sub.bytes_added or 0
     ranked = sorted(totals.values(), key=lambda e: -e["points"])
     rows: list[LeaderboardRow] = []
     for i, e in enumerate(ranked):
@@ -186,5 +188,6 @@ def compute_leaderboard(db: Session, campaign: Campaign) -> list[LeaderboardRow]
                 else i + 1)
         rows.append(LeaderboardRow(
             rank=rank, user=UserOut.model_validate(e["user"]),
-            submission_count=e["submission_count"], points=e["points"]))
+            submission_count=e["submission_count"], points=e["points"],
+            bytes_added=e["bytes_added"]))
     return rows

@@ -97,19 +97,45 @@ const STATUS_BADGE = {
             <p v-if="c.hidden_marks" class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
               Marks are hidden in this campaign.
             </p>
-            <table v-else-if="c.rows.length" class="mt-3 w-full max-w-md text-sm">
-              <tbody>
-                <tr v-for="r in c.rows" :key="r.rank + r.username"
-                    :class="r.me ? 'bg-neutral-100 dark:bg-neutral-800 font-semibold' : ''">
-                  <td class="py-1 px-2 w-10 text-right tabular-nums">{{ r.rank }}</td>
-                  <td class="py-1 px-2">{{ r.username }}</td>
-                  <td class="py-1 px-2 text-right tabular-nums">{{ r.points.toFixed(2) }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <p v-else class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
-              No points counted yet.
-            </p>
+            <template v-else>
+              <!-- your own contributions in this campaign -->
+              <div v-if="c.mine" class="mt-3 grid grid-cols-3 max-w-md rounded-lg
+                          border border-blue-200 dark:border-blue-900
+                          bg-blue-50 dark:bg-blue-950/40 divide-x divide-blue-200 dark:divide-blue-900">
+                <div class="px-3 py-2 text-center">
+                  <div class="text-lg font-bold tabular-nums text-blue-700 dark:text-blue-400">
+                    {{ c.mine.submission_count }}
+                  </div>
+                  <div class="text-[11px] text-blue-900 dark:text-blue-300">Contributions</div>
+                </div>
+                <div class="px-3 py-2 text-center">
+                  <div class="text-lg font-bold tabular-nums text-blue-700 dark:text-blue-400">
+                    {{ c.mine.points }}
+                  </div>
+                  <div class="text-[11px] text-blue-900 dark:text-blue-300">Points</div>
+                </div>
+                <div class="px-3 py-2 text-center">
+                  <div class="text-lg font-bold tabular-nums text-blue-700 dark:text-blue-400">
+                    {{ c.mine.bytes_added.toLocaleString() }}
+                  </div>
+                  <div class="text-[11px] text-blue-900 dark:text-blue-300">Bytes</div>
+                </div>
+              </div>
+
+              <table v-if="c.rows.length" class="mt-3 w-full max-w-md text-sm">
+                <tbody>
+                  <tr v-for="r in c.rows" :key="r.rank + r.username"
+                      :class="r.me ? 'bg-neutral-100 dark:bg-neutral-800 font-semibold' : ''">
+                    <td class="py-1 px-2 w-10 text-right tabular-nums">{{ r.rank }}</td>
+                    <td class="py-1 px-2">{{ r.username }}</td>
+                    <td class="py-1 px-2 text-right tabular-nums">{{ r.points.toFixed(2) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-else class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
+                No points counted yet.
+              </p>
+            </template>
           </div>
         </div>
 
