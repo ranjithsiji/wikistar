@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import api from '../api'
 import { useAuthStore } from '../store'
 import { useTheme } from '../theme'
+import UserAvatar from './UserAvatar.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -74,6 +75,7 @@ router.afterEach(() => { menuOpen.value = false })
 
       <div v-if="auth.isLoggedIn" ref="menuRoot" class="relative">
         <button class="btn" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
+          <UserAvatar :username="auth.user.username" size="sm" />
           {{ auth.user.username }}
           <svg class="w-3.5 h-3.5 transition-transform" :class="menuOpen && 'rotate-180'"
                viewBox="0 0 24 24" fill="none" stroke="currentColor"

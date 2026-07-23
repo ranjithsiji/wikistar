@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import api, { errorMessage } from '../api'
+import UserAvatar from './UserAvatar.vue'
 
 const props = defineProps({ slug: { type: String, required: true } })
 const stats = ref(null)
@@ -218,6 +219,7 @@ const timelineArea = computed(() => {
             <span class="col-span-5 sm:col-span-4 truncate flex items-center gap-1.5">
               <span class="inline-block w-2 h-2 rounded-full shrink-0"
                     :style="{ background: donutArcs[row.rank - 1]?.color || DONUT_OTHER }"></span>
+              <UserAvatar :username="row.user.username" size="sm" />
               {{ row.rank }}. {{ row.user.username }}
             </span>
             <div class="col-span-5 sm:col-span-6 h-4 rounded bg-neutral-100 dark:bg-neutral-800">

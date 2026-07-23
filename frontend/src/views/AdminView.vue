@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import api, { errorMessage } from '../api'
 import AppMessage from '../components/AppMessage.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 import { useAuthStore } from '../store'
 
 const auth = useAuthStore()
@@ -315,7 +316,12 @@ async function deleteArticle (s) {
                 <tbody>
                   <tr v-for="m in detail.members" :key="m.id"
                       class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-                    <td class="td">{{ m.user.username }}</td>
+                    <td class="td">
+                      <span class="inline-flex items-center gap-2">
+                        <UserAvatar :username="m.user.username" size="sm" />
+                        {{ m.user.username }}
+                      </span>
+                    </td>
                     <td class="td"><span class="badge bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{{ m.role }}</span></td>
                     <td class="td text-right">
                       <button class="btn-danger !py-0.5 !px-2 text-xs" :disabled="busy"
@@ -412,7 +418,10 @@ async function deleteArticle (s) {
               <td class="td">
                 <a :href="`https://meta.wikimedia.org/wiki/User:${u.username.replaceAll(' ', '_')}`"
                    target="_blank" rel="noopener"
-                   class="text-blue-700 dark:text-blue-400 hover:underline">{{ u.username }}</a>
+                   class="inline-flex items-center gap-2 text-blue-700 dark:text-blue-400 hover:underline">
+                  <UserAvatar :username="u.username" size="sm" />
+                  {{ u.username }}
+                </a>
               </td>
               <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ new Date(u.registered_at).toLocaleDateString() }}</td>
               <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—' }}</td>
