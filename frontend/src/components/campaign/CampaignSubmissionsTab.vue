@@ -186,7 +186,6 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
             </template>
             <template v-if="s.kind === 'wikidata_item'"> · Wikidata</template>
             <template v-if="s.kind === 'commons_file'"> · Commons</template>
-            <template v-if="s.is_new_page"> · new page</template>
             <template v-if="s.bytes_added"> · +{{ s.bytes_added.toLocaleString() }} bytes</template>
             <template v-if="s.kind === 'wikidata_edits' && s.metrics && !s.metrics.over_limit">
               · {{ s.metrics.statements }} statements
@@ -206,6 +205,9 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
             Reason: {{ s.moderation_note }}
           </p>
         </div>
+        <span v-if="s.is_new_page" class="badge bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300">
+          new article
+        </span>
         <span v-if="s.status !== 'submitted'" class="badge" :class="statusStyles[s.status === 'accepted' ? 'active' : 'rejected']">
           {{ s.status }}
         </span>
