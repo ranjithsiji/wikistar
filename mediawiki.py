@@ -408,15 +408,33 @@ def fetch_commons_details(title: str) -> dict | None:
     }
 
 
+def _bytes_added(revs: list[dict], base_size: int, username: str) -> int:
+    """Sum (size_after - size_before) — positive AND negative — over the
+    given user's own revisions (oldest -> newest), floored at 0.
+
+    Other editors' revisions only advance the running "previous size"
+    baseline; they're never credited or blamed. Summing signed deltas
+    (not just the positive ones) means a user's own trim-then-re-add
+    churn nets out instead of the same bytes being counted as growth
+    every time they're re-added.
+    """
+    prev_size = base_size
+    added = 0
+    for rev in revs:
+        size = rev.get("size", prev_size)
+        if rev.get("user") == username:
+            added += size - prev_size
+        prev_size = size
+    return max(0, added)
+
+
 def fetch_page_metadata(
     domain: str, title: str, username: str, start: date, end: date
 ) -> PageMetadata:
-    """Fetch page info and the participant's byte delta within [start, end].
-
-    bytes_added sums max(0, size_after - size_before) over the user's
-    revisions inside the window. Network errors raise httpx.HTTPError —
-    callers decide whether that is fatal (submission still accepted,
-    metadata refreshable later).
+    """Fetch page info and the participant's byte delta within [start, end]
+    (see _bytes_added for exactly how bytes_added is computed). Network
+    errors raise httpx.HTTPError — callers decide whether that is fatal
+    (submission still accepted, metadata refreshable later).
     """
     meta = PageMetadata()
     with _client() as client:
@@ -489,12 +507,5 @@ def fetch_page_metadata(
                 if base_pages and base_pages[0].get("revisions"):
                     base_size = base_pages[0]["revisions"][0].get("size", 0)
 
-        prev_size = base_size
-        added = 0
-        for rev in revs:
-            size = rev.get("size", prev_size)
-            if rev.get("user") == username:
-                added += max(0, size - prev_size)
-            prev_size = size
-        meta.bytes_added = added
+        meta.bytes_added = _bytes_added(revs, base_size, username)
     return meta
