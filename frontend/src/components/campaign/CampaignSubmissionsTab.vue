@@ -205,7 +205,7 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
             Reason: {{ s.moderation_note }}
           </p>
         </div>
-        <span v-if="s.is_new_page" class="badge bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300">
+        <span v-if="s.is_new_page" class="badge bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300">
           new article
         </span>
         <span v-if="s.status !== 'submitted'" class="badge" :class="statusStyles[s.status === 'accepted' ? 'active' : 'rejected']">
@@ -289,7 +289,7 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
           This user made more than {{ s.metrics.limit }} edits in the campaign
           period (likely a QuickStatements / OpenRefine or mass-upload run), so
           the points cannot be calculated automatically.
-          <a :href="s.url" target="_blank" class="underline">Review the
+          <a :href="s.url" target="_blank" class="text-blue-700 dark:text-blue-400 underline">Review the
           contributions ↗</a>, decide whether these edits count, and enter the
           points with <b>Override points</b>.
         </p>
