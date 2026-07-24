@@ -27,6 +27,7 @@ const needsListReview = (s) =>
   && !suggestedQids.value.has(s.title.toUpperCase())
 
 const onlyMine = ref(false)
+const wikidataOnly = ref(false)
 const expanded = ref(null)
 // Article details (created/updated dates + editors, bytes, words) for the
 // expanded submission card — fetched from the wiki on demand, once per
@@ -67,6 +68,7 @@ const shownSubmissions = computed(() => {
   if (onlyMine.value) list = list.filter(s => s.user.username === props.currentUsername)
   if (filterUser.value) list = list.filter(s => s.user.username === filterUser.value)
   if (filterLang.value) list = list.filter(s => submissionLang(s) === filterLang.value)
+  if (wikidataOnly.value) list = list.filter(s => s.kind === 'wikidata_item')
   return list
 })
 
@@ -125,6 +127,9 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
       <label v-if="isLoggedIn" class="flex items-center gap-2 text-sm cursor-pointer">
         <input type="checkbox" v-model="onlyMine" /> Show only my submissions
       </label>
+      <label class="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" v-model="wikidataOnly" /> Wikidata only
+      </label>
       <!-- coordinator filter: one participant's submissions -->
       <label v-if="isOrganizer && submitterNames.length"
              class="flex items-center gap-2 text-sm">
@@ -142,7 +147,7 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
           <option v-for="l in availableLangs" :key="l" :value="l">{{ l }}</option>
         </select>
       </label>
-      <span v-if="filterUser || filterLang" class="text-xs text-neutral-600 dark:text-neutral-300">
+      <span v-if="filterUser || filterLang || wikidataOnly" class="text-xs text-neutral-600 dark:text-neutral-300">
         {{ shownSubmissions.length }} of {{ submissions.length }} submissions
       </span>
     </div>
