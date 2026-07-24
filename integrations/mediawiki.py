@@ -219,16 +219,31 @@ def fetch_user_contribs(domain: str, username: str, start: date, end: date,
 
 
 # Wikibase auto-summaries, e.g. "/* wbsetclaim-create:2||1 */ [[Property:P31]]…"
-# wbsetclaim-update covers editing an existing statement's value (e.g.
-# correcting coordinates) — a real contribution, same as creating one.
+# Statements: creating/editing/removing a claim, its qualifiers, its
+# references, or its rank — all real curation work on the item's facts.
+# wbsetclaim-update-{rank,qualifiers,references} are distinct autocomment
+# keys from plain wbsetclaim-update, so the base "wbsetclaim-update" match
+# (a prefix of all three) covers them without listing each separately.
+# wbcreateclaim also has legacy -value/-novalue/-somevalue variants.
 _STATEMENT_RE = re.compile(
-    r"^/\* wb(setclaim-(create|update)|createclaim-create)")
-# Labels/descriptions/aliases, plus sitelinks (wbsetsitelink-*,
-# wblinktitles-connect) — connecting a page to the item is the same kind
-# of identity-enriching edit as adding a label or description.
+    r"^/\* wb("
+    r"setclaim-(create|update)"
+    r"|createclaim(-create|-value|-novalue|-somevalue)?"
+    r"|setclaimvalue"
+    r"|removeclaims?(-remove|-update)?"
+    r"|set(qualifier|reference)(-add|-set)?"
+    r"|remove(qualifiers|references)(-remove|-update)?"
+    r")")
+# Labels/descriptions/aliases (incl. removal), plus sitelinks
+# (wbsetsitelink-*, wblinktitles-connect) — connecting a page to the item
+# is the same kind of identity-enriching edit as adding a label.
 _TERM_RE = re.compile(
-    r"^/\* wb(set(label|description|aliases|sitelink)-(add|set)"
-    r"|linktitles-connect)")
+    r"^/\* wb("
+    r"set(label|description)-(add|set|remove)"
+    r"|setaliases-(add|set|remove|add-remove|update)"
+    r"|setsitelink-(add|add-both|set|set-badges|set-both|remove)"
+    r"|linktitles-(connect|create)"
+    r")")
 # Commons structured data: "…EntityPage/P180]]: [[d:Special:EntityPage/Q42]]"
 _DEPICTS_RE = re.compile(r"EntityPage/P180\]\]: \[\[d:Special:EntityPage/(Q\d+)")
 

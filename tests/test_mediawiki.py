@@ -141,3 +141,54 @@ def test_wikidata_claim_update_counts_as_a_statement_edit(monkeypatch):
     activity = fetch_wikidata_user_activity(
         "பொதுஉதவி", date(2026, 7, 15), date(2026, 8, 15))
     assert activity["Q1426089"] == {"statements": 3, "terms": 2}
+
+
+def test_qualifier_reference_rank_and_remove_edits_all_count(monkeypatch):
+    # Full audit of Wikibase autocomment keys (wikimedia/Wikibase i18n)
+    # turned up several more real-edit verbs that weren't recognised by
+    # either classifier: rank changes, qualifier/reference add/remove
+    # (both the dedicated API and the generic setclaim path), claim
+    # removal, and the "remove" variant of label/description/alias/
+    # sitelink edits. All represent real curation work and must count.
+    statement_comments = [
+        "/* wbsetclaim-update-rank:2||1 */ x",
+        "/* wbsetclaim-update-qualifiers:2||1 */ x",
+        "/* wbsetclaim-update-references:2||1 */ x",
+        "/* wbsetqualifier-add:1| */ x",
+        "/* wbremovequalifiers-remove:1| */ x",
+        "/* wbsetreference-add:2| */ x",
+        "/* wbremovereferences-remove:1| */ x",
+        "/* wbremoveclaims-remove:1| */ x",
+    ]
+    term_comments = [
+        "/* wbsetlabel-remove:1|en */ x",
+        "/* wbsetdescription-remove:1|en */ x",
+        "/* wbsetaliases-remove:1|en */ x",
+        "/* wbsetsitelink-remove:1|enwiki */ x",
+    ]
+    revs = [{"title": "Q1", "comment": c} for c in statement_comments + term_comments]
+    monkeypatch.setattr(mediawiki, "fetch_user_contribs", lambda *a, **k: revs)
+    activity = fetch_wikidata_user_activity(
+        "Tester", date(2026, 7, 15), date(2026, 8, 15))
+    assert activity["Q1"] == {
+        "statements": len(statement_comments), "terms": len(term_comments)}
+
+
+def test_undo_restore_and_merge_are_not_counted(monkeypatch):
+    # Reverts and item merges aren't the acting user contributing new
+    # content — they must stay uncounted, not silently miscounted as
+    # either bucket.
+    comments = [
+        "/* wbsetclaim-create:2||1 */ x (restore)",
+        "undo",
+        "/* wbmergeitems-from:0| */ x",
+        "/* wbmergeitems-to:0| */ x",
+        "/* wbcreateredirect:0| */ x",
+    ]
+    revs = [{"title": "Q2", "comment": c} for c in comments]
+    monkeypatch.setattr(mediawiki, "fetch_user_contribs", lambda *a, **k: revs)
+    activity = fetch_wikidata_user_activity(
+        "Tester", date(2026, 7, 15), date(2026, 8, 15))
+    # only the first comment (a real wbsetclaim-create, "(restore)" is
+    # just an incidental suffix MediaWiki appends) should count
+    assert activity["Q2"] == {"statements": 1, "terms": 0}
