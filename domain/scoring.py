@@ -50,6 +50,12 @@ from domain.models import (
 # Metrics the engine can compute on its own from submission metadata.
 AUTO_METRICS = {"bytes_added"}
 
+# A single Wikidata item submission needs at least this many combined
+# statement/label/description/alias edits by the submitter to count as a
+# real contribution for the suggested-list bonus (not settings-gated —
+# see compute_breakdown's suggested_list branch).
+MIN_SUGGESTED_ITEM_EDITS = 5
+
 # Bulk kinds cover a user's whole activity in the campaign window; their
 # per_unit rules score from Submission.metrics counts (rule metric ->
 # metrics key) instead of claims.
@@ -200,6 +206,14 @@ def compute_breakdown(
             on_list = (submission.title.lower() in suggested_titles
                        or (qid and qid in suggested_titles))
             contributed = submission.is_new_page or bool(submission.bytes_added)
+            if submission.kind == SubmissionKind.wikidata_item:
+                # A page can grow (bytes_added > 0) from a single small
+                # edit — for items, "contributed" specifically means at
+                # least MIN_SUGGESTED_ITEM_EDITS combined statement/term
+                # edits, not just any nonzero byte delta.
+                metrics = submission.metrics or {}
+                edits = metrics.get("statements", 0) + metrics.get("terms", 0)
+                contributed = submission.is_new_page or edits >= MIN_SUGGESTED_ITEM_EDITS
             if on_list and contributed:
                 bd.add(PointLine(rule.id, rule.label, "auto", 1, float(rule.points)))
             continue

@@ -57,6 +57,18 @@ def fake_mediawiki(monkeypatch):
             # e.g. a title that exists on a different wiki than the one
             # actually selected in a multi-language campaign.
             return PageMetadata(exists=False)
+        if title == "Q500":
+            # An existing (not newly-created) Wikidata item the user
+            # edited -- for the suggested-list-bonus edit-count gate.
+            return PageMetadata(exists=True, page_id=15, page_len=8000,
+                                current_rev_id=20, base_rev_id=19,
+                                bytes_added=80, is_new_page=False)
+        if title == "Q501":
+            # Statement/label edits on an existing item that happen not to
+            # move the page's byte size at all.
+            return PageMetadata(exists=True, page_id=16, page_len=8000,
+                                current_rev_id=21, base_rev_id=20,
+                                bytes_added=0, is_new_page=False)
         return PageMetadata(exists=True, page_id=12, page_len=4100,
                             current_rev_id=4, base_rev_id=None,
                             bytes_added=4100, is_new_page=True)
@@ -735,7 +747,7 @@ def test_coordinator_submits_on_behalf(client):
     assert r.json["user"]["username"] == "Mallory"
 
 
-def test_coordinator_recalculates_points(client):
+def test_recalculate_points_owner_and_coordinator(client):
     login("Alice")
     slug = client.post("/api/campaigns", json=make_campaign_payload(
         client, name="Recalc Contest")).json["slug"]
@@ -749,15 +761,25 @@ def test_coordinator_recalculates_points(client):
     # Kathakali: 5000 bytes -> 5 pts + suggested list 10 = 15
     assert sub["points"] == 15
 
-    # participants cannot force a recalculation
+    # a different participant cannot force a recalculation of Dana's submission
+    login("Bearer")
     r = client.post(f"/api/submissions/{sub['id']}/recalculate")
     assert r.status_code == 403
 
-    # an override wins until a coordinator recalculates
+    # the owner can recalculate their own submission (e.g. after making
+    # more edits), but it never clears an organizer's override
     login("Alice")
     r = client.post(f"/api/submissions/{sub['id']}/moderate",
                     json={"points_override": 99})
     assert r.json["points"] == 99
+    login("Dana")
+    r = client.post(f"/api/submissions/{sub['id']}/recalculate")
+    assert r.status_code == 200
+    assert r.json["points_override"] == 99
+    assert r.json["points"] == 99  # override still wins
+
+    # a coordinator's recalculate does clear the override
+    login("Alice")
     r = client.post(f"/api/submissions/{sub['id']}/recalculate")
     assert r.status_code == 200
     assert r.json["points_override"] is None
@@ -877,6 +899,62 @@ def test_wikidata_bulk_submission(client, monkeypatch):
     # only one bulk submission per participant
     assert client.post(f"/api/campaigns/{slug}/submissions",
                        json={"kind": "wikidata_edits"}).status_code == 409
+
+
+def test_suggested_item_bonus_needs_5_real_edits_end_to_end(client, monkeypatch):
+    activity = {"Q500": {"statements": 2, "terms": 1}}  # 3 total, below 5
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_user_activity",
+        lambda username, start, end, max_edits=None: activity)
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Item Edit Gate Contest",
+        suggested_items=["Q500"])).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Q500", "kind": "wikidata_item"})
+    assert r.status_code == 201, r.text
+    sub = r.json
+    assert sub["metrics"] == {"statements": 2, "terms": 1}
+    # below the 5-edit gate: no suggested-list bonus
+    assert not any(l["label"] == "Item from the suggested list"
+                   for l in sub["breakdown"])
+
+    # more edits land -> recalculate crosses the threshold
+    activity["Q500"] = {"statements": 3, "terms": 2}  # 5 total
+    login("Alice")
+    r = client.post(f"/api/submissions/{sub['id']}/recalculate")
+    assert r.status_code == 200
+    assert any(l["label"] == "Item from the suggested list"
+               for l in r.json["breakdown"])
+
+
+def test_wikidata_item_with_zero_byte_delta_but_real_edits_is_accepted(client, monkeypatch):
+    # Statement/label edits don't always change a Wikidata entity's page
+    # size -- bytes_added alone must not be the only accepted evidence of
+    # a real contribution for wikidata_item submissions.
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_user_activity",
+        lambda username, start, end, max_edits=None: {
+            "Q501": {"statements": 1, "terms": 0}})
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Zero Delta Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Q501", "kind": "wikidata_item"})
+    assert r.status_code == 201, r.text
+    assert r.json["metrics"] == {"statements": 1, "terms": 0}
 
 
 def test_commons_bulk_submission_and_rule_gating(client, monkeypatch):

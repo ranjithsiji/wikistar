@@ -204,7 +204,10 @@ const withdraw = (s) => {
 }
 const refresh = (s) => run(() => api.refreshSubmission(s.id), 'Wiki metadata refreshed.', `${s.id}:refresh`)
 const recalculate = (s) => {
-  if (s.points_override != null && !confirm(
+  // Only an organizer's recalculate clears a manual override; the
+  // submission owner's recalculate refreshes points but leaves an
+  // existing override in place, so no destructive-sounding confirm here.
+  if (isOrganizer.value && s.points_override != null && !confirm(
     'This clears the manual points override and recomputes the points '
     + 'from fresh wiki data and the campaign rules. Continue?')) return
   return run(() => api.recalculateSubmission(s.id), 'Points recalculated.', `${s.id}:recalculate`)

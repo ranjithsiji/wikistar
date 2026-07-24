@@ -17,6 +17,15 @@ const props = defineProps({
 })
 const emit = defineEmits(['refresh', 'withdraw', 'moderate', 'override', 'recalculate', 'save-review', 'save-claims', 'moderate-claim'])
 
+// Wikidata items not on the campaign's suggested list are still accepted
+// (a related-but-unlisted item can be a legitimate contribution) — just
+// flagged so an organizer notices and reviews it manually.
+const suggestedQids = computed(() =>
+  new Set((props.campaign.suggested_items || []).map(i => i.qid.toUpperCase())))
+const needsListReview = (s) =>
+  s.kind === 'wikidata_item' && suggestedQids.value.size > 0
+  && !suggestedQids.value.has(s.title.toUpperCase())
+
 const onlyMine = ref(false)
 const expanded = ref(null)
 // Article details (created/updated dates + editors, bytes, words) for the
@@ -204,7 +213,15 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
              class="text-xs text-red-700 dark:text-red-400 mt-1">
             Reason: {{ s.moderation_note }}
           </p>
+          <p v-if="needsListReview(s)" class="text-xs text-amber-700 dark:text-amber-400 mt-1">
+            Not on the suggested items list — please review manually.
+          </p>
         </div>
+        <span v-if="needsListReview(s)"
+              class="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+              title="This Wikidata item isn't on the campaign's suggested list">
+          needs review
+        </span>
         <span v-if="s.is_new_page" class="badge bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300">
           new article
         </span>
@@ -395,16 +412,19 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
               </svg>
               Override points
             </button>
-            <button class="btn" :disabled="isPending(s, 'recalculate')"
-                    title="Refetch wiki data and rescore from the campaign rules, clearing any override"
-                    @click="emit('recalculate', s)">
-              <svg v-if="isPending(s, 'recalculate')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Recalculate points
-            </button>
           </template>
+          <button v-if="isOrganizer || currentUsername === s.user.username"
+                  class="btn" :disabled="isPending(s, 'recalculate')"
+                  :title="isOrganizer
+                    ? 'Refetch wiki data and rescore from the campaign rules, clearing any override'
+                    : 'Refetch wiki data and rescore from the campaign rules (an existing organizer override, if any, is kept)'"
+                  @click="emit('recalculate', s)">
+            <svg v-if="isPending(s, 'recalculate')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Recalculate points
+          </button>
         </div>
       </div>
     </div>

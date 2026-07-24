@@ -160,7 +160,25 @@ def _fetch_metadata(sub: Submission, campaign: Campaign,
     sub.is_new_page = meta.is_new_page
     sub.wikidata_qid = meta.wikidata_qid
     sub.metadata_fetched_at = datetime.now(timezone.utc)
+    if sub.kind == SubmissionKind.wikidata_item:
+        _fetch_wikidata_item_metrics(sub, campaign, username)
     return meta
+
+
+def _fetch_wikidata_item_metrics(sub: Submission, campaign: Campaign,
+                                 username: str) -> None:
+    """Statement/label/description/alias edit counts on this one item, for
+    the "Statements added" / "Labels..." per_unit rules AND the
+    suggested-list bonus's real-contribution gate (a title/QID match alone
+    isn't a contribution — the submitter must have actually edited it)."""
+    try:
+        activity = mediawiki.fetch_wikidata_user_activity(
+            username, campaign.start_date, campaign.end_date)
+        entry = (activity or {}).get(sub.title.upper(),
+                                     {"statements": 0, "terms": 0})
+        sub.metrics = {"statements": entry["statements"], "terms": entry["terms"]}
+    except Exception:
+        pass
 
 
 def _check_eligibility(sub: Submission, campaign: Campaign, user: User,
@@ -182,7 +200,11 @@ def _check_eligibility(sub: Submission, campaign: Campaign, user: User,
         # verifiable contribution to it — without this, anyone could
         # submit any page/item (in particular one on the suggested list)
         # they never touched and still collect its auto-scored bonuses.
-        if not sub.is_new_page and not sub.bytes_added:
+        # For Wikidata items, a statement/label edit doesn't always move
+        # page size, so counted metrics are accepted as evidence too.
+        metrics = sub.metrics or {}
+        has_metrics = metrics.get("statements", 0) or metrics.get("terms", 0)
+        if not sub.is_new_page and not sub.bytes_added and not has_metrics:
             raise HTTPException(
                 400, "No edits by you were found on this page during the "
                      "campaign period")
@@ -407,22 +429,28 @@ def refresh_metadata(submission_id: int):
 
 @bp.post("/submissions/<int:submission_id>/recalculate")
 def recalculate_points(submission_id: int):
-    """Coordinator's forced recalculation: refetch the wiki metadata and
-    score the submission from the campaign rules again, dropping any
-    manual points override so the computed total takes effect."""
+    """Refetch the wiki metadata and score the submission from the
+    campaign rules again — e.g. after the participant made more edits.
+    Owners may recalculate their own submission, but only to pick up
+    fresh metadata: an organizer's manual points override is a deliberate
+    decision and stays in effect until an organizer clears it themself.
+    A coordinator's recalculation does clear it, same as before."""
     db, user = get_db(), require_user()
     sub = _get_submission_or_404(db, submission_id)
     campaign = sub.campaign
-    require_organizer(db, campaign, user)
+    is_owner = sub.user_id == user.id
+    if not is_owner:
+        require_organizer(db, campaign, user)
     if sub.kind in BULK_KINDS:
         _fetch_bulk_metrics(sub, campaign, sub.user.username)
     else:
         _fetch_metadata(sub, campaign, sub.user.username)
     had_override = sub.points_override is not None
-    sub.points_override = None
+    if not is_owner:
+        sub.points_override = None
     audit(db, user, "recalculate", "submission", sub.id,
           {"campaign": campaign.slug, "title": sub.title,
-           "cleared_override": had_override})
+           "cleared_override": had_override and not is_owner})
     db.commit()
     db.refresh(sub)
     return respond(submission_out(campaign, sub))

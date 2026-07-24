@@ -119,6 +119,25 @@ def test_suggested_item_created_with_10_statements_is_10_points():
     assert total_suggested(sub, {"q126"}) == 10  # 3 + 5 + 2
 
 
+def test_suggested_item_bonus_needs_5_real_edits():
+    # metrics (statements + terms) come from the live Wikidata fetch, not
+    # claims -- this is the actual gate compute_breakdown enforces for a
+    # single wikidata_item submission's suggested-list bonus.
+    sub = make_submission(kind=SubmissionKind.wikidata_item, title="Q127")
+    sub.metrics = {"statements": 2, "terms": 1}  # 3 total, below the gate
+    assert total_suggested(sub, {"q127"}) == 0
+
+    sub2 = make_submission(kind=SubmissionKind.wikidata_item, title="Q128")
+    sub2.metrics = {"statements": 3, "terms": 2}  # 5 total, meets the gate
+    assert total_suggested(sub2, {"q128"}) == 5
+
+    # a brand-new item counts even with fewer than 5 term/statement edits
+    sub3 = make_submission(kind=SubmissionKind.wikidata_item, title="Q129",
+                           is_new_page=True)
+    sub3.metrics = {"statements": 1, "terms": 0}
+    assert total_suggested(sub3, {"q129"}) == 5
+
+
 def test_rejected_claim_counts_zero_and_adjustment_wins():
     sub = make_submission(bytes_added=2000, page_len=15000)
     claim(sub, "Good Article", status=ClaimStatus.rejected)
