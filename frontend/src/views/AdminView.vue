@@ -243,7 +243,7 @@ async function deleteArticle (s) {
         Nothing waiting for approval.
       </p>
       <div v-for="c in pendingCampaigns" :key="c.id" class="card p-3 mb-2 flex items-center gap-3 flex-wrap">
-        <router-link :to="`/campaigns/${c.slug}`" class="font-medium text-blue-700 dark:text-blue-400 hover:underline flex-1 min-w-40">
+        <router-link :to="`/campaigns/${c.slug}`" class="font-medium text-link-700 dark:text-link-400 hover:underline flex-1 min-w-40">
           {{ c.name }}
         </router-link>
         <span class="text-xs text-neutral-600 dark:text-neutral-300">by {{ c.created_by_username || '—' }}</span>
@@ -281,7 +281,7 @@ async function deleteArticle (s) {
             {{ expanded === c.slug ? '▾' : '▸' }}
           </button>
           <router-link :to="`/campaigns/${c.slug}`"
-                       class="font-medium text-blue-700 dark:text-blue-400 hover:underline flex-1 min-w-40 truncate">
+                       class="font-medium text-link-700 dark:text-link-400 hover:underline flex-1 min-w-40 truncate">
             {{ c.name }}
           </router-link>
           <span class="badge" :class="STATUS_BADGE[c.status]">{{ c.status }}</span>
@@ -363,7 +363,7 @@ async function deleteArticle (s) {
                       class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
                     <td class="td">
                       <a :href="s.url" target="_blank" rel="noopener"
-                         class="text-blue-700 dark:text-blue-400 hover:underline">{{ s.title }}</a>
+                         class="text-link-700 dark:text-link-400 hover:underline">{{ s.title }}</a>
                     </td>
                     <td class="td">{{ s.user.username }}</td>
                     <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ s.kind }}</td>
@@ -418,7 +418,7 @@ async function deleteArticle (s) {
               <td class="td">
                 <a :href="`https://meta.wikimedia.org/wiki/User:${u.username.replaceAll(' ', '_')}`"
                    target="_blank" rel="noopener"
-                   class="inline-flex items-center gap-2 text-blue-700 dark:text-blue-400 hover:underline">
+                   class="inline-flex items-center gap-2 text-link-700 dark:text-link-400 hover:underline">
                   <UserAvatar :username="u.username" size="sm" />
                   {{ u.username }}
                 </a>

@@ -354,7 +354,7 @@ async function save () {
                 : 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300'">
           {{ isJuryFlow ? 'Jury assessment' : (isHybrid ? 'Self-assessment + jury' : 'Self-assessment') }}
         </span>
-        <button v-if="!createdSlug" type="button" class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+        <button v-if="!createdSlug" type="button" class="text-xs text-link-700 dark:text-link-400 hover:underline"
                 @click="modeChosen = false">
           change type
         </button>

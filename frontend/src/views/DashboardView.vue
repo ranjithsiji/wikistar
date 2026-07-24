@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import api, { errorMessage } from '../api'
 import { useAuthStore } from '../store'
 
@@ -7,25 +7,37 @@ const auth = useAuthStore()
 
 const TABS = [
   { key: 'participation', label: 'Participation', fetch: api.myParticipation },
+  { key: 'submissions', label: 'Submissions', fetch: api.mySubmissions },
   { key: 'evaluation', label: 'Evaluation', fetch: api.myEvaluation },
   { key: 'created', label: 'Created', fetch: api.myCreated },
   { key: 'approval', label: 'Approval', fetch: api.myApproval },
 ]
 
 const tab = ref('participation')
-const data = ref({})       // key -> list
+const data = ref({})       // key -> list, absent until loaded
+const loaded = ref(false)  // all tabs fetched once, so empty ones can hide
 const loading = ref(false)
 const error = ref('')
 
 const current = computed(() => data.value[tab.value])
+// Tabs with content are always shown; Participation stays visible even
+// when empty as the landing tab with its own "not submitted yet" message.
+const visibleTabs = computed(() => TABS.filter(t =>
+  t.key === 'participation' || !loaded.value || (data.value[t.key]?.length || 0) > 0))
 
 async function load () {
-  const t = TABS.find(t => t.key === tab.value)
-  if (data.value[t.key]) return
   loading.value = true
   error.value = ''
   try {
-    data.value = { ...data.value, [t.key]: (await t.fetch()).data }
+    const results = await Promise.all(TABS.map(t => t.fetch()))
+    data.value = Object.fromEntries(TABS.map((t, i) => [t.key, results[i].data]))
+    loaded.value = true
+    // Land on the first tab that actually has something, if the default
+    // (Participation) is empty but the user has content elsewhere.
+    if (!data.value.participation?.length) {
+      const firstNonEmpty = TABS.find(t => data.value[t.key]?.length)
+      if (firstNonEmpty) tab.value = firstNonEmpty.key
+    }
   } catch (err) {
     error.value = errorMessage(err)
   } finally {
@@ -33,7 +45,22 @@ async function load () {
   }
 }
 
-watch(tab, load, { immediate: true })
+load()
+
+const withdrawing = ref(null)
+async function withdraw (s) {
+  if (!confirm(`Withdraw "${s.title}"?`)) return
+  withdrawing.value = s.id
+  try {
+    await api.deleteSubmission(s.id)
+    data.value = { ...data.value,
+      submissions: data.value.submissions.filter(x => x.id !== s.id) }
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    withdrawing.value = null
+  }
+}
 
 function relativeEnd (c) {
   const end = new Date(`${c.end_date}T23:59:59`)
@@ -59,13 +86,13 @@ const STATUS_BADGE = {
     <h1 class="text-2xl font-bold tracking-tight mb-4">Dashboard</h1>
 
     <p v-if="auth.loaded && !auth.isLoggedIn" class="text-neutral-600 dark:text-neutral-300">
-      Please <a class="text-blue-600 dark:text-blue-400 hover:underline"
+      Please <a class="text-link-700 dark:text-link-400 hover:underline"
                 :href="api.loginUrl">log in</a> to see your dashboard.
     </p>
 
     <template v-else>
       <div class="tab-group mb-5 w-fit max-w-full overflow-x-auto">
-        <button v-for="t in TABS" :key="t.key" class="tab"
+        <button v-for="t in visibleTabs" :key="t.key" class="tab"
                 :class="{ 'tab-active': tab === t.key }" @click="tab = t.key">
           {{ t.label }}
         </button>
@@ -78,6 +105,7 @@ const STATUS_BADGE = {
         <p v-if="!current.length" class="text-sm text-neutral-600 dark:text-neutral-300">
           {{ {
             participation: 'You have not submitted to any campaign yet.',
+            submissions: 'You have not submitted anything yet.',
             evaluation: 'You are not on the jury of any campaign.',
             created: 'You have not created any campaigns.',
             approval: 'No campaigns are waiting for your approval.',
@@ -89,7 +117,7 @@ const STATUS_BADGE = {
           <div v-for="c in current" :key="c.id" class="card p-4">
             <div class="flex items-baseline gap-3 flex-wrap">
               <router-link :to="`/campaigns/${c.slug}`"
-                           class="font-semibold text-blue-700 dark:text-blue-400 hover:underline">
+                           class="font-semibold text-link-700 dark:text-link-400 hover:underline">
                 {{ c.name }}
               </router-link>
               <span class="text-xs text-neutral-600 dark:text-neutral-300">{{ relativeEnd(c) }}</span>
@@ -136,6 +164,31 @@ const STATUS_BADGE = {
                 No points counted yet.
               </p>
             </template>
+          </div>
+        </div>
+
+        <!-- Submissions: every submission I've made, with a withdraw action -->
+        <div v-else-if="tab === 'submissions'" class="space-y-2">
+          <div v-for="s in current" :key="s.id" class="card p-3 flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-40">
+              <a :href="s.url" target="_blank"
+                 class="font-medium text-link-700 dark:text-link-400 hover:underline">{{ s.title }}</a>
+              <div class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
+                <router-link :to="`/campaigns/${s.campaign.slug}`"
+                             class="text-link-700 dark:text-link-400 hover:underline">
+                  {{ s.campaign.name }}</router-link>
+                · {{ new Date(s.submitted_at).toLocaleDateString() }}
+                <template v-if="s.bytes_added"> · +{{ s.bytes_added.toLocaleString() }} bytes</template>
+              </div>
+            </div>
+            <span v-if="s.status !== 'submitted'" class="badge" :class="STATUS_BADGE[s.status === 'accepted' ? 'active' : 'rejected']">
+              {{ s.status }}
+            </span>
+            <span v-if="s.status !== 'rejected'" class="font-bold tabular-nums">{{ s.points }}<span class="text-xs font-normal text-neutral-600 dark:text-neutral-300"> pts</span></span>
+            <button v-if="s.campaign.status === 'active'" class="btn-danger"
+                    :disabled="withdrawing === s.id" @click="withdraw(s)">
+              {{ withdrawing === s.id ? 'Withdrawing…' : 'Withdraw' }}
+            </button>
           </div>
         </div>
 

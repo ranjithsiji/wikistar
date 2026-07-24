@@ -186,7 +186,7 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
       <div class="p-3 flex flex-wrap items-center gap-3 cursor-pointer"
            @click="toggleExpanded(s)">
         <div class="flex-1 min-w-40">
-          <a :href="s.url" target="_blank" class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
+          <a :href="s.url" target="_blank" class="font-medium text-link-700 dark:text-link-400 hover:underline"
              @click.stop>{{ s.title }}</a>
           <div class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
             by {{ s.user.username }} · {{ new Date(s.submitted_at).toLocaleDateString() }}
@@ -306,7 +306,7 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
           This user made more than {{ s.metrics.limit }} edits in the campaign
           period (likely a QuickStatements / OpenRefine or mass-upload run), so
           the points cannot be calculated automatically.
-          <a :href="s.url" target="_blank" class="text-blue-700 dark:text-blue-400 underline">Review the
+          <a :href="s.url" target="_blank" class="text-link-700 dark:text-link-400 underline">Review the
           contributions ↗</a>, decide whether these edits count, and enter the
           points with <b>Override points</b>.
         </p>
@@ -350,7 +350,7 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
             <span class="badge" :class="claimStatusStyles[c.status]">{{ c.status }}</span>
             <span class="tabular-nums">{{ c.points_final ?? c.points_claimed }} pts</span>
             <a v-if="c.evidence_url" :href="c.evidence_url" target="_blank"
-               class="text-blue-600 dark:text-blue-400 text-xs hover:underline">evidence</a>
+               class="text-link-700 dark:text-link-400 text-xs hover:underline">evidence</a>
             <template v-if="isJury && campaign.status !== 'archived'">
               <button class="btn !py-0.5 !px-2 text-xs" @click="emit('moderate-claim', c, 'verified')">Verify</button>
               <button class="btn !py-0.5 !px-2 text-xs" @click="emit('moderate-claim', c, 'adjusted')">Adjust</button>

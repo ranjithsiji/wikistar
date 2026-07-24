@@ -362,6 +362,12 @@ def test_personal_dashboard(client):
     assert part[0]["mine"]["bytes_added"] == 5000
     assert part[0]["mine"]["points"] == me_rows[0]["points"]
 
+    subs = client.get("/api/me/submissions").json
+    assert len(subs) == 1
+    assert subs[0]["title"] == "Kathakali"
+    assert subs[0]["campaign"]["slug"] == part[0]["slug"]
+    assert subs[0]["campaign"]["name"] == part[0]["name"]
+
     # JuryBob is on the jury of both campaigns; the jury-mode one has
     # Dave's submission which JuryBob already reviewed -> missing == 0,
     # while Carol's self campaign submission is unreviewed -> missing == 1

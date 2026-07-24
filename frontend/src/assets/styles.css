@@ -88,6 +88,18 @@
   --color-violet-700: #6a60b0;
   --color-violet-800: #534fa3;
   --color-violet-950: #23203b;
+
+  /* Genuine blue — distinct from the terracotta "blue-*" scale above.
+     For elements that specifically need to read as blue regardless of
+     the app's primary accent colour (e.g. the organizer badge, content
+     links called out as "must be blue"). */
+  --color-link-50:  #eef4ff;
+  --color-link-100: #dbe7fe;
+  --color-link-300: #93b8fd;
+  --color-link-400: #609afa;
+  --color-link-700: #1d4fd8;
+  --color-link-800: #1e40af;
+  --color-link-950: #1b2a5e;
 }
 
 /* Data-viz series colour follows the primary accent so charts match the

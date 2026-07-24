@@ -266,7 +266,7 @@ const statusStyles = {
       <h1 class="text-2xl font-bold">
         <a v-if="campaign.settings.campaign_page_url"
            :href="campaign.settings.campaign_page_url" target="_blank" rel="noopener"
-           class="text-blue-700 dark:text-blue-400 hover:underline"
+           class="text-link-700 dark:text-link-400 hover:underline"
            title="Open the campaign page">{{ campaign.name }}</a>
         <template v-else>{{ campaign.name }}</template>
       </h1>

@@ -93,7 +93,7 @@ watch(() => [props.newTitle, props.newKind, props.submitWiki], () => { titleExis
   </div>
   <p v-else-if="!isLoggedIn && campaign.status === 'active'"
      class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
-    <a class="text-blue-600 dark:text-blue-400 hover:underline" :href="api.loginUrl">Log in</a>
+    <a class="text-link-700 dark:text-link-400 hover:underline" :href="api.loginUrl">Log in</a>
     to submit your contribution.
   </p>
 </template>

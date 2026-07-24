@@ -142,7 +142,7 @@ const leadMargin = computed(() => {
           </template>
           <template #item-username="{ item, row }">
             <button type="button" title="Show this participant's submissions"
-                    class="inline-flex items-center gap-2 font-medium text-blue-700 dark:text-blue-400 hover:underline"
+                    class="inline-flex items-center gap-2 font-medium text-link-700 dark:text-link-400 hover:underline"
                     @click="emit('show-details', row.user)">
               <UserAvatar :username="item" size="sm" />
               {{ item }}

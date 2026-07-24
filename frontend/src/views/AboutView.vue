@@ -87,22 +87,22 @@ import wikistarLogo from '../assets/Wikistar.svg'
       <h2 class="text-lg font-semibold">Links</h2>
       <ul class="space-y-2 text-sm">
         <li>
-          <a class="text-blue-600 dark:text-blue-400 hover:underline"
+          <a class="text-link-700 dark:text-link-400 hover:underline"
              href="https://gitlab.wikimedia.org/toolforge-repos/wikistar"
              target="_blank" rel="noopener">Source code on Wikimedia GitLab</a>
         </li>
         <li>
-          <a class="text-blue-600 dark:text-blue-400 hover:underline"
+          <a class="text-link-700 dark:text-link-400 hover:underline"
              href="https://gitlab.wikimedia.org/toolforge-repos/wikistar/-/issues"
              target="_blank" rel="noopener">Bug reports and feature requests</a>
         </li>
         <li>
-          <a class="text-blue-600 dark:text-blue-400 hover:underline"
+          <a class="text-link-700 dark:text-link-400 hover:underline"
              href="https://toolforge.org" target="_blank" rel="noopener">
             Wikimedia Toolforge</a>, which hosts this tool
         </li>
         <li>
-          <a class="text-blue-600 dark:text-blue-400 hover:underline"
+          <a class="text-link-700 dark:text-link-400 hover:underline"
              href="https://meta.wikimedia.org/wiki/User:Ranjithsiji"
              target="_blank" rel="noopener">Ranjithsiji</a>, maintainer
         </li>
@@ -113,15 +113,15 @@ import wikistarLogo from '../assets/Wikistar.svg'
       <h2 class="text-lg font-semibold">License</h2>
       <p class="text-sm text-neutral-700 dark:text-neutral-300">
         WikiSTAR is free software, released under the
-        <a class="text-blue-600 dark:text-blue-400 hover:underline"
+        <a class="text-link-700 dark:text-link-400 hover:underline"
            href="https://www.gnu.org/licenses/gpl-3.0.html"
            target="_blank" rel="noopener">GNU General Public License v3.0</a>
         (or any later version), in line with Toolforge's
-        <a class="text-blue-600 dark:text-blue-400 hover:underline"
+        <a class="text-link-700 dark:text-link-400 hover:underline"
            href="https://wikitech.wikimedia.org/wiki/Wikitech:Cloud_Services_Terms_of_use"
            target="_blank" rel="noopener">right-to-fork policy</a>.
         Scoring behaviour follows the model established by the
-        <a class="text-blue-600 dark:text-blue-400 hover:underline"
+        <a class="text-link-700 dark:text-link-400 hover:underline"
            href="https://fountain.toolforge.org" target="_blank"
            rel="noopener">Fountain</a> tool.
       </p>

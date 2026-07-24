@@ -105,7 +105,7 @@ async function save () {
     <h1 class="text-2xl font-bold">Preferences</h1>
 
     <p v-if="auth.loaded && !auth.isLoggedIn" class="text-neutral-600 dark:text-neutral-300">
-      Please <a class="text-blue-600 dark:text-blue-400 hover:underline"
+      Please <a class="text-link-700 dark:text-link-400 hover:underline"
                 :href="api.loginUrl">log in</a> to edit your preferences.
     </p>
 

@@ -116,7 +116,7 @@ async function saveReview (review) {
     <p v-else-if="!campaign" class="text-neutral-600 dark:text-neutral-300 p-6">Loading…</p>
     <p v-else-if="!isJury" class="p-6 text-neutral-600 dark:text-neutral-300">
       Judging is for this campaign's jury members.
-      <router-link :to="`/campaigns/${slug}`" class="text-blue-600 dark:text-blue-400 hover:underline">
+      <router-link :to="`/campaigns/${slug}`" class="text-link-700 dark:text-link-400 hover:underline">
         Back to the campaign.</router-link>
     </p>
 
@@ -126,7 +126,7 @@ async function saveReview (review) {
                      border-b border-neutral-200 dark:border-neutral-800
                      bg-white dark:bg-neutral-900">
         <router-link :to="`/campaigns/${slug}`"
-                     class="font-semibold hover:text-blue-700 dark:hover:text-blue-400">
+                     class="font-semibold hover:text-link-700 dark:hover:text-link-400">
           ← {{ campaign.name }}
         </router-link>
         <span class="badge bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300">
@@ -181,7 +181,7 @@ async function saveReview (review) {
                         border-b border-neutral-200 dark:border-neutral-800
                         bg-white dark:bg-neutral-900">
               <a :href="selected.url" target="_blank"
-                 class="font-semibold text-blue-700 dark:text-blue-400 hover:underline">
+                 class="font-semibold text-link-700 dark:text-link-400 hover:underline">
                 {{ selected.title }} ↗
               </a>
               <span class="text-xs text-neutral-600 dark:text-neutral-300">
@@ -198,7 +198,7 @@ async function saveReview (review) {
               <p v-if="articleLoading" class="text-neutral-500">Loading article…</p>
               <p v-else-if="!articleHtml" class="text-neutral-500">
                 Could not load the page here —
-                <a :href="selected.url" target="_blank" class="text-blue-700 underline">
+                <a :href="selected.url" target="_blank" class="text-link-700 dark:text-link-400 underline">
                   open it on the wiki ↗</a>
               </p>
               <div v-else class="judge-article" v-html="articleHtml"></div>

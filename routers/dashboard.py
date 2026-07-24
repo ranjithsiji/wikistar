@@ -1,8 +1,10 @@
 """Personal dashboard ("Personal Cabinet"), modelled on Fountain.
 
-Four sections, all scoped to the logged-in user:
+Five sections, all scoped to the logged-in user:
   participation  campaigns you submitted to, with a leaderboard window
                  around your rank (hidden when the campaign hides marks)
+  submissions    every submission you've made, across every campaign,
+                 with a withdraw action (own submission, active campaign)
   evaluation     campaigns where you are on the jury, with the number of
                  submissions still waiting for your review
   created        campaigns you created (drafts included)
@@ -25,7 +27,7 @@ from domain.models import (
     ScoringMode,
     Submission,
 )
-from routers.common import campaign_summary, compute_leaderboard
+from routers.common import campaign_summary, compute_leaderboard, submission_out
 
 bp = Blueprint("dashboard", __name__, url_prefix="/api/me")
 
@@ -105,6 +107,33 @@ def participation():
                     if me.rank - 1 <= r.rank <= me.rank + 1
                 ]
         out.append({**_summary(c), "hidden_marks": hidden, "rows": rows, "mine": mine})
+    return respond(out)
+
+
+@bp.get("/submissions")
+def my_submissions():
+    """Every submission the user has made, newest first, across every
+    campaign — each with its campaign's slug/name/status so the frontend
+    can link back and gate withdrawal (own submission, campaign active)."""
+    db, user = get_db(), require_user()
+    subs = (
+        db.query(Submission)
+        .filter_by(user_id=user.id)
+        .options(
+            selectinload(Submission.reviews),
+            selectinload(Submission.claims),
+            selectinload(Submission.campaign),
+        )
+        .order_by(Submission.submitted_at.desc())
+        .all()
+    )
+    out = []
+    for s in subs:
+        campaign = s.campaign
+        item = jsonable(submission_out(campaign, s))
+        item["campaign"] = {"slug": campaign.slug, "name": campaign.name,
+                            "status": campaign.status.value}
+        out.append(item)
     return respond(out)
 
 

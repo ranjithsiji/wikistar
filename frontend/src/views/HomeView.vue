@@ -108,7 +108,7 @@ onMounted(async () => {
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold">{{ !loading && !recent.length ? 'How it works' : 'Recent contests' }}</h2>
         <router-link to="/contests"
-                     class="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                     class="text-sm font-medium text-link-700 dark:text-link-400 hover:underline">
           View all contests →
         </router-link>
       </div>

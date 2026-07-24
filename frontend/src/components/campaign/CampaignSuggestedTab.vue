@@ -128,7 +128,7 @@ function createUrl (item, lang) {
         <li v-for="t in campaign.suggested_articles" :key="t">
           <a target="_blank"
              :href="`https://${campaign.wiki_domain}/wiki/${t.replaceAll(' ', '_')}`"
-             class="text-blue-700 dark:text-blue-400 hover:underline">{{ t }}</a>
+             class="text-link-700 dark:text-link-400 hover:underline">{{ t }}</a>
         </li>
       </ul>
     </div>
@@ -310,7 +310,7 @@ function createUrl (item, lang) {
           <p class="text-xs text-neutral-500 dark:text-neutral-400 px-4 py-3">
             ✓ the article exists — click to read it; + it is missing — click to
             start it. Language columns come from
-            <router-link to="/preferences" class="text-blue-600 dark:text-blue-400 hover:underline">
+            <router-link to="/preferences" class="text-link-700 dark:text-link-400 hover:underline">
               your preferred languages</router-link>.
           </p>
         </template>

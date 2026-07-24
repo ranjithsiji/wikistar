@@ -19,6 +19,7 @@ export default {
 
   // personal dashboard
   myParticipation: () => http.get('/api/me/participation'),
+  mySubmissions: () => http.get('/api/me/submissions'),
   myEvaluation: () => http.get('/api/me/evaluation'),
   myCreated: () => http.get('/api/me/created'),
   myApproval: () => http.get('/api/me/approval'),

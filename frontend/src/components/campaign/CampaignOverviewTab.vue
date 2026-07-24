@@ -73,7 +73,7 @@ const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
           <div class="flex flex-wrap gap-1.5">
             <template v-if="campaign.members.some(m => m.role === 'organizer')">
               <span v-for="m in campaign.members.filter(m => m.role === 'organizer')" :key="m.id"
-                    class="badge bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                    class="badge bg-link-50 text-link-700 dark:bg-link-950 dark:text-link-300">
                 {{ m.user.username }}
               </span>
             </template>
@@ -116,7 +116,7 @@ const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
           </template>
           <template #item-username="{ item, row }">
             <button type="button" title="Show this participant's submissions"
-                    class="font-medium text-blue-700 dark:text-blue-400 hover:underline"
+                    class="font-medium text-link-700 dark:text-link-400 hover:underline"
                     @click="emit('show-details', row.user)">{{ item }}</button>
           </template>
           <template #item-bytes_added="{ item }">

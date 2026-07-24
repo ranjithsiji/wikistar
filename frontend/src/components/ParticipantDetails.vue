@@ -97,13 +97,13 @@ const fmtNum = (n) => n == null ? '—' : n.toLocaleString()
                  :sort="sort" @update:sort="onSort">
         <template #item-title="{ item, row: s }">
           <a :href="s.url" target="_blank"
-             class="font-medium text-blue-700 dark:text-blue-400 hover:underline">{{ item }}</a>
+             class="font-medium text-link-700 dark:text-link-400 hover:underline">{{ item }}</a>
           <span v-if="s.status === 'rejected'"
                 class="badge ml-1 bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">rejected</span>
           <div class="text-xs mt-0.5 space-x-2">
             <a v-if="s.kind === 'article' && s.details?.qid"
                :href="`https://www.wikidata.org/wiki/${s.details.qid}`" target="_blank"
-               class="text-blue-700 dark:text-blue-400 hover:underline">{{ s.details.qid }} ↗</a>
+               class="text-link-700 dark:text-link-400 hover:underline">{{ s.details.qid }} ↗</a>
             <span v-if="s.kind === 'wikidata_item' && s.details?.label"
                   class="text-neutral-600 dark:text-neutral-300">{{ s.details.label }}</span>
             <span v-if="s.kind === 'commons_file' && s.details?.uploader"
@@ -121,7 +121,7 @@ const fmtNum = (n) => n == null ? '—' : n.toLocaleString()
               over {{ s.details.limit }} edits — scored manually</span>
             <a v-if="s.kind === 'commons_file' && s.details?.file_url"
                :href="s.details.file_url" target="_blank"
-               class="text-blue-600 dark:text-blue-400 hover:underline">file ↗</a>
+               class="text-link-700 dark:text-link-400 hover:underline">file ↗</a>
             <span v-if="s.fetch_failed" class="text-red-600 dark:text-red-400">
               wiki details unavailable</span>
             <span v-else-if="!s.details" class="text-neutral-500 dark:text-neutral-400">
