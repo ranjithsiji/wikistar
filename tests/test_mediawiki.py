@@ -1,5 +1,8 @@
 """Pure-function tests for integrations/mediawiki.py's revision-delta math."""
-from integrations.mediawiki import _bytes_added
+from datetime import date
+
+import integrations.mediawiki as mediawiki
+from integrations.mediawiki import _bytes_added, fetch_wikidata_user_activity
 
 
 def test_clean_creation_sums_to_final_size():
@@ -96,3 +99,24 @@ def test_kappa_varutthathu_matches_the_real_edit_history():
     assert len(users) == len(sizes) == 51
     revs = [{"user": u, "size": s} for u, s in zip(users, sizes)]
     assert _bytes_added(revs, base_size=0, username="SijiR") == 11684
+
+
+def test_wikidata_sitelink_connect_counts_as_a_term_edit(monkeypatch):
+    # https://www.wikidata.org/wiki/Q21063857 - Ranjithsiji made 5 real
+    # edits: 2 descriptions, 1 label, 1 statement, and 1 sitelink connect
+    # (wblinktitles-connect, from merging enwiki/mlwiki sitelinks in).
+    # The sitelink connect wasn't recognised by the classifier, so the
+    # combined count landed on 4 and missed the suggested-list bonus's
+    # 5-edit gate by one - it must count as a term edit like labels do.
+    comments = [
+        "/* wbsetdescription-add:1|hi */ x",
+        "/* wbsetlabel-add:1|hi */ x",
+        "/* wbsetclaim-create:2||1 */ x",
+        "/* wbsetdescription-add:1|ml */ x",
+        "/* wblinktitles-connect:2| */ enwiki:Jayaraj Vijay, mlwiki:x",
+    ]
+    revs = [{"title": "Q21063857", "comment": c} for c in comments]
+    monkeypatch.setattr(mediawiki, "fetch_user_contribs", lambda *a, **k: revs)
+    activity = fetch_wikidata_user_activity(
+        "Ranjithsiji", date(2026, 7, 15), date(2026, 8, 15))
+    assert activity["Q21063857"] == {"statements": 1, "terms": 4}

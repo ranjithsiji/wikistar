@@ -220,7 +220,12 @@ def fetch_user_contribs(domain: str, username: str, start: date, end: date,
 
 # Wikibase auto-summaries, e.g. "/* wbsetclaim-create:2||1 */ [[Property:P31]]…"
 _STATEMENT_RE = re.compile(r"^/\* wb(setclaim-create|createclaim-create)")
-_TERM_RE = re.compile(r"^/\* wbset(label|description|aliases)-(add|set)")
+# Labels/descriptions/aliases, plus sitelinks (wbsetsitelink-*,
+# wblinktitles-connect) — connecting a page to the item is the same kind
+# of identity-enriching edit as adding a label or description.
+_TERM_RE = re.compile(
+    r"^/\* wb(set(label|description|aliases|sitelink)-(add|set)"
+    r"|linktitles-connect)")
 # Commons structured data: "…EntityPage/P180]]: [[d:Special:EntityPage/Q42]]"
 _DEPICTS_RE = re.compile(r"EntityPage/P180\]\]: \[\[d:Special:EntityPage/(Q\d+)")
 
