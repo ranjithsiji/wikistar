@@ -72,10 +72,12 @@ const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
           </div>
           <div class="flex flex-wrap gap-1.5">
             <template v-if="campaign.members.some(m => m.role === 'organizer')">
-              <span v-for="m in campaign.members.filter(m => m.role === 'organizer')" :key="m.id"
-                    class="badge bg-link-50 text-link-700 dark:bg-link-950 dark:text-link-300">
+              <a v-for="m in campaign.members.filter(m => m.role === 'organizer')" :key="m.id"
+                 :href="`https://meta.wikimedia.org/wiki/User:${m.user.username.replaceAll(' ', '_')}`"
+                 target="_blank" rel="noopener"
+                 class="badge bg-link-50 text-link-700 dark:bg-link-950 dark:text-link-300 hover:underline">
                 {{ m.user.username }}
-              </span>
+              </a>
             </template>
             <span v-else class="text-sm text-neutral-500 dark:text-neutral-400">—</span>
           </div>
