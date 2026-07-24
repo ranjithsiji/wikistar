@@ -219,7 +219,10 @@ def fetch_user_contribs(domain: str, username: str, start: date, end: date,
 
 
 # Wikibase auto-summaries, e.g. "/* wbsetclaim-create:2||1 */ [[Property:P31]]…"
-_STATEMENT_RE = re.compile(r"^/\* wb(setclaim-create|createclaim-create)")
+# wbsetclaim-update covers editing an existing statement's value (e.g.
+# correcting coordinates) — a real contribution, same as creating one.
+_STATEMENT_RE = re.compile(
+    r"^/\* wb(setclaim-(create|update)|createclaim-create)")
 # Labels/descriptions/aliases, plus sitelinks (wbsetsitelink-*,
 # wblinktitles-connect) — connecting a page to the item is the same kind
 # of identity-enriching edit as adding a label or description.

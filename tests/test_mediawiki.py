@@ -120,3 +120,24 @@ def test_wikidata_sitelink_connect_counts_as_a_term_edit(monkeypatch):
     activity = fetch_wikidata_user_activity(
         "Ranjithsiji", date(2026, 7, 15), date(2026, 8, 15))
     assert activity["Q21063857"] == {"statements": 1, "terms": 4}
+
+
+def test_wikidata_claim_update_counts_as_a_statement_edit(monkeypatch):
+    # https://www.wikidata.org/wiki/Q1426089 - பொதுஉதவி made 5 real edits:
+    # 2 claim creates, 1 claim update (correcting the coordinate value),
+    # and 2 description changes. wbsetclaim-update wasn't recognised by
+    # the classifier (only wbsetclaim-create was), so the combined count
+    # landed on 4 and missed the suggested-list bonus's 5-edit gate by
+    # one - editing an existing statement is a real contribution too.
+    comments = [
+        "/* wbsetclaim-create:2||1 */ x",
+        "/* wbsetclaim-create:2||1 */ x",
+        "/* wbsetclaim-update:2||1 */ x",
+        "/* wbsetdescription-set:1|ta */ x",
+        "/* wbsetdescription-set:1|en */ x",
+    ]
+    revs = [{"title": "Q1426089", "comment": c} for c in comments]
+    monkeypatch.setattr(mediawiki, "fetch_user_contribs", lambda *a, **k: revs)
+    activity = fetch_wikidata_user_activity(
+        "பொதுஉதவி", date(2026, 7, 15), date(2026, 8, 15))
+    assert activity["Q1426089"] == {"statements": 3, "terms": 2}
