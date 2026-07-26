@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timezone
 import httpx
 
 from auth import USER_AGENT
+from domain.wikidomains import is_wikimedia_domain
 
 TIMEOUT = 15.0
 
@@ -167,6 +168,11 @@ def add_page_template(domain: str, title: str, template: str,
     """Prepend {{template}} to the article (or its talk page) with the
     user's own OAuth token. Returns True on success; never raises for
     API-level failures — callers treat the write as best-effort."""
+    # Never send the participant's OAuth Bearer token to a non-Wikimedia
+    # host. wiki_domain is validated on the way in (domain.schemas), but
+    # guard the token path here too, in depth.
+    if not is_wikimedia_domain(domain):
+        return False
     target = f"Talk:{title}" if on_talk else title
     wikitext = f"{{{{{template}}}}}\n"
     headers = {"User-Agent": USER_AGENT,

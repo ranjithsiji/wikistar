@@ -185,3 +185,67 @@
     @apply px-3 py-2 text-sm;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Codex "progressive" accent → the app's terracotta brand.
+
+   The Tailwind palette above remaps blue-* to terracotta, but Wikimedia
+   Codex components (CdxButton action="progressive", CdxTabs, CdxToggleSwitch,
+   focus rings, …) read Codex's OWN design tokens, which stay Wikimedia blue
+   (#36c) unless overridden — so a blue Codex button ends up next to a
+   terracotta .btn-primary. Remap the progressive token family to the same
+   terracotta ramp here (loaded after codex.style.css / codex-dark.css) so
+   the whole UI shares one primary accent.
+
+   NOTE: this deliberately does NOT touch the blue --color-link-* scale.
+   Content links (participant names, article titles) stay blue on purpose —
+   on wiki, blue means "clickable link" and red would read as broken/missing.
+   -------------------------------------------------------------------------- */
+:root {
+  --color-progressive: #b03a22;
+  --color-progressive--hover: #8f2f1c;
+  --color-progressive--active: #5c2015;
+  --color-progressive--focus: #b03a22;
+  --color-icon-progressive: #b03a22;
+  --background-color-progressive: #b03a22;
+  --background-color-progressive--hover: #8f2f1c;
+  --background-color-progressive--active: #5c2015;
+  --background-color-progressive--focus: #b03a22;
+  --background-color-progressive-subtle: #fdf1ea;
+  --background-color-progressive-subtle--hover: #fbe1d1;
+  --background-color-progressive-subtle--active: #f4bd9c;
+  --border-color-progressive: #b03a22;
+  --border-color-progressive--hover: #8f2f1c;
+  --border-color-progressive--active: #5c2015;
+  --border-color-progressive--focus: #b03a22;
+  --box-shadow-color-progressive--active: #5c2015;
+  --box-shadow-color-progressive--focus: #b03a22;
+  --box-shadow-color-progressive-selected: #b03a22;
+  --box-shadow-color-progressive-selected--hover: #8f2f1c;
+  --box-shadow-color-progressive-selected--active: #5c2015;
+  --outline-color-progressive--focus: #b03a22;
+}
+:root.dark {
+  --color-progressive: #e89b71;
+  --color-progressive--hover: #f4bd9c;
+  --color-progressive--active: #fbe1d1;
+  --color-progressive--focus: #e89b71;
+  --color-icon-progressive: #e89b71;
+  --background-color-progressive: #cf5f37;
+  --background-color-progressive--hover: #dd7e4f;
+  --background-color-progressive--active: #e89b71;
+  --background-color-progressive--focus: #dd7e4f;
+  --background-color-progressive-subtle: #3a2015;
+  --background-color-progressive-subtle--hover: #4a2a1a;
+  --background-color-progressive-subtle--active: #5c2015;
+  --border-color-progressive: #dd7e4f;
+  --border-color-progressive--hover: #e89b71;
+  --border-color-progressive--active: #f4bd9c;
+  --border-color-progressive--focus: #dd7e4f;
+  --box-shadow-color-progressive--active: #f4bd9c;
+  --box-shadow-color-progressive--focus: #dd7e4f;
+  --box-shadow-color-progressive-selected: #dd7e4f;
+  --box-shadow-color-progressive-selected--hover: #e89b71;
+  --box-shadow-color-progressive-selected--active: #f4bd9c;
+  --outline-color-progressive--focus: #dd7e4f;
+}

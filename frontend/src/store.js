@@ -12,6 +12,10 @@ export const useAuthStore = defineStore('auth', {
       try {
         const { data } = await api.me()
         this.user = data.user
+      } catch {
+        // Offline / 5xx on /api/me: treat as logged out rather than letting
+        // the rejection bubble up (the route guard awaits this).
+        this.user = null
       } finally {
         this.loaded = true
       }

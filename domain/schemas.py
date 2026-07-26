@@ -14,6 +14,7 @@ from domain.models import (
     SubmissionKind,
     SubmissionStatus,
 )
+from domain.wikidomains import is_wikimedia_domain, normalize_domain
 
 
 class ORMModel(BaseModel):
@@ -66,7 +67,7 @@ class CampaignIn(BaseModel):
     slug: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9_-]*$",
                              max_length=80)
     description: str | None = None
-    language: str = "en"
+    language: str = Field(default="en", pattern=r"^[a-z][a-z0-9-]{1,11}$")
     wiki_domain: str | None = None  # derived from language when omitted
     start_date: date
     end_date: date
@@ -87,6 +88,21 @@ class CampaignIn(BaseModel):
         if not isinstance(value, list):
             return value
         return [{"qid": v} if isinstance(v, str) else v for v in value]
+
+    @field_validator("wiki_domain")
+    @classmethod
+    def _check_wiki_domain(cls, value):
+        # A campaign's wiki_domain is used to build MediaWiki API URLs and,
+        # with auto_add_template on, receives the submitter's OAuth token —
+        # so it must be a real Wikimedia host, never an attacker's server.
+        if value is None:
+            return value
+        domain = normalize_domain(value)
+        if not is_wikimedia_domain(domain):
+            raise ValueError(
+                "wiki_domain must be a Wikimedia wiki host "
+                "(e.g. en.wikipedia.org, www.wikidata.org)")
+        return domain
 
 
 class MemberOut(ORMModel):

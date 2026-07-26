@@ -11,6 +11,8 @@ from enum import Enum
 
 from flask import Response, jsonify, request
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from sqlalchemy.exc import IntegrityError
+from werkzeug.exceptions import HTTPException as WerkzeugHTTPException
 
 
 class HTTPException(Exception):
@@ -61,3 +63,23 @@ def register_errors(app):
     @app.errorhandler(HTTPException)
     def _api_error(exc: HTTPException):
         return jsonify({"detail": jsonable(exc.detail)}), exc.status_code
+
+    @app.errorhandler(IntegrityError)
+    def _integrity_error(exc: IntegrityError):
+        # Concurrent duplicate writes hit a unique constraint (a second
+        # submit / join / review / claim). Report a clean 409 instead of a
+        # 500, and roll the failed transaction back.
+        from core.db import db_session
+        db_session.rollback()
+        return jsonify({"detail": "This conflicts with an existing record "
+                        "(it may already exist)."}), 409
+
+    @app.errorhandler(Exception)
+    def _unexpected(exc: Exception):
+        # Let Flask/werkzeug render their own HTTP errors (404, 405, …).
+        if isinstance(exc, WerkzeugHTTPException):
+            return exc
+        from core.db import db_session
+        db_session.rollback()
+        app.logger.exception("Unhandled error")
+        return jsonify({"detail": "Internal server error"}), 500

@@ -47,6 +47,7 @@ from routers.common import (
     get_campaign_or_404,
     get_or_create_user,
     load_submissions,
+    points_hidden_for,
     slugify,
     suggested_titles,
     unique_slug,
@@ -483,6 +484,11 @@ def reject_campaign(slug: str):
     db, user = get_db(), require_user()
     campaign = get_campaign_or_404(db, slug)
     _require_approval_rights(campaign, user)
+    # Only a pending campaign can be rejected — mirror approve_campaign, so
+    # an eligible approver can't reject (and thereby hide) a live/finished
+    # contest they don't organize.
+    if campaign.status not in (CampaignStatus.draft, CampaignStatus.rejected):
+        raise HTTPException(400, f"Campaign is already {campaign.status.value}")
     reason = (request.get_json(silent=True) or {}).get("reason", "")
     campaign.status = CampaignStatus.rejected
     audit(db, user, "reject", "campaign", campaign.id,
@@ -496,11 +502,17 @@ def reject_campaign(slug: str):
 def leaderboard(slug: str):
     db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
+    # Draft/rejected campaigns are visible only to their organizers/approvers.
+    if not can_see_campaign(db, campaign, user):
+        raise HTTPException(404, "Campaign not found")
     if not campaign.effective_settings.get("show_leaderboard", True):
         allowed = user and (user.is_admin or campaign_roles(db, campaign, user)
                             & {MemberRole.organizer, MemberRole.jury})
         if not allowed:
             raise HTTPException(403, "The leaderboard is not public")
+    if points_hidden_for(db, campaign, user):
+        raise HTTPException(
+            403, "Points are hidden until the organizers reveal results")
     return respond(compute_leaderboard(db, campaign))
 
 
@@ -518,6 +530,9 @@ def participant_details(slug: str, user_id: int):
                             & {MemberRole.organizer, MemberRole.jury})
         if not allowed:
             raise HTTPException(403, "The leaderboard is not public")
+    if points_hidden_for(db, campaign, user):
+        raise HTTPException(
+            403, "Points are hidden until the organizers reveal results")
 
     settings = campaign.effective_settings
     subs = [s for s in load_submissions(db, campaign.id)
@@ -557,6 +572,10 @@ def campaign_stats(slug: str):
     campaign = get_campaign_or_404(db, slug)
     if not can_see_campaign(db, campaign, user):
         raise HTTPException(404, "Campaign not found")
+    # HiddenMarks: keep the aggregate counts visible but withhold the
+    # point-derived figures (total points, top contributors) that would
+    # otherwise leak the hidden jury marks.
+    hide_points = points_hidden_for(db, campaign, user)
     settings = campaign.effective_settings
     subs = load_submissions(db, campaign.id)
 
@@ -589,7 +608,7 @@ def campaign_stats(slug: str):
         claims=claims,
         pending_claims=pending_claims,
         unreviewed_submissions=unreviewed,
-        total_points=total_points,
+        total_points=0.0 if hide_points else total_points,
         total_bytes_added=sum(s.bytes_added or 0 for s in subs),
         new_pages=sum(1 for s in subs if s.is_new_page),
         by_kind=dict(Counter(s.kind.value for s in subs)),
@@ -597,5 +616,6 @@ def campaign_stats(slug: str):
         by_language=dict(by_language),
         timeline=[{"date": d, "submissions": n}
                   for d, n in sorted(timeline.items())],
-        top_contributors=compute_leaderboard(db, campaign)[:10],
+        top_contributors=[] if hide_points
+        else compute_leaderboard(db, campaign)[:10],
     ))

@@ -33,6 +33,7 @@ threshold       gate only, no points (params: {"min_new_article_bytes": N}).
 eligibility     documentation of topical constraints shown to
                 participants and organizers, no points.
 """
+import math
 from dataclasses import dataclass, field
 
 from domain.models import (
@@ -97,6 +98,14 @@ class Breakdown:
         self.total = round(self.total + line.points, 2)
 
 
+def normalize_title(title: str) -> str:
+    """Normalise a page title for suggested-list matching. MediaWiki treats
+    spaces and underscores as equivalent and is case-insensitive on the
+    first letter, so "Kathakali_dance" and "Kathakali dance" must match the
+    same suggested entry. Used on both sides (list ingestion and matching)."""
+    return (title or "").replace("_", " ").strip().lower()
+
+
 def rule_applies(rule: ScoringRule, submission: Submission) -> bool:
     kind = RULE_KIND.get(submission.kind, submission.kind)
     return rule.active and rule.applies_to in (
@@ -110,13 +119,19 @@ def per_unit_points(rule: ScoringRule, value: float) -> tuple[int, float]:
 
     params.rounding: "floor" (default) or "nearest". Floor takes the lower
     whole-unit count (3,900 bytes -> 3 points at unit_size 1000); "nearest"
-    is opt-in per rule for organizers who want the older rounding.
+    is opt-in per rule for organizers who want conventional half-up rounding
+    (2,500 bytes -> 3 points). Units are never negative: a non-positive
+    metric (e.g. a page that shrank, bytes_added < 0) scores 0, not a
+    penalty.
     """
     if rule.unit_size <= 0:
         return 0, 0.0
     rounding = (rule.params or {}).get("rounding", "floor")
     ratio = value / rule.unit_size
-    units = round(ratio) if rounding == "nearest" else int(ratio)
+    # math.floor is a true floor for negatives (int() truncates toward zero);
+    # "nearest" is half-up, not Python's banker's rounding (round(2.5) == 2).
+    units = math.floor(ratio + 0.5) if rounding == "nearest" else math.floor(ratio)
+    units = max(0, units)
     if rule.max_units is not None:
         units = min(units, rule.max_units)
     return units, round(units * float(rule.points), 2)
@@ -150,8 +165,9 @@ def compute_breakdown(
 ) -> Breakdown:
     """Full point breakdown for one submission.
 
-    suggested_titles: lowercase titles of the campaign's suggested pages
-    matching this submission's kind.
+    suggested_titles: normalized (see normalize_title) titles of the
+    campaign's suggested pages matching this submission's kind, plus — for
+    articles — the suggested item QIDs (uppercase).
     settings: the campaign's effective settings; honours
     min_reviews_per_submission (jury) and unverified_claims_count (self).
     """
@@ -203,7 +219,7 @@ def compute_breakdown(
             # otherwise anyone could submit a page/item they never touched
             # just because it happens to be on the suggested list.
             qid = (submission.wikidata_qid or "").upper()
-            on_list = (submission.title.lower() in suggested_titles
+            on_list = (normalize_title(submission.title) in suggested_titles
                        or (qid and qid in suggested_titles))
             contributed = submission.is_new_page or bool(submission.bytes_added)
             if submission.kind == SubmissionKind.wikidata_item:
@@ -254,7 +270,11 @@ def review_total(criteria: list[dict], scores: dict) -> float:
     """Server-side total of a jury mark against the campaign's review
     criteria (Fountain-style parts: radio / check / int)."""
     total = 0.0
-    for part in criteria or []:
+    if not isinstance(criteria, list):
+        return total
+    for part in criteria:
+        if not isinstance(part, dict):
+            continue
         key = part.get("key") or part.get("title")
         value = (scores or {}).get(key)
         if value is None:
