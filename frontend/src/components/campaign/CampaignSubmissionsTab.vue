@@ -52,11 +52,17 @@ const fmtDateLong = (iso) => iso ? new Date(iso).toLocaleString('en-GB', {
 
 // English name for non-English submissions (Wikidata item labels, and
 // the connected item's English sitelink title for non-English
-// articles), shown in brackets next to the native title. Fetched once,
-// in a single batch, whenever the submission list changes.
+// articles), shown in brackets next to the native title. Fetched once
+// per set of submission ids seen so far — an accept/reject/refresh
+// swaps in a new submissions array without adding new ids, and must not
+// re-trigger this (otherwise every moderation action pays for a wiki
+// round trip it doesn't need).
 const englishNames = ref({})
+const knownSubmissionIds = ref(new Set())
 watch(() => props.submissions, async (subs) => {
-  if (!subs.length) return
+  const ids = subs.map(s => s.id)
+  if (!ids.length || ids.every(id => knownSubmissionIds.value.has(id))) return
+  knownSubmissionIds.value = new Set(ids)
   try {
     const { data } = await api.submissionEnglishNames(props.campaign.slug)
     englishNames.value = data

@@ -96,8 +96,11 @@ const canApprove = ref(false)
 
 async function load () {
   try {
-    campaign.value = (await api.getCampaign(props.slug)).data
-    submissions.value = (await api.listSubmissions(props.slug)).data
+    const [campaignRes, submissionsRes] = await Promise.all([
+      api.getCampaign(props.slug), api.listSubmissions(props.slug)
+    ])
+    campaign.value = campaignRes.data
+    submissions.value = submissionsRes.data
     // Overview stat tiles; best-effort, never blocks the page.
     api.campaignStats(props.slug)
       .then(r => { stats.value = r.data })
@@ -126,6 +129,13 @@ async function loadLeaderboard () {
   } catch (e) {
     error.value = errorMessage(e)
   }
+}
+// Submission-only actions (accept/reject/refresh/recalculate/withdraw/
+// review/claims) only need submissions refreshed, not the whole
+// campaign — reloading campaign+approval-rights on every click made
+// "Accept" feel slow for no reason.
+async function reloadSubmissions () {
+  submissions.value = (await api.listSubmissions(props.slug)).data
 }
 onMounted(load)
 
@@ -158,6 +168,24 @@ async function run (fn, successMsg = '', pendingKey = '') {
     await fn()
     notice.value = successMsg
     await load()
+    if (tab.value === 'leaderboard') await loadLeaderboard()
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    if (pendingKey) pendingAction.value = ''
+  }
+}
+// Same as run(), but for actions that only change one submission —
+// refreshes just the submissions list (and the leaderboard, since points
+// may have changed) instead of the whole campaign.
+async function runSub (fn, successMsg = '', pendingKey = '') {
+  error.value = ''
+  notice.value = ''
+  if (pendingKey) pendingAction.value = pendingKey
+  try {
+    await fn()
+    notice.value = successMsg
+    await reloadSubmissions()
     if (tab.value === 'leaderboard') await loadLeaderboard()
   } catch (e) {
     error.value = errorMessage(e)
@@ -200,9 +228,9 @@ const submit = () => run(async () => {
 }, 'Submission added.')
 const withdraw = (s) => {
   if (!confirm(`Withdraw "${s.title}"?`)) return
-  return run(() => api.deleteSubmission(s.id), '', `${s.id}:withdraw`)
+  return runSub(() => api.deleteSubmission(s.id), '', `${s.id}:withdraw`)
 }
-const refresh = (s) => run(() => api.refreshSubmission(s.id), 'Wiki metadata refreshed.', `${s.id}:refresh`)
+const refresh = (s) => runSub(() => api.refreshSubmission(s.id), 'Wiki metadata refreshed.', `${s.id}:refresh`)
 const recalculate = (s) => {
   // Only an organizer's recalculate clears a manual override; the
   // submission owner's recalculate refreshes points but leaves an
@@ -210,10 +238,10 @@ const recalculate = (s) => {
   if (isOrganizer.value && s.points_override != null && !confirm(
     'This clears the manual points override and recomputes the points '
     + 'from fresh wiki data and the campaign rules. Continue?')) return
-  return run(() => api.recalculateSubmission(s.id), 'Points recalculated.', `${s.id}:recalculate`)
+  return runSub(() => api.recalculateSubmission(s.id), 'Points recalculated.', `${s.id}:recalculate`)
 }
-const saveReview = (s, review) => run(() => api.submitReview(s.id, review), 'Review saved.')
-const saveClaims = (s, claims) => run(() => api.saveClaims(s.id, claims), 'Claims saved.')
+const saveReview = (s, review) => runSub(() => api.submitReview(s.id, review), 'Review saved.')
+const saveClaims = (s, claims) => runSub(() => api.saveClaims(s.id, claims), 'Claims saved.')
 const moderateSub = (s, status) => {
   let moderation_note
   if (status === 'rejected') {
@@ -221,13 +249,13 @@ const moderateSub = (s, status) => {
     if (moderation_note === null) return
     moderation_note = moderation_note.trim()
   }
-  return run(() => api.moderateSubmission(s.id, { status, moderation_note }), '', `${s.id}:${status}`)
+  return runSub(() => api.moderateSubmission(s.id, { status, moderation_note }), '', `${s.id}:${status}`)
 }
 const overrideSub = (s) => {
   const v = prompt('Final points for this submission (empty to clear the override):')
   if (v === null) return
   const payload = v === '' ? { clear_override: true } : { points_override: Number(v) }
-  return run(() => api.moderateSubmission(s.id, payload), '', `${s.id}:override`)
+  return runSub(() => api.moderateSubmission(s.id, payload), '', `${s.id}:override`)
 }
 const moderateClaim = (claim, status) => {
   let points_final = null
@@ -236,7 +264,7 @@ const moderateClaim = (claim, status) => {
     if (v === null) return
     points_final = Number(v)
   }
-  return run(() => api.moderateClaim(claim.id, { status, points_final }))
+  return runSub(() => api.moderateClaim(claim.id, { status, points_final }))
 }
 
 const statusStyles = {
