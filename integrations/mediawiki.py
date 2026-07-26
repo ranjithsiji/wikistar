@@ -116,6 +116,28 @@ def fetch_sitelinks(qids: list[str], languages: list[str]) -> dict[str, dict]:
     return result
 
 
+def fetch_wikibase_items(domain: str, titles: list[str]) -> dict[str, str]:
+    """The connected Wikidata QID for each of the given page titles on
+    `domain`, as {title: qid} (titles with no connected item are
+    omitted). Batched: up to 50 titles per API call."""
+    result: dict[str, str] = {}
+    if not titles:
+        return result
+    with _client() as client:
+        for start in range(0, len(titles), 50):  # API limit: 50 titles per call
+            chunk = titles[start:start + 50]
+            data = client.get(api_url(domain), params={
+                "action": "query", "format": "json", "formatversion": 2,
+                "prop": "pageprops", "ppprop": "wikibase_item",
+                "titles": "|".join(chunk),
+            }).json()
+            for page in data.get("query", {}).get("pages", []):
+                qid = (page.get("pageprops") or {}).get("wikibase_item")
+                if qid:
+                    result[page.get("title", "")] = qid
+    return result
+
+
 def fetch_user_registration(domain: str, username: str) -> datetime | None:
     """Account registration timestamp on the given wiki, or None."""
     with _client() as client:
@@ -344,9 +366,12 @@ def fetch_commons_user_activity(username: str, start: date, end: date,
 
 def fetch_article_details(domain: str, title: str) -> dict | None:
     """Live per-article facts for the participant popup and submission card:
-    size, word count, creation/last-edit dates and editors, and the
-    connected Wikidata item. Returns None for a missing page; network
-    errors raise httpx.HTTPError."""
+    size, word count, creation/last-edit dates and editors, the connected
+    Wikidata item, and — for a non-English wiki — that item's English
+    label/sitelink title, so a non-English submission can show its
+    English name alongside the native title. Returns None for a missing
+    page; network errors raise httpx.HTTPError."""
+    lang = domain.split(".")[0]
     with _client() as client:
         data = client.get(api_url(domain), params={
             "action": "query", "format": "json", "formatversion": 2,
@@ -364,6 +389,12 @@ def fetch_article_details(domain: str, title: str) -> dict | None:
             "titles": title,
         }).json()
         text = extract["query"]["pages"][0].get("extract") or ""
+        qid = (page.get("pageprops") or {}).get("wikibase_item")
+        label_en = title_en = None
+        if qid and lang != "en":
+            sitelinks = fetch_sitelinks([qid], ["en"]).get(qid) or {}
+            label_en = sitelinks.get("label_en")
+            title_en = sitelinks.get("links", {}).get("en")
     return {
         "bytes": page.get("length"),
         "words": len(text.split()),
@@ -371,7 +402,9 @@ def fetch_article_details(domain: str, title: str) -> dict | None:
         "created_by": first.get("user"),
         "last_updated": _parse_ts(page.get("touched")),
         "last_updated_by": latest.get("user"),
-        "qid": (page.get("pageprops") or {}).get("wikibase_item"),
+        "qid": qid,
+        "label_en": label_en,
+        "title_en": title_en,
     }
 
 
@@ -428,6 +461,80 @@ def fetch_commons_details(title: str) -> dict | None:
         "uploader": oldest.get("user"),
         "uploaded_at": _parse_ts(oldest.get("timestamp")),
         "file_url": latest.get("url"),
+    }
+
+
+# Claims are capped in the preview popup: it's a quick glance, not a full
+# item dump, and resolving every property label would be an unbounded
+# number of extra API calls for items with dozens of statements.
+MAX_PREVIEW_CLAIMS = 12
+
+
+def fetch_article_preview(domain: str, title: str) -> dict | None:
+    """Rendered HTML of the current revision, for the submission preview
+    popup. Returns None for a missing page; network errors raise
+    httpx.HTTPError. The lead section only (section 0) keeps the popup a
+    quick glance rather than a full mirrored article."""
+    with _client() as client:
+        data = client.get(api_url(domain), params={
+            "action": "parse", "format": "json", "formatversion": 2,
+            "page": title, "prop": "text", "section": "0",
+            "disabletoc": 1, "disableeditsection": 1,
+        }).json()
+    if "error" in data:
+        return None
+    parse = data.get("parse") or {}
+    return {"title": parse.get("title", title), "html": parse.get("text", "")}
+
+
+def fetch_wikidata_preview(qid: str) -> dict | None:
+    """Label, description, aliases and a capped list of claims (property
+    label -> formatted value strings) for the submission preview popup.
+    Returns None if the item is missing."""
+    with _client() as client:
+        entity = client.get(api_url("www.wikidata.org"), params={
+            "action": "wbgetentities", "format": "json", "ids": qid,
+            "props": "labels|descriptions|aliases|claims",
+            "languages": "en|mul",
+        }).json().get("entities", {}).get(qid)
+        if not entity or "missing" in entity:
+            return None
+        labels = entity.get("labels") or {}
+        descriptions = entity.get("descriptions") or {}
+        aliases = [a["value"] for a in (entity.get("aliases") or {}).get("en", [])]
+        claims = entity.get("claims") or {}
+        prop_ids = list(claims.keys())[:MAX_PREVIEW_CLAIMS]
+        prop_labels: dict[str, str] = {}
+        if prop_ids:
+            data = client.get(api_url("www.wikidata.org"), params={
+                "action": "wbgetentities", "format": "json",
+                "ids": "|".join(prop_ids), "props": "labels",
+                "languages": "en",
+            }).json()
+            for pid, pentity in (data.get("entities") or {}).items():
+                lbl = (pentity.get("labels") or {}).get("en", {}).get("value")
+                prop_labels[pid] = lbl or pid
+        rows = []
+        for pid in prop_ids:
+            values = []
+            for snak in claims[pid][:5]:
+                dv = (snak.get("mainsnak", {}) or {}).get("datavalue", {}) or {}
+                v = dv.get("value")
+                if isinstance(v, dict):
+                    text = v.get("id") or v.get("text") or v.get("time") or str(v)
+                elif v is None:
+                    text = "unknown value"
+                else:
+                    text = str(v)
+                values.append(text)
+            rows.append({"property": prop_labels.get(pid, pid), "values": values})
+    return {
+        "qid": qid.upper(),
+        "label": (labels.get("en") or labels.get("mul") or {}).get("value"),
+        "description": (descriptions.get("en") or descriptions.get("mul") or {}).get("value"),
+        "aliases": aliases,
+        "claims": rows,
+        "claim_count": len(claims),
     }
 
 

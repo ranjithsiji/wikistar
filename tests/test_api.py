@@ -712,6 +712,80 @@ def test_submission_details_endpoint(client, monkeypatch):
         f"/api/submissions/{sub['id']}/details").status_code == 502
 
 
+def test_submission_preview_endpoint(client, monkeypatch):
+    monkeypatch.setattr(
+        mediawiki, "fetch_article_preview",
+        lambda domain, title: {"title": title, "html": "<p>Lead text</p>"})
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_preview",
+        lambda qid: {"qid": qid, "label": "Kathakali", "description": "dance",
+                     "aliases": [], "claims": [], "claim_count": 0})
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Preview Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    article = client.post(f"/api/campaigns/{slug}/submissions",
+                          json={"title": "Kathakali", "kind": "article"}).json
+    item = client.post(f"/api/campaigns/{slug}/submissions",
+                       json={"title": "Q126", "kind": "wikidata_item"}).json
+
+    logout()  # public, like the submission-details popup
+    ap = client.get(f"/api/submissions/{article['id']}/preview").json
+    assert ap["html"] == "<p>Lead text</p>"
+    ip = client.get(f"/api/submissions/{item['id']}/preview").json
+    assert ip["label"] == "Kathakali"
+
+    assert client.get("/api/submissions/999999/preview").status_code == 404
+
+    monkeypatch.setattr(mediawiki, "fetch_article_preview",
+                        lambda domain, title: None)
+    assert client.get(
+        f"/api/submissions/{article['id']}/preview").status_code == 404
+
+    def boom(domain, title):
+        raise RuntimeError("wiki down")
+    monkeypatch.setattr(mediawiki, "fetch_article_preview", boom)
+    assert client.get(
+        f"/api/submissions/{article['id']}/preview").status_code == 502
+
+
+def test_submission_english_names_endpoint(client, monkeypatch):
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikibase_items",
+        lambda domain, titles: {"കപ്പ": "Q999"})
+    monkeypatch.setattr(
+        mediawiki, "fetch_sitelinks",
+        lambda qids, langs: {
+            "Q126": {"label": "Kathakali", "label_en": "Kathakali", "links": {}},
+            "Q999": {"label": "Tapioca", "label_en": "Tapioca",
+                     "links": {"en": "Tapioca"}},
+        })
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="English Names Contest",
+        settings={"allow_wikidata_items": True, "multi_language": True})).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    item = client.post(f"/api/campaigns/{slug}/submissions",
+                       json={"title": "Q126", "kind": "wikidata_item"}).json
+    article = client.post(f"/api/campaigns/{slug}/submissions",
+                          json={"title": "കപ്പ", "kind": "article",
+                                "language": "ml"}).json
+
+    names = client.get(f"/api/campaigns/{slug}/submissions/english-names").json
+    assert names[str(item["id"])]["label_en"] == "Kathakali"
+    assert names[str(article["id"])]["title_en"] == "Tapioca"
+
+
 def test_coordinator_submits_on_behalf(client):
     login("Alice")
     slug = client.post("/api/campaigns", json=make_campaign_payload(

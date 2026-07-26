@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import api from '../../api'
 import ClaimEditor from '../ClaimEditor.vue'
 import ReviewForm from '../ReviewForm.vue'
+import SubmissionPreview from '../SubmissionPreview.vue'
 
 const props = defineProps({
   campaign: { type: Object, required: true },
@@ -48,6 +49,27 @@ async function toggleExpanded (s) {
 const fmtDateLong = (iso) => iso ? new Date(iso).toLocaleString('en-GB', {
   day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit'
 }) : '—'
+
+// English name for non-English submissions (Wikidata item labels, and
+// the connected item's English sitelink title for non-English
+// articles), shown in brackets next to the native title. Fetched once,
+// in a single batch, whenever the submission list changes.
+const englishNames = ref({})
+watch(() => props.submissions, async (subs) => {
+  if (!subs.length) return
+  try {
+    const { data } = await api.submissionEnglishNames(props.campaign.slug)
+    englishNames.value = data
+  } catch (e) { /* best-effort: the native title alone is still useful */ }
+}, { immediate: true })
+const englishName = (s) => {
+  const entry = englishNames.value[s.id]
+  return entry?.label_en || entry?.title_en || ''
+}
+
+// Preview popup: rendered lead section for an article, item data for a
+// Wikidata item.
+const previewSubmission = ref(null)
 
 // Coordinators can narrow the submission list to one participant.
 const filterUser = ref('')
@@ -193,6 +215,8 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
         <div class="flex-1 min-w-40">
           <a :href="s.url" target="_blank" class="font-medium text-link-700 dark:text-link-400 hover:underline"
              @click.stop>{{ s.title }}</a>
+          <span v-if="englishName(s)" class="text-sm text-neutral-500 dark:text-neutral-400">
+            ({{ englishName(s) }})</span>
           <div class="text-xs text-neutral-600 dark:text-neutral-300 mt-0.5">
             by {{ s.user.username }} · {{ new Date(s.submitted_at).toLocaleDateString() }}
             <template v-if="campaign.settings.multi_language && s.kind === 'article'">
@@ -380,6 +404,10 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
 
         <!-- actions -->
         <div class="flex flex-wrap gap-2 pt-1">
+          <button v-if="['article', 'wikidata_item'].includes(s.kind)"
+                  class="btn" @click.stop="previewSubmission = s">
+            Preview
+          </button>
           <button class="btn" :disabled="isPending(s, 'refresh')" @click="emit('refresh', s)">
             <svg v-if="isPending(s, 'refresh')" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
@@ -435,5 +463,8 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
     </div>
       </div>
     </div>
+
+    <SubmissionPreview v-if="previewSubmission" :submission="previewSubmission"
+                        @close="previewSubmission = null" />
   </div>
 </template>

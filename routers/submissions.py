@@ -411,6 +411,81 @@ def submission_details(submission_id: int):
     return respond(details)
 
 
+@bp.get("/submissions/<int:submission_id>/preview")
+def submission_preview(submission_id: int):
+    """Quick-glance preview for the popup: rendered lead section for an
+    article, or label/description/claims for a Wikidata item. Commons
+    files and bulk kinds have no dedicated preview — the frontend links
+    out to the wiki directly for those."""
+    db = get_db()
+    sub = _get_submission_or_404(db, submission_id)
+    try:
+        if sub.kind == SubmissionKind.article:
+            preview = mediawiki.fetch_article_preview(sub.wiki_domain, sub.title)
+        elif sub.kind == SubmissionKind.wikidata_item:
+            preview = mediawiki.fetch_wikidata_preview(sub.title)
+        else:
+            raise HTTPException(400, "No preview available for this submission type")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(502, "Could not fetch a preview from the wiki")
+    if preview is None:
+        raise HTTPException(404, "Not found on the wiki")
+    return respond(preview)
+
+
+@bp.get("/campaigns/<slug>/submissions/english-names")
+def submission_english_names(slug: str):
+    """English name for every non-English submission in one batch: the
+    label for Wikidata items, and the connected item's English sitelink
+    title for non-English articles. Two Wikidata calls total (pageprops
+    lookups happen per wiki_domain) instead of one per submission row, so
+    the submissions list can show "native title (English name)" without
+    an expensive per-row fetch."""
+    db = get_db()
+    campaign = get_campaign_or_404(db, slug)
+    subs = load_submissions(db, campaign.id)
+
+    out: dict[int, dict] = {}
+    item_subs = [s for s in subs if s.kind == SubmissionKind.wikidata_item]
+    article_subs = [s for s in subs if s.kind == SubmissionKind.article
+                    and s.wiki_domain.split(".")[0] != "en"]
+
+    qids = list({s.title.upper() for s in item_subs})
+    # non-English articles: resolve each domain's titles -> connected QIDs
+    article_qids: dict[int, str] = {}
+    by_domain: dict[str, list[Submission]] = {}
+    for s in article_subs:
+        by_domain.setdefault(s.wiki_domain, []).append(s)
+    try:
+        for domain, group in by_domain.items():
+            qid_by_title = mediawiki.fetch_wikibase_items(
+                domain, [s.title for s in group])
+            for s in group:
+                qid = qid_by_title.get(s.title)
+                if qid:
+                    article_qids[s.id] = qid
+
+        all_qids = list({*qids, *article_qids.values()})
+        entities = mediawiki.fetch_sitelinks(all_qids, ["en"]) if all_qids else {}
+
+        for s in item_subs:
+            entity = entities.get(s.title.upper())
+            if entity and entity.get("label_en"):
+                out[s.id] = {"label_en": entity["label_en"]}
+        for s in article_subs:
+            qid = article_qids.get(s.id)
+            entity = entities.get(qid) if qid else None
+            if entity:
+                title_en = entity.get("links", {}).get("en")
+                if title_en and title_en != s.title:
+                    out[s.id] = {"title_en": title_en}
+    except Exception:
+        raise HTTPException(502, "Could not reach Wikidata for English names")
+    return respond(out)
+
+
 @bp.post("/submissions/<int:submission_id>/refresh")
 def refresh_metadata(submission_id: int):
     db, user = get_db(), require_user()
