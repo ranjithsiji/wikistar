@@ -72,7 +72,23 @@ const suggestedLangs = computed(() => {
   return ['en', ...langs.filter(l => l !== 'en')]
 })
 const itemLink = (item, lang) => item.links.find(l => l.lang === lang)
-const shownSectionItems = computed(() => activeSectionData.value?.items || [])
+
+// "Missing in language" filter: with only one language column there's
+// nothing to pick, the checkbox alone filters against it; once a second
+// language is added, a dropdown appears to choose which one.
+const missingOnly = ref(false)
+const missingLang = ref('')
+watch(suggestedLangs, (langs) => {
+  if (!langs.includes(missingLang.value)) missingLang.value = langs[0] || ''
+}, { immediate: true })
+const effectiveMissingLang = computed(() =>
+  suggestedLangs.value.length > 1 ? missingLang.value : suggestedLangs.value[0])
+
+const shownSectionItems = computed(() => {
+  const items = activeSectionData.value?.items || []
+  if (!missingOnly.value || !effectiveMissingLang.value) return items
+  return items.filter(item => !itemLink(item, effectiveMissingLang.value))
+})
 
 // Two heading layouts, user-switchable (remembered per device):
 //   all      — every heading as a wrapped label button (default)
@@ -258,7 +274,24 @@ function createUrl (item, lang) {
         </div>
 
         <template v-else>
-          <div class="overflow-x-auto">
+          <div class="flex flex-wrap items-center gap-3 px-4 pt-3">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" v-model="missingOnly" :disabled="!suggestedLangs.length" />
+              Missing article in
+              <select v-if="suggestedLangs.length > 1" v-model="missingLang"
+                      class="input !w-28 !py-1" :disabled="!missingOnly">
+                <option v-for="lang in suggestedLangs" :key="lang" :value="lang">{{ lang }}</option>
+              </select>
+              <span v-else class="font-medium">{{ suggestedLangs[0] }}</span>
+            </label>
+            <span v-if="missingOnly" class="text-xs text-neutral-600 dark:text-neutral-300">
+              {{ shownSectionItems.length }} of {{ activeSectionData?.items.length || 0 }} items
+            </span>
+          </div>
+          <p v-if="missingOnly && !shownSectionItems.length" class="text-sm text-neutral-600 dark:text-neutral-300 px-4 py-3">
+            No items are missing an article in {{ effectiveMissingLang }} for this heading.
+          </p>
+          <div v-else class="overflow-x-auto">
             <table class="w-full">
               <thead>
                 <tr class="border-b border-neutral-200 dark:border-neutral-800">
