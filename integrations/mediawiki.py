@@ -172,18 +172,6 @@ def _first_revision(client: httpx.Client, domain: str, page_id: int) -> dict:
     return {}
 
 
-def _latest_revision(client: httpx.Client, domain: str, page_id: int) -> dict:
-    data = client.get(api_url(domain), params={
-        "action": "query", "format": "json", "formatversion": 2,
-        "prop": "revisions", "pageids": page_id,
-        "rvprop": "timestamp|user", "rvdir": "older", "rvlimit": 1,
-    }).json()
-    pages = data.get("query", {}).get("pages", [])
-    if pages and pages[0].get("revisions"):
-        return pages[0]["revisions"][0]
-    return {}
-
-
 def add_page_template(domain: str, title: str, template: str,
                       on_talk: bool, access_token: str) -> bool:
     """Prepend {{template}} to the article (or its talk page) with the
@@ -365,36 +353,32 @@ def fetch_commons_user_activity(username: str, start: date, end: date,
 
 
 def fetch_article_details(domain: str, title: str) -> dict | None:
-    """Live per-article facts for the participant popup and submission card:
-    size, word count, creation/last-edit dates and editors, the connected
-    Wikidata item, and — for a non-English wiki — that item's English
-    label/sitelink title, so a non-English submission can show its
-    English name alongside the native title. Returns None for a missing
-    page; network errors raise httpx.HTTPError."""
-    lang = domain.split(".")[0]
+    """Live per-article facts for the participant popup and submission
+    card: size, word count, creation/last-edit dates and editors, and
+    the connected Wikidata item. Returns None for a missing page;
+    network errors raise httpx.HTTPError.
+
+    Two requests total: info+pageprops+extract+latest-revision share one
+    call (MediaWiki lets prop= list several props in a single query()),
+    and the first revision needs a second call since a single request
+    can't return both ends of a page's history. label_en/title_en for
+    non-English articles are resolved separately and in a batch by
+    submission_english_names, not duplicated here."""
     with _client() as client:
         data = client.get(api_url(domain), params={
             "action": "query", "format": "json", "formatversion": 2,
-            "prop": "info|pageprops", "ppprop": "wikibase_item",
+            "prop": "info|pageprops|extracts|revisions",
+            "ppprop": "wikibase_item",
+            "explaintext": 1, "exlimit": 1, "exsectionformat": "plain",
+            "rvprop": "timestamp|user", "rvlimit": 1,  # newest first
             "titles": title,
         }).json()
         page = data["query"]["pages"][0]
         if page.get("missing"):
             return None
+        latest = (page.get("revisions") or [{}])[0]
         first = _first_revision(client, domain, page["pageid"])
-        latest = _latest_revision(client, domain, page["pageid"])
-        extract = client.get(api_url(domain), params={
-            "action": "query", "format": "json", "formatversion": 2,
-            "prop": "extracts", "explaintext": 1, "exlimit": 1,
-            "titles": title,
-        }).json()
-        text = extract["query"]["pages"][0].get("extract") or ""
-        qid = (page.get("pageprops") or {}).get("wikibase_item")
-        label_en = title_en = None
-        if qid and lang != "en":
-            sitelinks = fetch_sitelinks([qid], ["en"]).get(qid) or {}
-            label_en = sitelinks.get("label_en")
-            title_en = sitelinks.get("links", {}).get("en")
+        text = page.get("extract") or ""
     return {
         "bytes": page.get("length"),
         "words": len(text.split()),
@@ -402,25 +386,28 @@ def fetch_article_details(domain: str, title: str) -> dict | None:
         "created_by": first.get("user"),
         "last_updated": _parse_ts(page.get("touched")),
         "last_updated_by": latest.get("user"),
-        "qid": qid,
-        "label_en": label_en,
-        "title_en": title_en,
+        "qid": (page.get("pageprops") or {}).get("wikibase_item"),
     }
 
 
 def fetch_wikidata_details(qid: str) -> dict | None:
-    """Label, size and dates of one Wikidata item, or None if missing."""
+    """Label, size and dates of one Wikidata item, or None if missing.
+    Two requests: info+latest-revision+labels share one call, the first
+    revision needs a second (a single request can't return both ends of
+    a page's history)."""
     domain = "www.wikidata.org"
     with _client() as client:
         data = client.get(api_url(domain), params={
             "action": "query", "format": "json", "formatversion": 2,
-            "prop": "info", "titles": qid,
+            "prop": "info|revisions",
+            "rvprop": "timestamp|user", "rvlimit": 1,  # newest first
+            "titles": qid,
         }).json()
         page = data["query"]["pages"][0]
         if page.get("missing") or page.get("invalid"):
             return None
+        latest = (page.get("revisions") or [{}])[0]
         first = _first_revision(client, domain, page["pageid"])
-        latest = _latest_revision(client, domain, page["pageid"])
         # "mul" holds the default-for-all-languages label Wikidata uses
         # when no language-specific one exists.
         entity = client.get(api_url(domain), params={
