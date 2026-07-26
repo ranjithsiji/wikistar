@@ -154,7 +154,7 @@ const leadMargin = computed(() => {
                 <div class="h-2 rounded bg-blue-600 dark:bg-blue-500"
                      :style="{ width: `${(item / maxSubmissions) * 100}%` }"></div>
               </div>
-              <span class="tabular-nums w-4 text-right">{{ item }}</span>
+              <span class="tabular-nums w-6 text-right shrink-0">{{ item }}</span>
             </div>
           </template>
           <template #item-bytes_added="{ item }">
