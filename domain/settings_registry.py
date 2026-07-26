@@ -15,7 +15,7 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         label="Jury members may submit",
         help="Allow jurors to take part with their own submissions."),
     "max_submissions_per_user": dict(
-        type="int", default=0, category="participation",
+        type="int", default=0, min=0, category="participation",
         label="Max submissions per participant",
         help="0 means unlimited."),
     "allow_articles": dict(
@@ -39,7 +39,7 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         label="Accept submissions after the end date",
         help="e.g. to register Good Article nominations decided later."),
     "max_wikidata_edits_auto": dict(
-        type="int", default=50, category="participation",
+        type="int", default=50, min=0, category="participation",
         label="Max Wikidata edits for automatic scoring",
         help="Bulk Wikidata submissions by users with more edits than this "
              "in the campaign period (e.g. QuickStatements/OpenRefine runs) "
@@ -47,7 +47,7 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
              "contributions and enters the points manually. 0 disables "
              "the cap."),
     "max_commons_uploads_auto": dict(
-        type="int", default=100, category="participation",
+        type="int", default=100, min=0, category="participation",
         label="Max Commons uploads for automatic scoring",
         help="Bulk Commons submissions with more uploads or file edits "
              "than this are not scored automatically — the coordinator "
@@ -60,7 +60,7 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         help="Submissions of pages that existed before the start date are "
              "rejected (checked against the page history)."),
     "min_article_bytes": dict(
-        type="int", default=0, category="eligibility",
+        type="int", default=0, min=0, category="eligibility",
         label="Minimum article size (bytes)",
         help="0 disables the check."),
     "submitter_registered_after": dict(
@@ -74,7 +74,7 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
 
     # -- jury review ---------------------------------------------------------
     "min_reviews_per_submission": dict(
-        type="int", default=1, category="jury",
+        type="int", default=1, min=1, category="jury",
         label="Reviews needed before points count",
         help="Jury mode: a submission scores only once this many jurors "
              "accepted it."),
@@ -89,7 +89,7 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         help="Jurors see only their own marks; points are hidden from "
              "everyone but organizers until revealed."),
     "jury_criteria": dict(
-        type="json", default=[], category="jury",
+        type="json", json_shape="list", default=[], category="jury",
         label="Review criteria",
         help='Fountain-style parts, e.g. [{"key": "quality", "title": '
              '"Quality", "type": "radio", "values": [{"title": "ok", '
@@ -169,6 +169,11 @@ def validate_overrides(overrides: dict[str, Any]) -> dict[str, Any]:
         elif kind == "int":
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError(f"Setting {key} must be an integer")
+            low, high = spec.get("min"), spec.get("max")
+            if low is not None and value < low:
+                raise ValueError(f"Setting {key} must be at least {low}")
+            if high is not None and value > high:
+                raise ValueError(f"Setting {key} must be at most {high}")
         elif kind == "str":
             if not isinstance(value, str):
                 raise ValueError(f"Setting {key} must be a string")
@@ -177,7 +182,14 @@ def validate_overrides(overrides: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError(
                     f"Setting {key} must be one of: {', '.join(choices)}")
         elif kind == "json":
-            if not isinstance(value, (list, dict)):
+            shape = spec.get("json_shape")
+            if shape == "list":
+                if not isinstance(value, list):
+                    raise ValueError(f"Setting {key} must be a JSON list")
+            elif shape == "object":
+                if not isinstance(value, dict):
+                    raise ValueError(f"Setting {key} must be a JSON object")
+            elif not isinstance(value, (list, dict)):
                 raise ValueError(f"Setting {key} must be a JSON list/object")
         if value != spec["default"]:
             clean[key] = value

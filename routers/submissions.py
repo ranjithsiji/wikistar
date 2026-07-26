@@ -35,6 +35,7 @@ from domain.models import (
 from domain.scoring import BULK_KIND_METRICS
 from routers.common import (
     audit,
+    can_see_campaign,
     get_campaign_or_404,
     get_or_create_user,
     load_submissions,
@@ -395,8 +396,12 @@ def submission_details(submission_id: int):
     word count, creation/last-edit dates and editors. Fetched on demand
     (only while the card is expanded) rather than eagerly for every
     submission in the list."""
-    db = get_db()
+    db, user = get_db(), get_current_user()
     sub = _get_submission_or_404(db, submission_id)
+    # Don't leak titles/QIDs (or trigger wiki fetches) for submissions in a
+    # campaign the caller can't even see.
+    if not can_see_campaign(db, sub.campaign, user):
+        raise HTTPException(404, "Submission not found")
     try:
         if sub.kind == SubmissionKind.article:
             details = mediawiki.fetch_article_details(sub.wiki_domain, sub.title)

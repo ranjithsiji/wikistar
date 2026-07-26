@@ -10,6 +10,7 @@ from domain.models import (
     Campaign,
     CampaignStatus,
     MemberRole,
+    ScoringMode,
     Submission,
     SubmissionKind,
     User,
@@ -25,7 +26,7 @@ from domain.schemas import (
     SuggestedItemOut,
     UserOut,
 )
-from domain.scoring import compute_breakdown
+from domain.scoring import compute_breakdown, normalize_title
 
 
 def audit(db: Session, user: User | None, action: str,
@@ -75,7 +76,8 @@ def suggested_titles(campaign: Campaign, kind: SubmissionKind) -> set[str]:
     the suggested titles of that kind, plus — for articles — the suggested
     Wikidata item QIDs, so an article that is a suggested item's sitelink
     also matches (scoring compares the article's connected QID)."""
-    keys = {p.title.lower() for p in campaign.suggested_pages if p.kind == kind}
+    keys = {normalize_title(p.title) for p in campaign.suggested_pages
+            if p.kind == kind}
     if kind == SubmissionKind.article:
         keys |= {p.title.upper() for p in campaign.suggested_pages
                  if p.kind == SubmissionKind.wikidata_item}
@@ -163,6 +165,27 @@ def can_see_campaign(db: Session, campaign: Campaign, user: User | None) -> bool
 
         return wiki_rights.can_approve_campaign(user, campaign)[0]
     return False
+
+
+def points_hidden_for(db: Session, campaign: Campaign, user: User | None) -> bool:
+    """Fountain HiddenMarks: in an anonymous-reviews jury campaign only
+    admins and organizers see computed points. Everyone else — participants
+    and jurors alike — has points hidden until the organizers reveal
+    results. list_submissions already redacts per-submission; this is the
+    same gate for the derived views (leaderboard, participant details,
+    stats) so standings don't leak the hidden marks."""
+    settings = campaign.effective_settings
+    if not settings.get("anonymous_reviews"):
+        return False
+    if campaign.scoring_mode != ScoringMode.jury:
+        return False
+    if user is None:
+        return True
+    if user.is_admin:
+        return False
+    from auth import campaign_roles  # local import to avoid cycle at startup
+
+    return MemberRole.organizer not in campaign_roles(db, campaign, user)
 
 
 def compute_leaderboard(db: Session, campaign: Campaign) -> list[LeaderboardRow]:
