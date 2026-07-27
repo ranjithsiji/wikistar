@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { CdxDialog } from '@wikimedia/codex'
 import { errorMessage } from '../api'
+import LANGUAGES from '../languages'
 
 // Quick-glance popup: rendered lead section for an article, or the full
 // statement list for a Wikidata item.
@@ -21,6 +22,13 @@ const emit = defineEmits(['close'])
 const preview = ref(null)     // articles: { html }
 const item = ref(null)        // wikidata: { label, description, aliases, groups }
 const error = ref('')
+
+// Other-language versions of an article, loaded only when asked for.
+const showSitelinks = ref(false)
+const sitelinks = ref(null)   // null = not loaded, [] = none exist
+const sitelinksLoading = ref(false)
+const sitelinksError = ref('')
+const sitelinkFilter = ref('')
 
 function text (node) {
   return (node?.textContent || '').replace(/\s+/g, ' ').trim()
@@ -109,6 +117,112 @@ async function loadArticle (domain, title) {
   return { html: parse.text || '' }
 }
 
+// ---- other-language versions ----------------------------------------------
+// Sitelink keys ending in "wiki" are Wikipedia language editions, except
+// these: Commons is a media repository and the others are meta/internal
+// wikis, none of which is a language version of the article.
+const NON_LANGUAGE_WIKIS = new Set([
+  'commonswiki', 'abstractwiki', 'metawiki', 'specieswiki',
+  'sourceswiki', 'mediawikiwiki', 'wikidatawiki', 'incubatorwiki',
+  'outreachwiki', 'foundationwiki'
+])
+
+// A few editions kept legacy site codes that no longer match their
+// language code, so they aren't in languages.js. The domains still
+// resolve; only the display name needs filling in.
+const LEGACY_WIKIS = {
+  als: { name: 'Alemannisch', en: 'Alemannic' },
+  'be-x-old': { name: 'беларуская (тарашкевіца)', en: 'Belarusian (Taraškievica)' },
+  'zh-min-nan': { name: 'Bân-lâm-gú', en: 'Southern Min' },
+  'zh-yue': { name: '粵語', en: 'Cantonese' },
+  bat_smg: { name: 'žemaitėška', en: 'Samogitian' },
+  fiu_vro: { name: 'võro', en: 'Võro' },
+  roa_rup: { name: 'armãneashti', en: 'Aromanian' }
+}
+
+// Sitelinks come from the article's connected Wikidata item, so the QID
+// has to be resolved first when the submission doesn't already carry one
+// (it is captured at submission time, but older rows may predate that or
+// the article may have been connected to an item since).
+async function resolveQid (domain, title) {
+  const query = new URLSearchParams({
+    action: 'query', format: 'json', formatversion: '2', origin: '*',
+    prop: 'pageprops', ppprop: 'wikibase_item', titles: title
+  })
+  const res = await fetch(`https://${domain}/w/api.php?${query}`)
+  if (!res.ok) throw new Error(`The wiki returned ${res.status}`)
+  const page = (await res.json())?.query?.pages?.[0]
+  return page?.pageprops?.wikibase_item || ''
+}
+
+async function loadSitelinks () {
+  if (sitelinks.value || sitelinksLoading.value) return
+  sitelinksLoading.value = true
+  sitelinksError.value = ''
+  try {
+    const sub = props.submission
+    if (!WIKIMEDIA_HOST.test(sub.wiki_domain)) {
+      throw new Error(`${sub.wiki_domain} is not a Wikimedia wiki.`)
+    }
+    const qid = sub.wikidata_qid || await resolveQid(sub.wiki_domain, sub.title)
+    if (!qid) {
+      sitelinks.value = []
+      return
+    }
+    const query = new URLSearchParams({
+      action: 'wbgetentities', format: 'json', origin: '*',
+      ids: qid, props: 'sitelinks'
+    })
+    const res = await fetch(`https://www.wikidata.org/w/api.php?${query}`)
+    if (!res.ok) throw new Error(`Wikidata returned ${res.status}`)
+    const data = await res.json()
+    if (data.error) throw new Error(data.error.info || 'Wikidata request failed')
+    const entity = data.entities?.[qid]
+    if (!entity || 'missing' in entity) {
+      sitelinks.value = []
+      return
+    }
+    const own = sub.wiki_domain.split('.')[0]
+    sitelinks.value = Object.entries(entity.sitelinks || {})
+      // Wikipedia language editions only: "<code>wiki". Sister projects
+      // end in wikiquote/wikisource/…, while "commonswiki" (a media
+      // repository) and "abstractwiki" match the shape but are not
+      // language versions of the article.
+      .filter(([site]) => /^[a-z0-9_-]+wiki$/.test(site)
+                          && !NON_LANGUAGE_WIKIS.has(site))
+      .map(([site, link]) => {
+        const raw = site.slice(0, -4)
+        const code = raw.replace(/_/g, '-')
+        const lang = LANGUAGES.find(l => l.code === code)
+          || LEGACY_WIKIS[raw] || LEGACY_WIKIS[code]
+        return {
+          code,
+          title: link.title,
+          name: lang?.name || code,
+          en: lang?.en || '',
+          url: `https://${code}.wikipedia.org/wiki/${encodeURIComponent(link.title.replace(/ /g, '_'))}`,
+          isOwn: code === own
+        }
+      })
+      // Known languages first (alphabetically by English name), then any
+      // edition missing from our list, so nothing is silently dropped.
+      .sort((a, b) => (a.en ? 0 : 1) - (b.en ? 0 : 1) ||
+                      (a.en || a.code).localeCompare(b.en || b.code))
+  } catch (e) {
+    sitelinksError.value = e.message || errorMessage(e)
+  } finally {
+    sitelinksLoading.value = false
+  }
+}
+
+const shownSitelinks = computed(() => {
+  const q = sitelinkFilter.value.trim().toLowerCase()
+  if (!q || !sitelinks.value) return sitelinks.value || []
+  return sitelinks.value.filter(s =>
+    s.code.includes(q) || s.name.toLowerCase().includes(q) ||
+    s.en.toLowerCase().includes(q) || s.title.toLowerCase().includes(q))
+})
+
 onMounted(async () => {
   const sub = props.submission
   try {
@@ -138,9 +252,66 @@ onMounted(async () => {
       Fetching preview from the wiki…
     </div>
 
-    <!-- article: rendered lead section -->
-    <div v-else-if="submission.kind === 'article'"
-         class="article-preview text-sm leading-relaxed" v-html="preview.html"></div>
+    <!-- article: rendered lead section, plus other-language versions -->
+    <div v-else-if="submission.kind === 'article'">
+      <div class="article-preview text-sm leading-relaxed" v-html="preview.html"></div>
+
+      <div class="mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-800">
+        <button class="btn !py-1 text-sm"
+                @click="showSitelinks = !showSitelinks; showSitelinks && loadSitelinks()">
+          {{ showSitelinks ? '▾' : '▸' }} View sitelinks
+          <span v-if="sitelinks && sitelinks.length"
+                class="badge bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 ml-1">
+            {{ sitelinks.length }}
+          </span>
+        </button>
+
+        <div v-if="showSitelinks" class="mt-3">
+          <p v-if="sitelinksError" class="text-sm text-red-600 dark:text-red-400">
+            {{ sitelinksError }}
+            <button class="ml-1 underline hover:no-underline" @click="loadSitelinks">
+              Try again
+            </button>
+          </p>
+          <p v-else-if="sitelinksLoading" class="text-sm text-neutral-600 dark:text-neutral-300">
+            Looking up other language versions…
+          </p>
+          <p v-else-if="sitelinks && !sitelinks.length"
+             class="text-sm text-neutral-600 dark:text-neutral-300">
+            This article is not connected to a Wikidata item, so no other
+            language versions could be found.
+          </p>
+          <template v-else-if="sitelinks">
+            <input v-model="sitelinkFilter" class="input !w-56 mb-3"
+                   placeholder="Filter languages…" />
+            <p v-if="!shownSitelinks.length"
+               class="text-sm text-neutral-600 dark:text-neutral-300">
+              No language matches “{{ sitelinkFilter }}”.
+            </p>
+            <ul v-else class="grid sm:grid-cols-2 gap-x-4">
+              <li v-for="s in shownSitelinks" :key="s.code"
+                  class="py-1.5 border-b border-neutral-100 dark:border-neutral-800 min-w-0">
+                <a :href="s.url" target="_blank" rel="noopener" class="group block">
+                  <span class="text-xs text-neutral-500 dark:text-neutral-400 tabular-nums">
+                    {{ s.code }}
+                  </span>
+                  <span class="ml-1.5 text-sm text-link-700 dark:text-link-400 group-hover:underline">
+                    {{ s.title }}
+                  </span>
+                  <span v-if="s.isOwn"
+                        class="badge bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 ml-1.5">
+                    this wiki
+                  </span>
+                  <span class="block text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                    {{ s.name }}<template v-if="s.en && s.en !== s.name"> · {{ s.en }}</template>
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </template>
+        </div>
+      </div>
+    </div>
 
     <!-- wikidata item: label/description/aliases, then every statement -->
     <div v-else>
