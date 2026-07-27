@@ -193,11 +193,17 @@ async function refreshCampaigns () {
 </script>
 
 <template>
-  <div>
-    <h1 class="text-2xl font-bold mb-4">Administration</h1>
+  <div class="admin-shell">
+    <div class="flex items-center gap-3 flex-wrap mb-1">
+      <h1 class="text-2xl font-bold">Administration</h1>
+      <span class="admin-chip">Admin area</span>
+    </div>
+    <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
+      Site-wide controls. Changes here affect every campaign and user.
+    </p>
     <AppMessage v-model="error" type="error" />
 
-    <div class="tab-group mb-5 w-fit max-w-full overflow-x-auto">
+    <div class="tab-group w-fit max-w-full overflow-x-auto">
       <button v-for="[key, label] in TABS" :key="key" class="tab"
               :class="{ 'tab-active': tab === key }" @click="selectTab(key)">
         {{ label }}
@@ -208,158 +214,161 @@ async function refreshCampaigns () {
       </button>
     </div>
 
-    <!-- =========================== Dashboard =========================== -->
-    <div v-if="tab === 'dashboard'">
-      <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.users }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Users</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Editathons</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.active_campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Active</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.pending_campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Pending approval</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.submissions }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Submissions</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.reviews }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Reviews</div></div>
-        <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.claims }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Claims</div></div>
-      </div>
+    <div class="tab-panel p-4">
 
-      <h2 class="font-semibold mb-2">Editathons awaiting approval</h2>
-      <p v-if="!pendingCampaigns.length" class="text-sm text-neutral-600 dark:text-neutral-300">
-        Nothing waiting for approval.
-      </p>
-      <div v-for="c in pendingCampaigns" :key="c.id" class="card p-3 mb-2 flex items-center gap-3 flex-wrap">
-        <router-link :to="`/campaigns/${c.slug}`" class="font-medium text-link-700 dark:text-link-400 hover:underline flex-1 min-w-40">
-          {{ c.name }}
-        </router-link>
-        <span class="text-xs text-neutral-600 dark:text-neutral-300">by {{ c.created_by_username || '—' }}</span>
-        <span class="text-xs text-neutral-600 dark:text-neutral-300">{{ c.start_date }} → {{ c.end_date }}</span>
-        <button class="btn" :disabled="busy" @click="reject(c)">Reject</button>
-        <button class="btn-primary" :disabled="busy" @click="approve(c)">Approve</button>
-      </div>
+      <!-- =========================== Dashboard =========================== -->
+      <div v-if="tab === 'dashboard'">
+        <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+          <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.users }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Users</div></div>
+          <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Editathons</div></div>
+          <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.active_campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Active</div></div>
+          <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.pending_campaigns }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Pending approval</div></div>
+          <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.submissions }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Submissions</div></div>
+          <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.reviews }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Reviews</div></div>
+          <div class="card p-4"><div class="text-2xl font-bold tabular-nums">{{ stats.claims }}</div><div class="text-xs text-neutral-600 dark:text-neutral-300 mt-1">Claims</div></div>
+        </div>
 
-      <h2 class="font-semibold mb-2 mt-6">Latest activity</h2>
-      <div class="card overflow-x-auto">
-        <table class="w-full">
-          <tbody>
-            <tr v-for="l in logs.logs.slice(0, 10)" :key="l.id"
-                class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-              <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ new Date(l.created_at).toLocaleString() }}</td>
-              <td class="td">{{ l.username }}</td>
-              <td class="td">{{ l.action }}</td>
-              <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ l.entity_type }} {{ l.details?.title || l.details?.username || l.details?.slug || l.entity_id || '' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- =========================== Editathons ========================== -->
-    <div v-if="tab === 'campaigns'" class="space-y-2">
-      <div class="flex gap-1 mb-1">
-        <button v-for="f in ['all', 'draft', 'active', 'finished', 'archived', 'rejected']"
-                :key="f" class="tab !py-1" :class="{ 'tab-active': statusFilter === f }"
-                @click="setStatusFilter(f)">{{ f }}</button>
-      </div>
-      <p v-if="!shownCampaigns.length" class="text-sm text-neutral-600 dark:text-neutral-300">
-        No editathons with this status.
-      </p>
-      <div v-for="c in shownCampaigns" :key="c.id" class="card">
-        <div class="p-3 flex items-center gap-3 flex-wrap">
-          <router-link :to="`/admin/campaigns/${c.slug}`"
-                       class="font-medium text-link-700 dark:text-link-400 hover:underline flex-1 min-w-40 truncate"
-                       title="Manage members and submissions">
+        <h2 class="font-semibold mb-2">Editathons awaiting approval</h2>
+        <p v-if="!pendingCampaigns.length" class="text-sm text-neutral-600 dark:text-neutral-300">
+          Nothing waiting for approval.
+        </p>
+        <div v-for="c in pendingCampaigns" :key="c.id" class="card p-3 mb-2 flex items-center gap-3 flex-wrap">
+          <router-link :to="`/campaigns/${c.slug}`" class="font-medium text-link-700 dark:text-link-400 hover:underline flex-1 min-w-40">
             {{ c.name }}
           </router-link>
-          <span class="badge" :class="STATUS_BADGE[c.status]">{{ c.status }}</span>
-          <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">by {{ c.created_by_username || '—' }}</span>
-          <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ c.start_date }} → {{ c.end_date }}</span>
-          <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap tabular-nums"
-                :title="`${c.submission_count} submissions / ${c.participant_count} participants`">
-            {{ c.submission_count }} subs · {{ c.participant_count }} users
-          </span>
-          <button v-if="['draft', 'rejected'].includes(c.status)" class="btn-primary !py-0.5 text-xs"
-                  :disabled="busy" @click="approve(c)">Approve</button>
-          <button v-if="c.status === 'draft'" class="btn !py-0.5 text-xs"
-                  :disabled="busy" @click="reject(c)">Reject</button>
-          <button v-if="c.status === 'active'" class="btn !py-0.5 text-xs"
-                  :disabled="busy" @click="deactivate(c)">Deactivate</button>
-          <router-link class="btn !py-0.5 text-xs" :to="`/admin/campaigns/${c.slug}`">Manage</router-link>
-          <button class="btn-danger !py-0.5 text-xs" :disabled="busy" @click="removeCampaign(c)">Delete</button>
+          <span class="text-xs text-neutral-600 dark:text-neutral-300">by {{ c.created_by_username || '—' }}</span>
+          <span class="text-xs text-neutral-600 dark:text-neutral-300">{{ c.start_date }} → {{ c.end_date }}</span>
+          <button class="btn" :disabled="busy" @click="reject(c)">Reject</button>
+          <button class="btn-primary" :disabled="busy" @click="approve(c)">Approve</button>
+        </div>
+
+        <h2 class="font-semibold mb-2 mt-6">Latest activity</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <tbody>
+              <tr v-for="l in logs.logs.slice(0, 10)" :key="l.id"
+                  class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+                <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ new Date(l.created_at).toLocaleString() }}</td>
+                <td class="td">{{ l.username }}</td>
+                <td class="td">{{ l.action }}</td>
+                <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ l.entity_type }} {{ l.details?.title || l.details?.username || l.details?.slug || l.entity_id || '' }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
-    </div>
 
-    <!-- ============================= Users ============================= -->
-    <div v-if="tab === 'users'">
-      <input v-model="userFilter" class="input !w-64 mb-3" placeholder="Filter users…" />
-      <div class="card overflow-x-auto">
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-neutral-200 dark:border-neutral-800">
-              <th class="th">Username</th><th class="th">Registered</th>
-              <th class="th">Last login</th>
-              <th class="th text-right">Submissions</th>
-              <th class="th text-right">Campaigns</th>
-              <th class="th">Site admin</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="u in filteredUsers" :key="u.id"
-                class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-              <td class="td">
-                <a :href="`https://meta.wikimedia.org/wiki/User:${u.username.replaceAll(' ', '_')}`"
-                   target="_blank" rel="noopener"
-                   class="inline-flex items-center gap-2 text-link-700 dark:text-link-400 hover:underline">
-                  <UserAvatar :username="u.username" size="sm" />
-                  {{ u.username }}
-                </a>
-              </td>
-              <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ new Date(u.registered_at).toLocaleDateString() }}</td>
-              <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—' }}</td>
-              <td class="td text-right tabular-nums">{{ u.submission_count }}</td>
-              <td class="td text-right tabular-nums">{{ u.campaigns_created }}</td>
-              <td class="td">
-                <button class="btn !py-0.5 !px-2 text-xs" :disabled="u.id === auth.user?.id"
-                        @click="toggleAdmin(u)">
-                  {{ u.is_admin ? '✓ admin' : 'make admin' }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- =========================== Editathons ========================== -->
+      <div v-if="tab === 'campaigns'" class="space-y-2">
+        <div class="flex gap-1 mb-1">
+          <button v-for="f in ['all', 'draft', 'active', 'finished', 'archived', 'rejected']"
+                  :key="f" class="tab !py-1" :class="{ 'tab-active': statusFilter === f }"
+                  @click="setStatusFilter(f)">{{ f }}</button>
+        </div>
+        <p v-if="!shownCampaigns.length" class="text-sm text-neutral-600 dark:text-neutral-300">
+          No editathons with this status.
+        </p>
+        <div v-for="c in shownCampaigns" :key="c.id" class="card">
+          <div class="p-3 flex items-center gap-3 flex-wrap">
+            <router-link :to="`/admin/campaigns/${c.slug}`"
+                         class="font-medium text-link-700 dark:text-link-400 hover:underline flex-1 min-w-40 truncate"
+                         title="Manage members and submissions">
+              {{ c.name }}
+            </router-link>
+            <span class="badge" :class="STATUS_BADGE[c.status]">{{ c.status }}</span>
+            <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">by {{ c.created_by_username || '—' }}</span>
+            <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ c.start_date }} → {{ c.end_date }}</span>
+            <span class="text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap tabular-nums"
+                  :title="`${c.submission_count} submissions / ${c.participant_count} participants`">
+              {{ c.submission_count }} subs · {{ c.participant_count }} users
+            </span>
+            <button v-if="['draft', 'rejected'].includes(c.status)" class="btn-primary !py-0.5 text-xs"
+                    :disabled="busy" @click="approve(c)">Approve</button>
+            <button v-if="c.status === 'draft'" class="btn !py-0.5 text-xs"
+                    :disabled="busy" @click="reject(c)">Reject</button>
+            <button v-if="c.status === 'active'" class="btn !py-0.5 text-xs"
+                    :disabled="busy" @click="deactivate(c)">Deactivate</button>
+            <router-link class="btn !py-0.5 text-xs" :to="`/admin/campaigns/${c.slug}`">Manage</router-link>
+            <button class="btn-danger !py-0.5 text-xs" :disabled="busy" @click="removeCampaign(c)">Delete</button>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- =========================== Activity ============================ -->
-    <div v-if="tab === 'activity'">
-      <div class="flex flex-wrap gap-2 mb-3">
-        <select v-model="logAction" class="input !w-48">
-          <option value="">All actions</option>
-          <option v-for="a in logs.actions" :key="a" :value="a">{{ a }}</option>
-        </select>
-        <input v-model="logUser" class="input !w-56" placeholder="Filter by username…" />
-        <span class="self-center text-xs text-neutral-600 dark:text-neutral-300">
-          {{ logs.total }} entries
-        </span>
+      <!-- ============================= Users ============================= -->
+      <div v-if="tab === 'users'">
+        <input v-model="userFilter" class="input !w-64 mb-3" placeholder="Filter users…" />
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-neutral-200 dark:border-neutral-800">
+                <th class="th">Username</th><th class="th">Registered</th>
+                <th class="th">Last login</th>
+                <th class="th text-right">Submissions</th>
+                <th class="th text-right">Campaigns</th>
+                <th class="th">Site admin</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="u in filteredUsers" :key="u.id"
+                  class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+                <td class="td">
+                  <a :href="`https://meta.wikimedia.org/wiki/User:${u.username.replaceAll(' ', '_')}`"
+                     target="_blank" rel="noopener"
+                     class="inline-flex items-center gap-2 text-link-700 dark:text-link-400 hover:underline">
+                    <UserAvatar :username="u.username" size="sm" />
+                    {{ u.username }}
+                  </a>
+                </td>
+                <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ new Date(u.registered_at).toLocaleDateString() }}</td>
+                <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—' }}</td>
+                <td class="td text-right tabular-nums">{{ u.submission_count }}</td>
+                <td class="td text-right tabular-nums">{{ u.campaigns_created }}</td>
+                <td class="td">
+                  <button class="btn !py-0.5 !px-2 text-xs" :disabled="u.id === auth.user?.id"
+                          @click="toggleAdmin(u)">
+                    {{ u.is_admin ? '✓ admin' : 'make admin' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="card overflow-x-auto">
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-neutral-200 dark:border-neutral-800">
-              <th class="th">When</th><th class="th">Who</th><th class="th">Action</th><th class="th">What</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="l in logs.logs" :key="l.id"
-                class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-              <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ new Date(l.created_at).toLocaleString() }}</td>
-              <td class="td">{{ l.username }}</td>
-              <td class="td">{{ l.action }}</td>
-              <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ l.entity_type }} {{ l.details?.title || l.details?.username || l.details?.slug || l.entity_id || '' }}</td>
-            </tr>
-          </tbody>
-        </table>
+
+      <!-- =========================== Activity ============================ -->
+      <div v-if="tab === 'activity'">
+        <div class="flex flex-wrap gap-2 mb-3">
+          <select v-model="logAction" class="input !w-48">
+            <option value="">All actions</option>
+            <option v-for="a in logs.actions" :key="a" :value="a">{{ a }}</option>
+          </select>
+          <input v-model="logUser" class="input !w-56" placeholder="Filter by username…" />
+          <span class="self-center text-xs text-neutral-600 dark:text-neutral-300">
+            {{ logs.total }} entries
+          </span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-neutral-200 dark:border-neutral-800">
+                <th class="th">When</th><th class="th">Who</th><th class="th">Action</th><th class="th">What</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="l in logs.logs" :key="l.id"
+                  class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+                <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{{ new Date(l.created_at).toLocaleString() }}</td>
+                <td class="td">{{ l.username }}</td>
+                <td class="td">{{ l.action }}</td>
+                <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ l.entity_type }} {{ l.details?.title || l.details?.username || l.details?.slug || l.entity_id || '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button v-if="logs.logs.length < logs.total" class="btn mt-3" @click="loadMoreLogs">
+          Load more ({{ logs.logs.length }} / {{ logs.total }})
+        </button>
       </div>
-      <button v-if="logs.logs.length < logs.total" class="btn mt-3" @click="loadMoreLogs">
-        Load more ({{ logs.logs.length }} / {{ logs.total }})
-      </button>
     </div>
   </div>
 </template>

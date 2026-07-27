@@ -178,6 +178,21 @@
     @apply bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800
            rounded-xl rounded-tl-none;
   }
+  /* Admin screens are visually distinct from the participant-facing app:
+     an amber accent rail down the left plus an "Admin area" chip, so it
+     is never ambiguous that an action here is site-wide. The active tab
+     picks up the same amber inside .admin-shell. */
+  .admin-shell {
+    @apply border-l-4 border-amber-500 dark:border-amber-600 pl-4 sm:pl-5;
+  }
+  .admin-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase
+           tracking-wide bg-amber-100 text-amber-900 border border-amber-300
+           dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800;
+  }
+  .admin-shell .tab-active {
+    @apply text-amber-800 dark:text-amber-300;
+  }
   .th {
     @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400;
   }

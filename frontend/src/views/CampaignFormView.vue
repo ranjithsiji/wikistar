@@ -402,7 +402,7 @@ async function save () {
         project (self-assessment); otherwise a wiki admin must approve.
       </p>
 
-      <div class="tab-group mb-4 w-fit max-w-full overflow-x-auto">
+      <div class="tab-group w-fit max-w-full overflow-x-auto">
         <button v-for="([key, label], i) in sections" :key="key" type="button" class="tab"
                 :class="{ 'tab-active': section === key,
                           'opacity-40 !cursor-default': isWizard && i > maxVisited }"
@@ -419,9 +419,11 @@ async function save () {
         </button>
       </div>
 
-      <form ref="formEl" @submit.prevent="save">
+      <!-- The step tabs sit directly on this panel, so the tab bar and the
+           step content read as one connected box (see .tab-panel). -->
+      <form ref="formEl" class="tab-panel p-4" @submit.prevent="save">
         <!-- ============================ General ========================= -->
-        <div v-show="section === 'general'" class="card p-4 grid gap-4 sm:grid-cols-2">
+        <div v-show="section === 'general'" class="grid gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2">
             <label class="label">Name *</label>
             <cdx-text-input v-model="form.name" required minlength="3" />

@@ -144,11 +144,14 @@ async function deleteArticle (s) {
 </script>
 
 <template>
-  <div>
-    <router-link to="/admin/campaigns"
-                 class="text-sm text-link-700 dark:text-link-400 hover:underline">
-      ← Back to Editathons
-    </router-link>
+  <div class="admin-shell">
+    <div class="flex items-center gap-3 flex-wrap">
+      <router-link to="/admin/campaigns"
+                   class="text-sm text-link-700 dark:text-link-400 hover:underline">
+        ← Back to Editathons
+      </router-link>
+      <span class="admin-chip">Admin area</span>
+    </div>
 
     <AppMessage v-model="error" type="error" class="mt-3" />
 
@@ -177,7 +180,7 @@ async function deleteArticle (s) {
         <button class="btn-danger" :disabled="busy" @click="removeCampaign">Delete</button>
       </div>
 
-      <div class="tab-group mb-5 w-fit max-w-full overflow-x-auto">
+      <div class="tab-group w-fit max-w-full overflow-x-auto">
         <button v-for="[key, label] in PANELS" :key="key" class="tab"
                 :class="{ 'tab-active': panel === key }" @click="selectPanel(key)">
           {{ label }}
@@ -188,104 +191,107 @@ async function deleteArticle (s) {
         </button>
       </div>
 
-      <!-- ============================ Members ============================ -->
-      <div v-if="panel === 'members'">
-        <div class="card overflow-x-auto mb-3">
-          <table class="w-full">
-            <thead>
-              <tr class="border-b border-neutral-200 dark:border-neutral-800">
-                <th class="th">User</th><th class="th">Role</th><th class="th text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="!campaign.members.length">
-                <td class="td text-sm text-neutral-600 dark:text-neutral-300" colspan="3">
-                  No members yet.
-                </td>
-              </tr>
-              <tr v-for="m in campaign.members" :key="m.id"
-                  class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-                <td class="td">
-                  <span class="inline-flex items-center gap-2">
-                    <UserAvatar :username="m.user.username" size="sm" />
-                    {{ m.user.username }}
-                  </span>
-                </td>
-                <td class="td">
-                  <span class="badge bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                    {{ m.role }}
-                  </span>
-                </td>
-                <td class="td text-right">
-                  <button class="btn-danger !py-0.5 !px-2 text-xs" :disabled="busy"
-                          @click="removeMember(m)">remove</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <form class="flex gap-2 items-center flex-wrap" @submit.prevent="addMember">
-          <input v-model="newMember.username" class="input !w-56" placeholder="Wikimedia username" />
-          <select v-model="newMember.role" class="input !w-36">
-            <option value="participant">participant</option>
-            <option value="jury">jury</option>
-            <option value="organizer">organizer</option>
-          </select>
-          <button class="btn-primary" :disabled="busy || !newMember.username.trim()">
-            Add member
-          </button>
-        </form>
-      </div>
+      <div class="tab-panel p-4">
 
-      <!-- =========================== Articles ============================ -->
-      <div v-if="panel === 'articles'">
-        <p v-if="!articles" class="text-sm text-neutral-600 dark:text-neutral-300">Loading…</p>
-        <p v-else-if="!articles.length" class="text-sm text-neutral-600 dark:text-neutral-300">
-          No submissions yet.
-        </p>
-        <div v-else class="card overflow-x-auto">
-          <table class="w-full">
-            <thead>
-              <tr class="border-b border-neutral-200 dark:border-neutral-800">
-                <th class="th">Title</th><th class="th">User</th><th class="th">Kind</th>
-                <th class="th">Status</th><th class="th text-right">Points</th><th class="th">Submitted</th>
-                <th class="th text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="s in articles" :key="s.id"
-                  class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-                <td class="td">
-                  <a :href="s.url" target="_blank" rel="noopener"
-                     class="text-link-700 dark:text-link-400 hover:underline">{{ s.title }}</a>
-                </td>
-                <td class="td">{{ s.user.username }}</td>
-                <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ s.kind }}</td>
-                <td class="td text-xs">
-                  {{ s.status }}
-                  <span v-if="s.points_override != null"
-                        class="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                        title="Points manually overridden">override</span>
-                </td>
-                <td class="td text-right tabular-nums">{{ s.points }}</td>
-                <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">
-                  {{ new Date(s.submitted_at).toLocaleDateString() }}
-                </td>
-                <td class="td text-right whitespace-nowrap space-x-1">
-                  <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
-                          title="Rename the submitted page" @click="renameArticle(s)">Rename</button>
-                  <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
-                          @click="moderateArticle(s, 'accepted')">Accept</button>
-                  <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
-                          @click="moderateArticle(s, 'rejected')">Reject</button>
-                  <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
-                          title="Set or clear a manual points override" @click="overrideArticle(s)">Points</button>
-                  <button class="btn-danger !py-0.5 !px-2 text-xs" :disabled="busy"
-                          @click="deleteArticle(s)">Delete</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <!-- ============================ Members ============================ -->
+        <div v-if="panel === 'members'">
+          <div class="overflow-x-auto mb-3">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-neutral-200 dark:border-neutral-800">
+                  <th class="th">User</th><th class="th">Role</th><th class="th text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!campaign.members.length">
+                  <td class="td text-sm text-neutral-600 dark:text-neutral-300" colspan="3">
+                    No members yet.
+                  </td>
+                </tr>
+                <tr v-for="m in campaign.members" :key="m.id"
+                    class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+                  <td class="td">
+                    <span class="inline-flex items-center gap-2">
+                      <UserAvatar :username="m.user.username" size="sm" />
+                      {{ m.user.username }}
+                    </span>
+                  </td>
+                  <td class="td">
+                    <span class="badge bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                      {{ m.role }}
+                    </span>
+                  </td>
+                  <td class="td text-right">
+                    <button class="btn-danger !py-0.5 !px-2 text-xs" :disabled="busy"
+                            @click="removeMember(m)">remove</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <form class="flex gap-2 items-center flex-wrap" @submit.prevent="addMember">
+            <input v-model="newMember.username" class="input !w-56" placeholder="Wikimedia username" />
+            <select v-model="newMember.role" class="input !w-36">
+              <option value="participant">participant</option>
+              <option value="jury">jury</option>
+              <option value="organizer">organizer</option>
+            </select>
+            <button class="btn-primary" :disabled="busy || !newMember.username.trim()">
+              Add member
+            </button>
+          </form>
+        </div>
+
+        <!-- =========================== Articles ============================ -->
+        <div v-if="panel === 'articles'">
+          <p v-if="!articles" class="text-sm text-neutral-600 dark:text-neutral-300">Loading…</p>
+          <p v-else-if="!articles.length" class="text-sm text-neutral-600 dark:text-neutral-300">
+            No submissions yet.
+          </p>
+          <div v-else class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-neutral-200 dark:border-neutral-800">
+                  <th class="th">Title</th><th class="th">User</th><th class="th">Kind</th>
+                  <th class="th">Status</th><th class="th text-right">Points</th><th class="th">Submitted</th>
+                  <th class="th text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="s in articles" :key="s.id"
+                    class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+                  <td class="td">
+                    <a :href="s.url" target="_blank" rel="noopener"
+                       class="text-link-700 dark:text-link-400 hover:underline">{{ s.title }}</a>
+                  </td>
+                  <td class="td">{{ s.user.username }}</td>
+                  <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ s.kind }}</td>
+                  <td class="td text-xs">
+                    {{ s.status }}
+                    <span v-if="s.points_override != null"
+                          class="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          title="Points manually overridden">override</span>
+                  </td>
+                  <td class="td text-right tabular-nums">{{ s.points }}</td>
+                  <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">
+                    {{ new Date(s.submitted_at).toLocaleDateString() }}
+                  </td>
+                  <td class="td text-right whitespace-nowrap space-x-1">
+                    <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
+                            title="Rename the submitted page" @click="renameArticle(s)">Rename</button>
+                    <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
+                            @click="moderateArticle(s, 'accepted')">Accept</button>
+                    <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
+                            @click="moderateArticle(s, 'rejected')">Reject</button>
+                    <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
+                            title="Set or clear a manual points override" @click="overrideArticle(s)">Points</button>
+                    <button class="btn-danger !py-0.5 !px-2 text-xs" :disabled="busy"
+                            @click="deleteArticle(s)">Delete</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </template>
