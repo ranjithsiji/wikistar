@@ -63,8 +63,11 @@ class SuggestedItemOut(BaseModel):
 
 class CampaignIn(BaseModel):
     name: str = Field(min_length=3, max_length=255)
-    slug: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9_-]*$",
-                             max_length=80)
+    # Mandatory and strictly [a-z0-9-]: the slug is the campaign's public
+    # URL, so it is the organizer's deliberate choice rather than
+    # something derived from the name. Underscores are not accepted.
+    slug: str = Field(min_length=1, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      max_length=80)
     description: str | None = None
     language: str = "en"
     wiki_domain: str | None = None  # derived from language when omitted

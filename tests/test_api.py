@@ -4,6 +4,7 @@ Auth uses the real signed session cookie (set via the test client's
 session_transaction); MediaWiki lookups are monkeypatched.
 """
 from datetime import date, timedelta
+from itertools import count
 
 import pytest
 
@@ -101,9 +102,15 @@ def logout():
         s.pop("user_id", None)
 
 
+_slug_seq = count(1)
+
+
 def make_campaign_payload(client, mode="self", **extra):
     meta = client.get("/api/meta").json
+    # The slug is mandatory and must be unique; tests that don't care get
+    # a generated one, and any test may still pass slug=... explicitly.
     payload = {
+        "slug": f"test-campaign-{next(_slug_seq)}",
         "name": "Kerala Culture Contest",
         "description": "Improve Kerala culture coverage",
         "language": "ml",
@@ -348,6 +355,49 @@ def test_settings_validation_and_admin(client):
     assert logs["total"] > 0
     users = client.get("/api/admin/users").json
     assert any(u["username"] == "Carol" for u in users)
+
+
+def test_slug_is_mandatory_unique_and_alphanumeric(client):
+    """The slug is the campaign's public URL, so it is required, limited
+    to [a-z0-9-], and never silently renamed on a collision."""
+    login("Alice")
+
+    # missing / empty -> 422 from the schema
+    payload = make_campaign_payload(client, name="No Slug Contest")
+    del payload["slug"]
+    assert client.post("/api/campaigns", json=payload).status_code == 422
+    payload["slug"] = ""
+    assert client.post("/api/campaigns", json=payload).status_code == 422
+
+    # anything outside [a-z0-9-] is refused, including underscores,
+    # spaces, capitals and stray/doubled hyphens
+    for bad in ["Kerala Culture", "kerala_culture", "Kerala-Culture",
+                "-kerala", "kerala-", "kerala--culture", "kerala/culture",
+                "കേരളം", "a" * 81]:
+        payload["slug"] = bad
+        r = client.post("/api/campaigns", json=payload)
+        assert r.status_code == 422, (bad, r.status_code)
+
+    payload["slug"] = "kerala-culture-2026"
+    r = client.post("/api/campaigns", json=payload)
+    assert r.status_code == 201, r.text
+    assert r.json["slug"] == "kerala-culture-2026"
+
+    # a duplicate is a conflict, not a "-2" rename
+    dup = make_campaign_payload(client, name="Another Contest",
+                                slug="kerala-culture-2026")
+    r = client.post("/api/campaigns", json=dup)
+    assert r.status_code == 409 and "already taken" in r.json["detail"]
+
+    # renaming onto a taken slug is refused too; keeping your own is fine
+    other = make_campaign_payload(client, name="Third Contest",
+                                  slug="third-contest")
+    assert client.post("/api/campaigns", json=other).status_code == 201
+    other["slug"] = "kerala-culture-2026"
+    r = client.put("/api/campaigns/third-contest", json=other)
+    assert r.status_code == 409
+    other["slug"] = "third-contest"
+    assert client.put("/api/campaigns/third-contest", json=other).status_code == 200
 
 
 def test_personal_dashboard(client):

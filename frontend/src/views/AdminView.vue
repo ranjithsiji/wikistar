@@ -1,10 +1,16 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import api, { errorMessage } from '../api'
 import AppMessage from '../components/AppMessage.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import { useAuthStore } from '../store'
 
+const props = defineProps({
+  tab: { type: String, default: '' }
+})
+const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const error = ref('')
 
@@ -14,24 +20,63 @@ const TABS = [
   ['users', 'Users'],
   ['activity', 'Activity log'],
 ]
-const tab = ref('dashboard')
+// The active tab lives in the URL (/admin/<tab>), like the campaign
+// tabs, so admin views are linkable and survive a refresh. The bare
+// /admin path means "dashboard".
+const tab = ref(props.tab || 'dashboard')
+
+function selectTab (key) {
+  tab.value = key
+  router.push({ path: `/admin/${key}`, query: tabQuery(key) })
+}
+
+// Each tab keeps its own filter state in the query string, so a filtered
+// view (pending drafts, one user's audit trail) can be linked directly.
+function tabQuery (key) {
+  if (key === 'campaigns') {
+    return statusFilter.value === 'all' ? {} : { status: statusFilter.value }
+  }
+  if (key === 'users') {
+    return userFilter.value.trim() ? { q: userFilter.value.trim() } : {}
+  }
+  if (key === 'activity') {
+    return {
+      ...(logAction.value ? { action: logAction.value } : {}),
+      ...(logUser.value.trim() ? { username: logUser.value.trim() } : {})
+    }
+  }
+  return {}
+}
+
+// Replace (not push) so typing in a filter box doesn't fill up history.
+function syncQuery () {
+  router.replace({ path: `/admin/${tab.value}`, query: tabQuery(tab.value) })
+}
+
+// Browser back/forward, or a direct link to a specific tab.
+watch(() => props.tab, (key) => {
+  const next = key || 'dashboard'
+  if (next !== tab.value) tab.value = next
+})
 
 // ---- dashboard -------------------------------------------------------------
 const stats = ref(null)
 
 // ---- editathons ------------------------------------------------------------
+// Per-campaign management (members, submissions) is a full page of its
+// own at /admin/campaigns/<slug> — this list stays a scannable index.
 const campaigns = ref([])
-const statusFilter = ref('all')
+const statusFilter = ref(route.query.status || 'all')
 const shownCampaigns = computed(() =>
   statusFilter.value === 'all'
     ? campaigns.value
     : campaigns.value.filter(c => c.status === statusFilter.value))
-const expanded = ref(null)          // slug of the expanded campaign row
-const detail = ref(null)            // campaign detail (members) of expanded row
-const articles = ref(null)          // submissions of expanded row
-const panel = ref('members')        // 'members' | 'articles'
-const newMember = ref({ username: '', role: 'jury' })
 const busy = ref(false)
+
+function setStatusFilter (f) {
+  statusFilter.value = f
+  syncQuery()
+}
 
 const pendingCampaigns = computed(() =>
   campaigns.value.filter(c => c.status === 'draft'))
@@ -46,7 +91,7 @@ const STATUS_BADGE = {
 
 // ---- users -----------------------------------------------------------------
 const users = ref([])
-const userFilter = ref('')
+const userFilter = ref(route.query.q || '')
 const filteredUsers = computed(() => {
   const q = userFilter.value.trim().toLowerCase()
   return q ? users.value.filter(u => u.username.toLowerCase().includes(q)) : users.value
@@ -54,8 +99,8 @@ const filteredUsers = computed(() => {
 
 // ---- activity --------------------------------------------------------------
 const logs = ref({ total: 0, logs: [], actions: [] })
-const logAction = ref('')
-const logUser = ref('')
+const logAction = ref(route.query.action || '')
+const logUser = ref(route.query.username || '')
 let logTimer = null
 
 const logParams = () => ({
@@ -69,10 +114,17 @@ async function reloadLogs () {
     logs.value = (await api.adminLogs(logParams())).data
   } catch (e) { error.value = errorMessage(e) }
 }
-watch(logAction, reloadLogs)
+watch(logAction, () => { syncQuery(); reloadLogs() })
 watch(logUser, () => {
   clearTimeout(logTimer)
-  logTimer = setTimeout(reloadLogs, 300)
+  logTimer = setTimeout(() => { syncQuery(); reloadLogs() }, 300)
+})
+// Typing in the user filter is debounced the same way, so the URL only
+// picks up the settled value rather than every keystroke.
+let userFilterTimer = null
+watch(userFilter, () => {
+  clearTimeout(userFilterTimer)
+  userFilterTimer = setTimeout(syncQuery, 300)
 })
 
 async function load () {
@@ -114,39 +166,6 @@ async function run (fn) {
   try { await fn() } catch (e) { error.value = errorMessage(e) } finally { busy.value = false }
 }
 
-async function toggleExpand (c) {
-  if (expanded.value === c.slug) { expanded.value = null; return }
-  expanded.value = c.slug
-  panel.value = 'members'
-  detail.value = null
-  articles.value = null
-  await run(async () => { detail.value = (await api.getCampaign(c.slug)).data })
-}
-
-async function showArticles () {
-  panel.value = 'articles'
-  if (articles.value) return
-  await run(async () => { articles.value = (await api.listSubmissions(expanded.value)).data })
-}
-
-async function addMember () {
-  const username = newMember.value.username.trim()
-  if (!username) return
-  await run(async () => {
-    detail.value = (await api.addMember(expanded.value, {
-      username, role: newMember.value.role
-    })).data
-    newMember.value.username = ''
-  })
-}
-
-async function removeMember (m) {
-  if (!confirm(`Remove ${m.user.username} (${m.role}) from this campaign?`)) return
-  await run(async () => {
-    detail.value = (await api.removeMember(expanded.value, m.id)).data
-  })
-}
-
 async function approve (c) {
   await run(async () => { await api.approveCampaign(c.slug); await refreshCampaigns() })
 }
@@ -159,7 +178,6 @@ async function removeCampaign (c) {
   if (!confirm(`Delete campaign "${c.name}" with all its submissions? This cannot be undone.`)) return
   await run(async () => {
     await api.deleteCampaign(c.slug)
-    if (expanded.value === c.slug) expanded.value = null
     await refreshCampaigns()
   })
 }
@@ -172,42 +190,6 @@ async function refreshCampaigns () {
   const { data } = await api.adminStats()
   stats.value = data
 }
-
-// ---- submitted articles: admin repairs -------------------------------------
-async function reloadArticles () {
-  articles.value = (await api.listSubmissions(expanded.value)).data
-}
-async function renameArticle (s) {
-  const title = prompt('New title for this submission:', s.title)
-  if (title === null || !title.trim() || title.trim() === s.title) return
-  await run(async () => {
-    await api.adminEditSubmission(s.id, { title: title.trim() })
-    await reloadArticles()
-  })
-}
-async function moderateArticle (s, status) {
-  await run(async () => {
-    await api.moderateSubmission(s.id, { status })
-    await reloadArticles()
-  })
-}
-async function overrideArticle (s) {
-  const v = prompt('Final points (empty to clear the override):',
-                   s.points_override ?? '')
-  if (v === null) return
-  const payload = v === '' ? { clear_override: true } : { points_override: Number(v) }
-  await run(async () => {
-    await api.moderateSubmission(s.id, payload)
-    await reloadArticles()
-  })
-}
-async function deleteArticle (s) {
-  if (!confirm(`Delete the submission "${s.title}" by ${s.user.username}?`)) return
-  await run(async () => {
-    await api.deleteSubmission(s.id)
-    await reloadArticles()
-  })
-}
 </script>
 
 <template>
@@ -217,7 +199,7 @@ async function deleteArticle (s) {
 
     <div class="tab-group mb-5 w-fit max-w-full overflow-x-auto">
       <button v-for="[key, label] in TABS" :key="key" class="tab"
-              :class="{ 'tab-active': tab === key }" @click="tab = key">
+              :class="{ 'tab-active': tab === key }" @click="selectTab(key)">
         {{ label }}
         <span v-if="key === 'dashboard' && pendingCampaigns.length"
               class="badge bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 ml-1">
@@ -273,15 +255,16 @@ async function deleteArticle (s) {
       <div class="flex gap-1 mb-1">
         <button v-for="f in ['all', 'draft', 'active', 'finished', 'archived', 'rejected']"
                 :key="f" class="tab !py-1" :class="{ 'tab-active': statusFilter === f }"
-                @click="statusFilter = f">{{ f }}</button>
+                @click="setStatusFilter(f)">{{ f }}</button>
       </div>
+      <p v-if="!shownCampaigns.length" class="text-sm text-neutral-600 dark:text-neutral-300">
+        No editathons with this status.
+      </p>
       <div v-for="c in shownCampaigns" :key="c.id" class="card">
         <div class="p-3 flex items-center gap-3 flex-wrap">
-          <button class="btn !px-2 !py-0.5 text-xs" @click="toggleExpand(c)">
-            {{ expanded === c.slug ? '▾' : '▸' }}
-          </button>
-          <router-link :to="`/campaigns/${c.slug}`"
-                       class="font-medium text-link-700 dark:text-link-400 hover:underline flex-1 min-w-40 truncate">
+          <router-link :to="`/admin/campaigns/${c.slug}`"
+                       class="font-medium text-link-700 dark:text-link-400 hover:underline flex-1 min-w-40 truncate"
+                       title="Manage members and submissions">
             {{ c.name }}
           </router-link>
           <span class="badge" :class="STATUS_BADGE[c.status]">{{ c.status }}</span>
@@ -297,103 +280,8 @@ async function deleteArticle (s) {
                   :disabled="busy" @click="reject(c)">Reject</button>
           <button v-if="c.status === 'active'" class="btn !py-0.5 text-xs"
                   :disabled="busy" @click="deactivate(c)">Deactivate</button>
+          <router-link class="btn !py-0.5 text-xs" :to="`/admin/campaigns/${c.slug}`">Manage</router-link>
           <button class="btn-danger !py-0.5 text-xs" :disabled="busy" @click="removeCampaign(c)">Delete</button>
-        </div>
-
-        <div v-if="expanded === c.slug" class="border-t border-neutral-200 dark:border-neutral-800 p-4">
-          <div class="flex gap-1 mb-3">
-            <button class="tab !py-1" :class="{ 'tab-active': panel === 'members' }"
-                    @click="panel = 'members'">Members</button>
-            <button class="tab !py-1" :class="{ 'tab-active': panel === 'articles' }"
-                    @click="showArticles">Articles</button>
-          </div>
-
-          <!-- members panel -->
-          <div v-if="panel === 'members'">
-            <p v-if="!detail" class="text-sm text-neutral-600 dark:text-neutral-300">Loading…</p>
-            <template v-else>
-              <table class="w-full max-w-2xl mb-3">
-                <tbody>
-                  <tr v-for="m in detail.members" :key="m.id"
-                      class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-                    <td class="td">
-                      <span class="inline-flex items-center gap-2">
-                        <UserAvatar :username="m.user.username" size="sm" />
-                        {{ m.user.username }}
-                      </span>
-                    </td>
-                    <td class="td"><span class="badge bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{{ m.role }}</span></td>
-                    <td class="td text-right">
-                      <button class="btn-danger !py-0.5 !px-2 text-xs" :disabled="busy"
-                              @click="removeMember(m)">remove</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <form class="flex gap-2 items-center flex-wrap" @submit.prevent="addMember">
-                <input v-model="newMember.username" class="input !w-56"
-                       placeholder="Wikimedia username" />
-                <select v-model="newMember.role" class="input !w-36">
-                  <option value="participant">participant</option>
-                  <option value="jury">jury</option>
-                  <option value="organizer">organizer</option>
-                </select>
-                <button class="btn-primary" :disabled="busy || !newMember.username.trim()">
-                  Add member
-                </button>
-              </form>
-            </template>
-          </div>
-
-          <!-- articles panel -->
-          <div v-if="panel === 'articles'">
-            <p v-if="!articles" class="text-sm text-neutral-600 dark:text-neutral-300">Loading…</p>
-            <p v-else-if="!articles.length" class="text-sm text-neutral-600 dark:text-neutral-300">No submissions yet.</p>
-            <div v-else class="overflow-x-auto">
-              <table class="w-full">
-                <thead>
-                  <tr class="border-b border-neutral-200 dark:border-neutral-800">
-                    <th class="th">Title</th><th class="th">User</th><th class="th">Kind</th>
-                    <th class="th">Status</th><th class="th text-right">Points</th><th class="th">Submitted</th>
-                    <th class="th text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="s in articles" :key="s.id"
-                      class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
-                    <td class="td">
-                      <a :href="s.url" target="_blank" rel="noopener"
-                         class="text-link-700 dark:text-link-400 hover:underline">{{ s.title }}</a>
-                    </td>
-                    <td class="td">{{ s.user.username }}</td>
-                    <td class="td text-xs text-neutral-600 dark:text-neutral-300">{{ s.kind }}</td>
-                    <td class="td text-xs">
-                      {{ s.status }}
-                      <span v-if="s.points_override != null"
-                            class="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                            title="Points manually overridden">override</span>
-                    </td>
-                    <td class="td text-right tabular-nums">{{ s.points }}</td>
-                    <td class="td text-xs text-neutral-600 dark:text-neutral-300 whitespace-nowrap">
-                      {{ new Date(s.submitted_at).toLocaleDateString() }}
-                    </td>
-                    <td class="td text-right whitespace-nowrap space-x-1">
-                      <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
-                              title="Rename the submitted page" @click="renameArticle(s)">Rename</button>
-                      <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
-                              @click="moderateArticle(s, 'accepted')">Accept</button>
-                      <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
-                              @click="moderateArticle(s, 'rejected')">Reject</button>
-                      <button class="btn !py-0.5 !px-2 text-xs" :disabled="busy"
-                              title="Set or clear a manual points override" @click="overrideArticle(s)">Points</button>
-                      <button class="btn-danger !py-0.5 !px-2 text-xs" :disabled="busy"
-                              @click="deleteArticle(s)">Delete</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       </div>
     </div>

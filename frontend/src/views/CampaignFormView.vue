@@ -46,6 +46,30 @@ const suggestedArticlesText = ref('')
 // section (empty heading = the default group).
 const itemSections = ref([{ heading: '', text: '' }])
 
+// The slug is the campaign's public URL and is mandatory. It is
+// suggested from the name while the organizer hasn't typed one, but
+// stays their choice — the server enforces the same [a-z0-9-] rule and
+// rejects duplicates rather than silently renaming.
+const slugTouched = ref(!!props.slug)
+function slugify (text) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+watch(() => form.name, (name) => {
+  if (!slugTouched.value) form.slug = slugify(name).slice(0, 80)
+})
+watch(() => form.slug, (v) => {
+  // Typing in the field (rather than the auto-fill above) claims it.
+  if (v !== slugify(form.name).slice(0, 80)) slugTouched.value = true
+})
+const slugError = computed(() => {
+  const slug = form.slug.trim()
+  if (!slug) return 'A URL slug is required.'
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
+    return 'Use lowercase letters, numbers and single hyphens only (e.g. kerala-culture-month-2026).'
+  }
+  return ''
+})
+
 const juryWiki = computed(() =>
   form.wiki_domain || `${form.language || 'en'}.wikipedia.org`)
 
@@ -199,7 +223,7 @@ function removeSet (i) {
 function buildPayload () {
   const payload = {
     ...form,
-    slug: form.slug || null,
+    slug: form.slug.trim(),
     wiki_domain: form.wiki_domain || null,
     jury_usernames: [...juryUsers.value],
     coordinator_usernames: [...coordinatorUsers.value],
@@ -247,6 +271,11 @@ function validateVisible () {
 
 async function nextStep () {
   if (!validateVisible()) return
+  if (slugError.value) {
+    section.value = 'general'
+    error.value = slugError.value
+    return
+  }
   saving.value = true
   error.value = ''
   notice.value = ''
@@ -282,6 +311,11 @@ const finishLabel = computed(() => {
 // Edit mode: single save button, no wizard.
 async function save () {
   if (isWizard.value) return nextStep()
+  if (slugError.value) {
+    section.value = 'general'
+    error.value = slugError.value
+    return
+  }
   saving.value = true
   error.value = ''
   try {
@@ -393,10 +427,14 @@ async function save () {
             <cdx-text-input v-model="form.name" required minlength="3" />
           </div>
           <div>
-            <label class="label">URL slug</label>
-            <cdx-text-input v-model="form.slug" pattern="[a-z0-9][a-z0-9_-]*"
-                            placeholder="auto-generated from name" />
-            <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+            <label class="label">URL slug *</label>
+            <cdx-text-input v-model="form.slug" required maxlength="80"
+                            pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                            placeholder="kerala-culture-month-2026" />
+            <p v-if="slugError" class="text-xs text-red-700 dark:text-red-400 mt-1">
+              {{ slugError }}
+            </p>
+            <p v-else class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
               wikistar.toolforge.org/campaigns/{{ form.slug || '…' }}
             </p>
           </div>

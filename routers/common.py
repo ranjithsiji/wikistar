@@ -1,5 +1,4 @@
 """Helpers shared by the routers: lookups, serializers, audit logging."""
-import re
 
 from sqlalchemy.orm import Session, selectinload
 
@@ -34,23 +33,6 @@ def audit(db: Session, user: User | None, action: str,
     db.add(AuditLog(user_id=user.id if user else None, action=action,
                     entity_type=entity_type, entity_id=entity_id,
                     details=details))
-
-
-def slugify(text: str) -> str:
-    slug = re.sub(r"[^a-z0-9_-]+", "-", text.lower()).strip("-")
-    return slug or "campaign"
-
-
-def unique_slug(db: Session, base: str, exclude_id: int | None = None) -> str:
-    slug, suffix = base, 1
-    while True:
-        q = db.query(Campaign.id).filter_by(slug=slug)
-        if exclude_id is not None:
-            q = q.filter(Campaign.id != exclude_id)
-        if q.first() is None:
-            return slug
-        suffix += 1
-        slug = f"{base}-{suffix}"
 
 
 def get_campaign_or_404(db: Session, slug: str) -> Campaign:

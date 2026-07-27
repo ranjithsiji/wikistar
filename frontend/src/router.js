@@ -13,7 +13,17 @@ const routes = [
   },
   { path: '/campaigns/:slug/judge', name: 'campaign-judge', component: () => import('./views/JudgeView.vue'), props: true },
   { path: '/campaigns/:slug/edit', name: 'campaign-edit', component: () => import('./views/CampaignFormView.vue'), props: true },
-  { path: '/admin', name: 'admin', component: () => import('./views/AdminView.vue') },
+  // Admin tabs get their own URLs so they are linkable and survive a
+  // refresh. The per-campaign management screen is a full page rather
+  // than an inline expander, with its own panel in the path.
+  {
+    path: '/admin/campaigns/:slug/:panel(members|articles)?',
+    name: 'admin-campaign', component: () => import('./views/AdminCampaignView.vue'), props: true
+  },
+  {
+    path: '/admin/:tab(dashboard|campaigns|users|activity)?',
+    name: 'admin', component: () => import('./views/AdminView.vue'), props: true
+  },
   { path: '/dashboard', name: 'dashboard', component: () => import('./views/DashboardView.vue') },
   { path: '/preferences', name: 'preferences', component: () => import('./views/PreferencesView.vue') },
   { path: '/about', name: 'about', component: () => import('./views/AboutView.vue') }

@@ -47,9 +47,7 @@ from routers.common import (
     get_campaign_or_404,
     get_or_create_user,
     load_submissions,
-    slugify,
     suggested_titles,
-    unique_slug,
 )
 from domain.schemas import CampaignIn, CampaignStats, MemberAddIn
 from domain.scoring import compute_breakdown, default_self_assessment_rules
@@ -209,8 +207,12 @@ def create_campaign():
     db, user = get_db(), require_user()
     payload = parse(CampaignIn)
     overrides = _validated_settings(payload)
-    slug = unique_slug(db, payload.slug or slugify(payload.name))
-    campaign = Campaign(slug=slug, status=CampaignStatus.draft,
+    # The slug is chosen by the organizer (schema-validated to [a-z0-9-]),
+    # so a collision is reported rather than silently renamed to "-2":
+    # they asked for this exact public URL.
+    if db.query(Campaign.id).filter_by(slug=payload.slug).first():
+        raise HTTPException(409, f"The URL slug {payload.slug!r} is already taken")
+    campaign = Campaign(slug=payload.slug, status=CampaignStatus.draft,
                         created_by=user.id)
     _apply_scalar_fields(campaign, payload)
     # Fountain model: creators holding the required on-wiki admin right
@@ -229,7 +231,7 @@ def create_campaign():
     _replace_suggested(campaign, payload)
     _replace_rules(db, campaign, payload)
     audit(db, user, "create", "campaign", campaign.id,
-          {"slug": slug, "name": campaign.name,
+          {"slug": campaign.slug, "name": campaign.name,
            "auto_approved": auto_ok and auto_reason or False})
     db.commit()
     db.refresh(campaign)
@@ -261,8 +263,13 @@ def update_campaign(slug: str):
     require_organizer(db, campaign, user)
     overrides = _validated_settings(payload)
 
-    if payload.slug and payload.slug != campaign.slug:
-        campaign.slug = unique_slug(db, payload.slug, exclude_id=campaign.id)
+    if payload.slug != campaign.slug:
+        taken = db.query(Campaign.id).filter(
+            Campaign.slug == payload.slug, Campaign.id != campaign.id).first()
+        if taken:
+            raise HTTPException(
+                409, f"The URL slug {payload.slug!r} is already taken")
+        campaign.slug = payload.slug
     if payload.status and payload.status != campaign.status:
         transition = (campaign.status, payload.status)
         if not user.is_admin and transition not in ORGANIZER_TRANSITIONS:
