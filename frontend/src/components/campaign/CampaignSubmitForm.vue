@@ -35,6 +35,27 @@ const vTitle = computed({ get: () => props.newTitle, set: v => emit('update:newT
 // confirmed miss — the server is still the real, authoritative check.
 const titleExists = ref(null)
 watch(() => [props.newTitle, props.newKind, props.submitWiki], () => { titleExists.value = null })
+
+// Mirrors the server-side title check (routers/submissions.py) so pasting
+// a SPARQL query or a sentence is caught inline instead of coming back as
+// a 400. The server stays the authority; this is only the fast feedback.
+const titleError = computed(() => {
+  const title = (props.newTitle || '').trim()
+  if (isBulkKind.value || !title) return ''
+  if (props.newKind === 'wikidata_item') {
+    return /^[Qq][1-9]\d*$/.test(title)
+      ? '' : 'Enter a Wikidata item ID like Q42.'
+  }
+  if (props.newKind === 'commons_file') {
+    return /^(File|Image):.+\.[A-Za-z0-9]{2,5}$/.test(title)
+      ? '' : 'Enter a Commons file name like File:Example.jpg.'
+  }
+  if (title.length > 255) return 'That is too long to be a page title.'
+  if (/[#<>[\]|{}_]/.test(title)) {
+    return 'A page title cannot contain # < > [ ] | { } _ — paste the title exactly as it appears on the wiki.'
+  }
+  return ''
+})
 </script>
 
 <template>
@@ -78,6 +99,9 @@ watch(() => [props.newTitle, props.newKind, props.submitWiki], () => { titleExis
                            :wiki="submitWiki" :kind="newKind"
                            :placeholder="{ article: 'Start typing or paste the article title…', wikidata_item: 'Q… or search by label', commons_file: 'File:Example.jpg' }[newKind]"
                            @update:exists="titleExists = $event" />
+        <p v-if="titleError" class="mt-1 text-xs text-red-700 dark:text-red-400">
+          {{ titleError }}
+        </p>
       </div>
       <p v-else class="flex-1 min-w-48 text-xs text-neutral-600 dark:text-neutral-300 self-center">
         {{ newKind === 'wikidata_edits'
@@ -85,8 +109,8 @@ watch(() => [props.newTitle, props.newKind, props.submitWiki], () => { titleExis
            : 'Counts the files uploaded and depicts statements added during the campaign.' }}
       </p>
       <button class="btn-primary" type="submit"
-              :disabled="!isBulkKind && titleExists === false"
-              :title="!isBulkKind && titleExists === false ? 'This title was not found on the selected wiki' : ''">
+              :disabled="!isBulkKind && (titleExists === false || !!titleError)"
+              :title="titleError || (!isBulkKind && titleExists === false ? 'This title was not found on the selected wiki' : '')">
         Submit your contribution
       </button>
     </form>

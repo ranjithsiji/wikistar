@@ -5,6 +5,7 @@ campaign as participant (same flow in jury and self modes). Page
 metadata is fetched from the MediaWiki API at submission time and can
 be refreshed; a failed fetch never blocks the submission.
 """
+import re
 from datetime import date, datetime, timezone
 
 from flask import Blueprint
@@ -56,6 +57,43 @@ BULK_KINDS = {
     SubmissionKind.commons_edits: (COMMONS_DOMAIN, "Commons uploads",
                                    RuleApplies.commons_file),
 }
+
+
+# MediaWiki refuses these outright in page titles; a submission carrying
+# one is never a real page, so it is rejected before any API call rather
+# than relying on the best-effort metadata fetch to notice.
+_BAD_TITLE_CHARS = set("#<>[]|{}_")
+_QID_RE = re.compile(r"^Q[1-9]\d*$")
+_FILE_RE = re.compile(r"^(?:File|Image):.+\.[A-Za-z0-9]{2,5}$")
+
+
+def _validate_title(kind: SubmissionKind, title: str) -> str:
+    """Reject anything that cannot name a real page before it is stored.
+
+    Without this a participant can paste arbitrary text (a SPARQL query,
+    a sentence) and have it accepted: MediaWiki reports such a title as
+    "invalid" rather than "missing", and a metadata fetch that fails for
+    any reason leaves the eligibility checks with nothing to test.
+    """
+    if kind == SubmissionKind.wikidata_item:
+        qid = title.upper()
+        if not _QID_RE.match(qid):
+            raise HTTPException(
+                400, "A Wikidata submission must be an item ID like Q42")
+        return qid
+    if kind == SubmissionKind.commons_file:
+        if not _FILE_RE.match(title):
+            raise HTTPException(
+                400, "A Commons submission must be a file name like "
+                     "File:Example.jpg")
+    if len(title) > 255:
+        raise HTTPException(400, "The title is too long to be a page name")
+    if _BAD_TITLE_CHARS & set(title):
+        raise HTTPException(
+            400, "The title contains characters that cannot appear in a "
+                 "page name — enter the page title exactly as it appears "
+                 "on the wiki")
+    return title
 
 
 def _has_bulk_rules(campaign: Campaign, kind: SubmissionKind) -> bool:
@@ -316,6 +354,8 @@ def create_submission(slug: str):
         wiki_domain = f"{payload.language}.wikipedia.org"
     else:
         wiki_domain = campaign.wiki_domain
+    if payload.kind not in BULK_KINDS:
+        title = _validate_title(payload.kind, title)
     existing = db.query(Submission).filter_by(
         campaign_id=campaign.id, user_id=participant.id, title=title,
         wiki_domain=wiki_domain).first()

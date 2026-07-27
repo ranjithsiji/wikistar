@@ -15,6 +15,10 @@ from domain.models import User
 
 TODAY = date.today()
 
+# Captured before the autouse fixture stubs it, for the few tests that
+# need to exercise the real implementation against a mock transport.
+_real_fetch_page_metadata = mediawiki.fetch_page_metadata
+
 _client = None
 
 
@@ -937,6 +941,69 @@ def test_submission_rejected_when_page_does_not_exist_on_the_wiki(client):
 
     subs = client.get(f"/api/campaigns/{slug}/submissions").json
     assert not any(s["title"] == "Nonexistent" for s in subs)
+
+
+def test_junk_titles_rejected_before_any_wiki_lookup(client, monkeypatch):
+    """A SPARQL query (or any other free text) pasted into the title box
+    must be refused outright. MediaWiki reports such a title as "invalid"
+    rather than "missing", so before the format check it sailed past the
+    "does not exist" guard and landed in the queue as needs-review."""
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Junk Title Contest",
+        settings={"allow_wikidata_items": True,
+                  "allow_commons_files": True})).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # The wiki must never even be asked about a malformed title.
+    def boom(*a, **kw):
+        raise AssertionError("wiki lookup attempted for an invalid title")
+    monkeypatch.setattr(mediawiki, "fetch_page_metadata", boom)
+
+    sparql = ('SELECT ?item ?len WHERE { { ?item wdt:P31 wd:Q61443650. } '
+              'UNION { ?item wdt:P31 wd:Q61443690. } }')
+    login("Dana")
+    for kind in ("wikidata_item", "commons_file", "article"):
+        r = client.post(f"/api/campaigns/{slug}/submissions",
+                        json={"title": sparql, "kind": kind})
+        assert r.status_code == 400, (kind, r.text)
+
+    # Wikidata kind must be a QID; Commons kind must be a file name.
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Some Article Name", "kind": "wikidata_item"})
+    assert r.status_code == 400 and "Q42" in r.json["detail"]
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Example.jpg", "kind": "commons_file"})
+    assert r.status_code == 400 and "File:" in r.json["detail"]
+
+    assert client.get(f"/api/campaigns/{slug}/submissions").json == []
+
+
+def test_invalid_title_reported_as_nonexistent_not_crash(monkeypatch):
+    """MediaWiki flags an unparseable title with "invalid" and no pageid.
+    fetch_page_metadata must return exists=False instead of raising, so a
+    caller's best-effort try/except can't turn it into "unverified but
+    acceptable"."""
+    import httpx
+
+    def handler(request):
+        return httpx.Response(200, json={"batchcomplete": True, "query": {
+            "pages": [{"title": "x", "invalid": True,
+                       "invalidreason": "contains invalid characters"}]}})
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(mediawiki, "_client",
+                        lambda: httpx.Client(transport=transport))
+    # the autouse fixture stubs this out; here we exercise the real one
+    monkeypatch.setattr(mediawiki, "fetch_page_metadata",
+                        _real_fetch_page_metadata)
+
+    meta = mediawiki.fetch_page_metadata(
+        "www.wikidata.org", "SELECT ?x WHERE { }", "Dana",
+        TODAY - timedelta(days=1), TODAY)
+    assert meta.exists is False and meta.page_id is None
 
 
 def test_wikidata_bulk_submission(client, monkeypatch):

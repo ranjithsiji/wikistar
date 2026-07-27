@@ -561,7 +561,11 @@ def fetch_page_metadata(
             "titles": title,
         }).json()
         page = info["query"]["pages"][0]
-        if page.get("missing"):
+        # "invalid" (title MediaWiki refuses to parse at all — stray
+        # braces, over-long, bad namespace) carries no pageid, so it must
+        # be handled alongside "missing" rather than falling through into
+        # the KeyError that would hide it behind a best-effort catch.
+        if page.get("missing") or page.get("invalid"):
             return meta
         meta.exists = True
         meta.page_id = page["pageid"]
