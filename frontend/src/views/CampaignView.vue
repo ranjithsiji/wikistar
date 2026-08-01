@@ -83,8 +83,25 @@ const participantNames = computed(() =>
     .filter(m => m.role === 'participant')
     .map(m => m.user.username))])
 
+// Submissions still needing attention from whoever runs the campaign.
+// In jury mode that means "nobody has reviewed it"; in self-assessment
+// there are no jury reviews to wait on, so it means "not yet accepted or
+// rejected by an organizer" — hence the different tab name.
+const reviewBacklog = computed(() => {
+  if (!isJury.value) return []
+  return submissions.value.filter(s =>
+    campaign.value?.scoring_mode === 'jury'
+      // A rejected submission is already decided — not a backlog.
+      ? s.status !== 'rejected' && !s.reviews.length
+      : s.status === 'submitted')
+})
+
 const tabs = computed(() => {
   const t = [['overview', 'Overview'], ['submissions', 'Submissions']]
+  if (isJury.value) {
+    t.push(['review', campaign.value?.scoring_mode === 'jury'
+      ? 'Not reviewed' : 'Review'])
+  }
   if (campaign.value?.suggested_articles.length || campaign.value?.suggested_items.length) {
     t.push(['suggested', 'Suggested articles'])
   }
@@ -151,6 +168,16 @@ watch(() => props.tab, (key) => {
   if (next !== tab.value) {
     tab.value = next
     if (next === 'leaderboard') loadLeaderboard()
+  }
+})
+
+// The review tab exists only for organizers/jury, but its URL is
+// reachable by anyone. Drop a participant who lands there (or who loses
+// the role) back to the overview instead of an empty panel.
+watch([tab, isJury], ([key, jury]) => {
+  if (key === 'review' && campaign.value && !jury) {
+    tab.value = 'overview'
+    router.replace(`/campaigns/${props.slug}`)
   }
 })
 
@@ -388,6 +415,33 @@ const statusStyles = {
                         @override="overrideSub" @recalculate="recalculate"
                         @save-review="saveReview" @save-claims="saveClaims"
                         @moderate-claim="moderateClaim" />
+
+    <!-- REVIEW BACKLOG: the same submissions list, pre-filtered to what
+         still needs attention, so it keeps every moderation control. -->
+    <template v-if="tab === 'review'">
+      <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-3">
+        <template v-if="reviewBacklog.length">
+          {{ reviewBacklog.length }}
+          {{ campaign.scoring_mode === 'jury'
+            ? 'submission(s) no juror has reviewed yet.'
+            : 'submission(s) waiting to be accepted or rejected.' }}
+        </template>
+        <template v-else>
+          Nothing is waiting — every submission has been
+          {{ campaign.scoring_mode === 'jury' ? 'reviewed' : 'moderated' }}.
+        </template>
+      </p>
+      <CampaignSubmissionsTab v-if="reviewBacklog.length"
+                          :campaign="campaign" :submissions="reviewBacklog"
+                          :is-logged-in="auth.isLoggedIn" :current-username="auth.user?.username || ''"
+                          :is-organizer="isOrganizer" :is-jury="isJury"
+                          :self-mode="selfMode" :criteria="criteria"
+                          :pending-action="pendingAction"
+                          @refresh="refresh" @withdraw="withdraw" @moderate="moderateSub"
+                          @override="overrideSub" @recalculate="recalculate"
+                          @save-review="saveReview" @save-claims="saveClaims"
+                          @moderate-claim="moderateClaim" />
+    </template>
 
     <!-- LEADERBOARD -->
     <CampaignLeaderboardTab v-if="tab === 'leaderboard'"

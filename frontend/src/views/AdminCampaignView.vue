@@ -32,6 +32,29 @@ const STATUS_BADGE = {
 
 const PANELS = [['members', 'Members'], ['articles', 'Articles']]
 
+// Review-state filter for the submissions table. "Awaiting my review" is
+// deliberately absent: an admin working across campaigns has no personal
+// review queue here — these are the campaign-wide backlogs.
+const REVIEW_FILTERS = [
+  ['unreviewed', 'Not reviewed by anyone'],
+  ['not_accepted', 'Not accepted yet'],
+  ['rejected', 'Rejected']
+]
+const REVIEW_TESTS = {
+  // A rejected submission is already decided, so it is not a backlog.
+  unreviewed: (s) => s.status !== 'rejected' && !s.reviews.length,
+  not_accepted: (s) => s.status === 'submitted',
+  rejected: (s) => s.status === 'rejected'
+}
+const filterReview = ref('')
+const shownArticles = computed(() => {
+  const test = REVIEW_TESTS[filterReview.value]
+  return test ? (articles.value || []).filter(test) : (articles.value || [])
+})
+const reviewCounts = computed(() => Object.fromEntries(
+  Object.entries(REVIEW_TESTS).map(([key, test]) =>
+    [key, (articles.value || []).filter(test).length])))
+
 const memberCount = computed(() => campaign.value?.members?.length ?? 0)
 
 async function run (fn) {
@@ -248,6 +271,23 @@ async function deleteArticle (s) {
           <p v-else-if="!articles.length" class="text-sm text-neutral-600 dark:text-neutral-300">
             No submissions yet.
           </p>
+          <template v-else>
+          <label class="flex items-center gap-2 text-sm mb-3">
+            Review state
+            <select v-model="filterReview" class="input !w-56 !py-1">
+              <option value="">All submissions</option>
+              <option v-for="[key, label] in REVIEW_FILTERS" :key="key" :value="key"
+                      :disabled="!reviewCounts[key]">
+                {{ label }} ({{ reviewCounts[key] }})
+              </option>
+            </select>
+            <span v-if="filterReview" class="text-xs text-neutral-600 dark:text-neutral-300">
+              {{ shownArticles.length }} of {{ articles.length }}
+            </span>
+          </label>
+          <p v-if="!shownArticles.length" class="text-sm text-neutral-600 dark:text-neutral-300">
+            No submissions match this filter.
+          </p>
           <div v-else class="overflow-x-auto">
             <table class="w-full">
               <thead>
@@ -258,7 +298,7 @@ async function deleteArticle (s) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="s in articles" :key="s.id"
+                <tr v-for="s in shownArticles" :key="s.id"
                     class="border-b border-neutral-100 dark:border-neutral-800 last:border-0">
                   <td class="td">
                     <a :href="s.url" target="_blank" rel="noopener"
@@ -292,6 +332,7 @@ async function deleteArticle (s) {
               </tbody>
             </table>
           </div>
+          </template>
         </div>
       </div>
     </template>

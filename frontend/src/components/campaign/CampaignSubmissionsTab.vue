@@ -91,14 +91,47 @@ const filterLang = ref('')
 const availableLangs = computed(() =>
   [...new Set(props.submissions.map(submissionLang).filter(Boolean))].sort())
 
+// Review-state filter, for organizers and jurors working through a
+// backlog. "Awaiting my review" is per-juror; the other two are
+// campaign-wide. Reviews and moderation status are independent: a
+// submission can carry reviews and still be awaiting an accept/reject.
+const REVIEW_FILTERS = [
+  ['awaiting_me', 'Awaiting my review'],
+  ['unreviewed', 'Not reviewed by anyone'],
+  ['not_accepted', 'Not accepted yet'],
+  ['rejected', 'Rejected']
+]
+const filterReview = ref('')
+const reviewedByMe = (s) =>
+  s.reviews.some(r => r.reviewer.username === props.currentUsername)
+const REVIEW_TESTS = {
+  // Own submissions are never reviewable by you, and a rejected one no
+  // longer needs a decision — both would otherwise sit in your queue
+  // forever as work you cannot clear.
+  awaiting_me: (s, me) =>
+    s.user.username !== me && s.status !== 'rejected' && !reviewedByMe(s),
+  unreviewed: (s) => s.status !== 'rejected' && !s.reviews.length,
+  not_accepted: (s) => s.status === 'submitted',
+  rejected: (s) => s.status === 'rejected'
+}
+
 const shownSubmissions = computed(() => {
   let list = props.submissions
   if (onlyMine.value) list = list.filter(s => s.user.username === props.currentUsername)
   if (filterUser.value) list = list.filter(s => s.user.username === filterUser.value)
   if (filterLang.value) list = list.filter(s => submissionLang(s) === filterLang.value)
   if (wikidataOnly.value) list = list.filter(s => s.kind === 'wikidata_item')
+  const test = REVIEW_TESTS[filterReview.value]
+  if (test) list = list.filter(s => test(s, props.currentUsername))
   return list
 })
+
+// Counts for the filter dropdown, so the size of each backlog is visible
+// without having to select it first.
+const reviewCounts = computed(() => Object.fromEntries(
+  Object.entries(REVIEW_TESTS).map(([key, test]) => [
+    key, props.submissions.filter(s => test(s, props.currentUsername)).length
+  ])))
 
 // Jury mode gets a Fountain-style table grouped by participant; self /
 // hybrid keep the flat expandable list (one pseudo-group without header).
@@ -175,12 +208,26 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
           <option v-for="l in availableLangs" :key="l" :value="l">{{ l }}</option>
         </select>
       </label>
-      <span v-if="filterUser || filterLang || wikidataOnly" class="text-xs text-neutral-600 dark:text-neutral-300">
+      <!-- review-state filter: the reviewing backlog, for whoever works it -->
+      <label v-if="isOrganizer || isJury" class="flex items-center gap-2 text-sm">
+        Review state
+        <select v-model="filterReview" class="input !w-56 !py-1">
+          <option value="">All submissions</option>
+          <option v-for="[key, label] in REVIEW_FILTERS" :key="key" :value="key"
+                  :disabled="!reviewCounts[key]">
+            {{ label }} ({{ reviewCounts[key] }})
+          </option>
+        </select>
+      </label>
+      <span v-if="filterUser || filterLang || wikidataOnly || filterReview"
+            class="text-xs text-neutral-600 dark:text-neutral-300">
         {{ shownSubmissions.length }} of {{ submissions.length }} submissions
       </span>
     </div>
 
-    <p v-if="!shownSubmissions.length" class="text-neutral-600 dark:text-neutral-300">No submissions yet.</p>
+    <p v-if="!shownSubmissions.length" class="text-neutral-600 dark:text-neutral-300">
+      {{ submissions.length ? 'No submissions match these filters.' : 'No submissions yet.' }}
+    </p>
 
     <!-- jury mode: table header -->
     <div v-if="juryTable && shownSubmissions.length"

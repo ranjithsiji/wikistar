@@ -31,6 +31,12 @@ const myReview = (s) => s.reviews.find(r => r.reviewer.username === auth.user?.u
 const reviewedByMe = computed(() => queue.value.filter(s => myReview(s)).length)
 const remaining = computed(() => queue.value.length - reviewedByMe.value)
 
+// Narrow the list to what I still have to review. The counts above stay
+// on the full queue, so the progress line keeps its meaning.
+const onlyUnreviewed = ref(false)
+const shownQueue = computed(() =>
+  onlyUnreviewed.value ? queue.value.filter(s => !myReview(s)) : queue.value)
+
 const decisionStyles = {
   accept: 'bg-green-500 border-green-500',
   reject: 'bg-red-500 border-red-500',
@@ -145,10 +151,20 @@ async function saveReview (review) {
         <!-- left: submission list with per-juror indicators -->
         <aside class="w-80 shrink-0 overflow-y-auto border-r border-neutral-200 dark:border-neutral-800
                       bg-white dark:bg-neutral-900">
-          <p v-if="!queue.length" class="p-4 text-sm text-neutral-600 dark:text-neutral-300">
-            Nothing to review.
+          <label v-if="queue.length"
+                 class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer
+                        border-b border-neutral-200 dark:border-neutral-800
+                        bg-neutral-50 dark:bg-neutral-950/40">
+            <input v-model="onlyUnreviewed" type="checkbox" />
+            Only awaiting my review
+            <span class="ml-auto tabular-nums text-xs text-neutral-600 dark:text-neutral-300">
+              {{ remaining }}
+            </span>
+          </label>
+          <p v-if="!shownQueue.length" class="p-4 text-sm text-neutral-600 dark:text-neutral-300">
+            {{ queue.length ? 'You have reviewed everything here.' : 'Nothing to review.' }}
           </p>
-          <button v-for="s in queue" :key="s.id" type="button"
+          <button v-for="s in shownQueue" :key="s.id" type="button"
                   class="w-full text-left px-3 py-2 border-b border-neutral-100 dark:border-neutral-800
                          hover:bg-neutral-50 dark:hover:bg-neutral-800/60"
                   :class="selected?.id === s.id && 'bg-blue-50 dark:bg-blue-950/40'"

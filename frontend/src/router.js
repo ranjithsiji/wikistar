@@ -8,7 +8,7 @@ const routes = [
   // :tab is constrained to the known tab keys so it can never shadow
   // /judge or /edit below (those stay separate routes/components).
   {
-    path: '/campaigns/:slug/:tab(overview|submissions|suggested|leaderboard|rules|stats)?',
+    path: '/campaigns/:slug/:tab(overview|submissions|review|suggested|leaderboard|rules|stats)?',
     name: 'campaign', component: () => import('./views/CampaignView.vue'), props: true
   },
   { path: '/campaigns/:slug/judge', name: 'campaign-judge', component: () => import('./views/JudgeView.vue'), props: true },
