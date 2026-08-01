@@ -50,7 +50,11 @@ from routers.common import (
     suggested_titles,
 )
 from domain.schemas import CampaignIn, CampaignStats, MemberAddIn
-from domain.scoring import compute_breakdown, default_self_assessment_rules
+from domain.scoring import (
+    compute_breakdown,
+    default_self_assessment_rules,
+    normalize_title,
+)
 
 bp = Blueprint("campaigns", __name__, url_prefix="/api")
 
@@ -172,6 +176,37 @@ def _replace_suggested(campaign: Campaign, payload: CampaignIn) -> None:
                 SuggestedPage(kind=kind, title=title, section=section))
         else:
             page.section = section  # section edits apply to kept rows
+    _resolve_suggested_qids(campaign)
+
+
+def _resolve_suggested_qids(campaign: Campaign) -> None:
+    """Cache each suggested *article*'s connected Wikidata item.
+
+    Scoring matches submitted articles to the suggested list by QID, so
+    the bonus is independent of how a title was spelled and of which
+    language edition the participant wrote in. Resolving here (once, when
+    the list is saved) keeps scoring a pure function of stored data.
+
+    Best-effort: a failed lookup leaves qid empty, and a suggested
+    article with no QID simply cannot be matched — the same rule that
+    applies to submissions. Re-saving the campaign retries the lookup.
+    """
+    pending = [p for p in campaign.suggested_pages
+               if p.kind == SubmissionKind.article and not p.qid]
+    if not pending:
+        return
+    try:
+        qid_by_title = mediawiki.fetch_wikibase_items(
+            campaign.wiki_domain, [p.title for p in pending])
+    except Exception:
+        return
+    # The wiki answers under its own normalised spelling of each title,
+    # so look results up by normalised key rather than verbatim.
+    by_norm = {normalize_title(t): q for t, q in qid_by_title.items()}
+    for page in pending:
+        qid = by_norm.get(normalize_title(page.title))
+        if qid:
+            page.qid = qid
 
 
 def _replace_rules(db: Session, campaign: Campaign, payload: CampaignIn) -> None:

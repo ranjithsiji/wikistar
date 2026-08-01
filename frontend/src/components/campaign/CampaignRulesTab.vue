@@ -20,6 +20,13 @@ const ruleRows = computed(() => (props.campaign?.rules || []).map(r => ({
   label: r.label, applies_to: r.applies_to.replace('_', ' '),
   points: ruleFormat(r)
 })))
+
+// Suggested articles are matched to the list by their connected Wikidata
+// item, so an unconnected article cannot earn the bonus. Say so up front
+// rather than leaving participants to discover it after submitting.
+const hasSuggestedArticleRule = computed(() =>
+  (props.campaign?.rules || []).some(r =>
+    r.rule_type === 'suggested_list' && ['any', 'article'].includes(r.applies_to)))
 </script>
 
 <template>
@@ -34,5 +41,11 @@ const ruleRows = computed(() => (props.campaign?.rules || []).map(r => ({
         <span class="tabular-nums font-semibold">{{ item }}</span>
       </template>
     </cdx-table>
+    <p v-if="hasSuggestedArticleRule"
+       class="text-xs text-neutral-600 dark:text-neutral-300 mt-3">
+      The suggested-list bonus is matched by Wikidata item, so it counts
+      only for an article that is connected to one. Connecting the article
+      to its Wikidata item — and then recalculating — earns the bonus.
+    </p>
   </div>
 </template>

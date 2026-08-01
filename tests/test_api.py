@@ -38,16 +38,27 @@ def client():
 SYSOP_WIKIS: dict[str, set] = {}
 
 
+# Connected Wikidata item per article title, used both when a campaign
+# resolves its suggested list and when a submission fetches metadata —
+# suggested articles are matched to the list by QID.
+ARTICLE_QIDS = {"Kathakali": "Q126", "Theyyam": "Q127"}
+
+
 @pytest.fixture(autouse=True)
 def fake_mediawiki(monkeypatch):
     monkeypatch.setattr(mediawiki, "fetch_sysop_wikis",
                         lambda username: SYSOP_WIKIS.get(username, set()))
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikibase_items",
+        lambda domain, titles: {t: ARTICLE_QIDS[t] for t in titles
+                                if t in ARTICLE_QIDS})
 
     def fake_fetch(domain, title, username, start, end):
         if title == "Kathakali":
             return PageMetadata(exists=True, page_id=11, page_len=20000,
                                 current_rev_id=2, base_rev_id=1,
-                                bytes_added=5000, is_new_page=False)
+                                bytes_added=5000, is_new_page=False,
+                                wikidata_qid=ARTICLE_QIDS["Kathakali"])
         if title == "Stub":
             return PageMetadata(exists=True, page_id=13, page_len=300,
                                 current_rev_id=5, base_rev_id=4,
@@ -398,6 +409,37 @@ def test_slug_is_mandatory_unique_and_alphanumeric(client):
     assert r.status_code == 409
     other["slug"] = "third-contest"
     assert client.put("/api/campaigns/third-contest", json=other).status_code == 200
+
+
+def test_suggested_article_bonus_needs_a_connected_wikidata_item(client):
+    """Suggested articles are matched to the list by QID, so the bonus is
+    independent of spelling and of the language edition. An article with
+    no connected item cannot be matched, and the breakdown says so."""
+    login("Alice")
+    # The suggested title is pasted from a URL — underscores and a
+    # different case than the wiki's canonical spelling. Matching by QID
+    # means neither matters.
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="QID Match Contest",
+        suggested_articles=["kathakali", "Unconnected Article"])).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # Kathakali resolves to Q126 on both sides -> 5 (bytes) + 10 (list)
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Kathakali", "kind": "article"}).json
+    assert sub["points"] == 15, sub["breakdown"]
+    assert any(line["label"] == "Article from the suggested list"
+               for line in sub["breakdown"])
+
+    # "Untouched" has no connected item: no bonus, with the reason shown.
+    sub2 = client.post(f"/api/campaigns/{slug}/submissions",
+                       json={"title": "Stub", "kind": "article"}).json
+    labels = [line["label"] for line in sub2["breakdown"]]
+    assert not any(lbl == "Article from the suggested list" for lbl in labels)
+    assert any("not connected to a Wikidata item" in lbl for lbl in labels)
 
 
 def test_personal_dashboard(client):

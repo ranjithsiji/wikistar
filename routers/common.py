@@ -24,7 +24,7 @@ from domain.schemas import (
     SuggestedItemOut,
     UserOut,
 )
-from domain.scoring import compute_breakdown
+from domain.scoring import compute_breakdown, normalize_title
 
 
 def audit(db: Session, user: User | None, action: str,
@@ -53,14 +53,21 @@ def get_or_create_user(db: Session, username: str) -> User:
 
 
 def suggested_titles(campaign: Campaign, kind: SubmissionKind) -> set[str]:
-    """Keys a submission of `kind` can match for the suggested-list bonus:
-    the suggested titles of that kind, plus — for articles — the suggested
-    Wikidata item QIDs, so an article that is a suggested item's sitelink
-    also matches (scoring compares the article's connected QID)."""
-    keys = {p.title.lower() for p in campaign.suggested_pages if p.kind == kind}
-    if kind == SubmissionKind.article:
-        keys |= {p.title.upper() for p in campaign.suggested_pages
-                 if p.kind == SubmissionKind.wikidata_item}
+    """Keys a submission of `kind` can match for the suggested-list bonus.
+
+    Articles are matched by Wikidata QID only: the item is what identifies
+    a subject across spellings and language editions, so a title that
+    merely looks right is not enough. The key set therefore holds the QIDs
+    of suggested items plus the items resolved from suggested articles.
+    (Wikidata item submissions match on their own title, which *is* a QID.)
+    """
+    if kind != SubmissionKind.article:
+        return {normalize_title(p.title) for p in campaign.suggested_pages
+                if p.kind == kind}
+    keys = {p.title.strip().upper() for p in campaign.suggested_pages
+            if p.kind == SubmissionKind.wikidata_item}
+    keys |= {p.qid.strip().upper() for p in campaign.suggested_pages
+             if p.kind == SubmissionKind.article and p.qid}
     return keys
 
 

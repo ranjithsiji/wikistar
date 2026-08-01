@@ -56,6 +56,26 @@ AUTO_METRICS = {"bytes_added"}
 # see compute_breakdown's suggested_list branch).
 MIN_SUGGESTED_ITEM_EDITS = 5
 
+
+def normalize_title(title: str) -> str:
+    """A page title reduced to the form MediaWiki itself treats as
+    canonical, so two spellings of the same page compare equal.
+
+    MediaWiki reads underscores as spaces, collapses runs of whitespace
+    and ignores the case of the first letter: "Kerala_history",
+    "Kerala  history" and "kerala history" are all one page. Organizers
+    routinely paste suggested titles straight out of a URL (underscores)
+    or off a rendered page (non-breaking spaces), so without this the
+    suggested-list bonus silently never matches what participants submit.
+    """
+    # \xa0 is whitespace to MediaWiki but not to str.split(); ‎ is a
+    # left-to-right mark, invisible and common in copied RTL titles.
+    cleaned = (title.replace("_", " ")
+                    .replace("\xa0", " ")
+                    .replace("‎", "")
+                    .replace("‏", ""))
+    return " ".join(cleaned.split()).lower()
+
 # Bulk kinds cover a user's whole activity in the campaign window; their
 # per_unit rules score from Submission.metrics counts (rule metric ->
 # metrics key) instead of claims.
@@ -202,9 +222,24 @@ def compute_breakdown(
             # Gated on the submitter having a verifiable contribution —
             # otherwise anyone could submit a page/item they never touched
             # just because it happens to be on the suggested list.
-            qid = (submission.wikidata_qid or "").upper()
-            on_list = (submission.title.lower() in suggested_titles
-                       or (qid and qid in suggested_titles))
+            qid = (submission.wikidata_qid or "").strip().upper()
+            if submission.kind == SubmissionKind.article:
+                # Articles match by Wikidata item only: the QID identifies
+                # the subject across spellings and language editions,
+                # where a title match is merely suggestive. An article
+                # with no connected item cannot be matched at all — say
+                # so, rather than silently scoring nothing.
+                if not qid:
+                    bd.add(PointLine(
+                        rule.id,
+                        rule.label + " (not connected to a Wikidata item — "
+                                     "cannot be matched against the list)",
+                        "auto", 0, 0.0))
+                    continue
+                on_list = qid in suggested_titles
+            else:
+                on_list = (normalize_title(submission.title) in suggested_titles
+                           or (qid and qid in suggested_titles))
             contributed = submission.is_new_page or bool(submission.bytes_added)
             if submission.kind == SubmissionKind.wikidata_item:
                 # A page can grow (bytes_added > 0) from a single small

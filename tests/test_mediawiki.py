@@ -192,3 +192,49 @@ def test_undo_restore_and_merge_are_not_counted(monkeypatch):
     # only the first comment (a real wbsetclaim-create, "(restore)" is
     # just an incidental suffix MediaWiki appends) should count
     assert activity["Q2"] == {"statements": 1, "terms": 0}
+
+
+def test_wikibase_items_keyed_by_the_title_asked_for(monkeypatch):
+    # The API rewrites titles on the way in: "united_states" is
+    # normalised to "United states", "USA" is a redirect to "United
+    # States", and several inputs can collapse onto one page. Keying the
+    # result by the title the wiki *returns* would leave callers unable
+    # to look up the title they passed -- which silently broke matching a
+    # suggested article (pasted from a URL, so underscored) against the
+    # submission for the same page.
+    payload = {"query": {
+        "normalized": [
+            {"from": "United_States", "to": "United States"},
+            {"from": "usa", "to": "Usa"},
+        ],
+        "redirects": [{"from": "Usa", "to": "United States"}],
+        "pages": [
+            {"title": "United States", "pageprops": {"wikibase_item": "Q30"}},
+            {"title": "Nowhere", "missing": True},
+        ],
+    }}
+
+    class FakeResponse:
+        def json(self):
+            return payload
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, *a, **k):
+            return FakeResponse()
+
+    monkeypatch.setattr(mediawiki, "_client", FakeClient)
+    result = mediawiki.fetch_wikibase_items(
+        "en.wikipedia.org", ["United_States", "usa", "United States", "Nowhere"])
+
+    # every spelling that leads to the page resolves, including the
+    # two-hop one (normalise "usa" -> "Usa", then redirect -> "United States")
+    assert result["United_States"] == "Q30"
+    assert result["usa"] == "Q30"
+    assert result["United States"] == "Q30"
+    assert "Nowhere" not in result

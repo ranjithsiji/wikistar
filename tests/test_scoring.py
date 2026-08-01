@@ -73,9 +73,11 @@ def test_bytes_rule_floors_not_rounds():
 
 
 def test_suggested_article_5000_bytes_improved_is_17_points():
-    sub = make_submission(title="Kathakali", bytes_added=5000, page_len=20000)
+    # The article is matched to the list by its connected Wikidata item.
+    sub = make_submission(title="Kathakali", bytes_added=5000, page_len=20000,
+                          wikidata_qid="Q126")
     claim(sub, "Substantial improvement")
-    assert total_suggested(sub, {"kathakali"}) == 17  # 5 + 2 + 10
+    assert total_suggested(sub, {"Q126"}) == 17  # 5 + 2 + 10
 
 
 def test_new_article_below_3500_bytes_earns_no_size_points():
@@ -164,9 +166,9 @@ def _accept_review(sub: Submission, total: float, reviewer_id: int = 10) -> None
 
 
 def test_jury_mode_counts_campaign_rules_plus_jury_average():
-    sub = make_submission(bytes_added=5000, page_len=20000)
+    sub = make_submission(bytes_added=5000, page_len=20000, wikidata_qid="Q126")
     _accept_review(sub, 7)
-    bd = compute_breakdown(sub, RULES, {"example"}, ScoringMode.jury)
+    bd = compute_breakdown(sub, RULES, {"Q126"}, ScoringMode.jury)
     # 5 (bytes, floor) + 10 (suggested list) + 7 (jury average)
     assert bd.total == 22
     assert {l.source for l in bd.lines} == {"auto", "jury"}
@@ -198,6 +200,12 @@ def test_article_matches_suggested_item_by_sitelink():
     sub2 = make_submission(title="Some Local Title", bytes_added=5000,
                            page_len=20000, wikidata_qid="Q999")
     assert total_suggested(sub2, {"Q126"}) == 5   # bytes only
-    # title match still works with no connected item
+    # An article with no connected item cannot be matched at all, even
+    # when its title is exactly the one on the list: the QID is what
+    # identifies the subject across spellings and language editions.
     sub3 = make_submission(title="Kathakali", bytes_added=5000, page_len=20000)
-    assert total_suggested(sub3, {"kathakali"}) == 15
+    assert total_suggested(sub3, {"kathakali", "Q126"}) == 5
+    # ...and the breakdown says why, instead of silently scoring nothing.
+    bd = compute_breakdown(sub3, RULES, {"kathakali", "Q126"}, ScoringMode.self_)
+    assert any("not connected to a Wikidata item" in line.label
+               for line in bd.lines)

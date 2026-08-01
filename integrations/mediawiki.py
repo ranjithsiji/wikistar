@@ -119,7 +119,16 @@ def fetch_sitelinks(qids: list[str], languages: list[str]) -> dict[str, dict]:
 def fetch_wikibase_items(domain: str, titles: list[str]) -> dict[str, str]:
     """The connected Wikidata QID for each of the given page titles on
     `domain`, as {title: qid} (titles with no connected item are
-    omitted). Batched: up to 50 titles per API call."""
+    omitted). Batched: up to 50 titles per API call.
+
+    Keyed by the title as *asked for*, not as the wiki answers. The API
+    rewrites titles on the way in — "Kerala_history" is normalised to
+    "Kerala history" and then followed through a redirect to "History of
+    Kerala" — so keying by the returned title would leave callers unable
+    to find the entry for the title they passed. `redirects=1` makes the
+    wiki resolve redirects, and the normalized/redirects maps it reports
+    are walked back to the original input.
+    """
     result: dict[str, str] = {}
     if not titles:
         return result
@@ -129,12 +138,31 @@ def fetch_wikibase_items(domain: str, titles: list[str]) -> dict[str, str]:
             data = client.get(api_url(domain), params={
                 "action": "query", "format": "json", "formatversion": 2,
                 "prop": "pageprops", "ppprop": "wikibase_item",
-                "titles": "|".join(chunk),
+                "titles": "|".join(chunk), "redirects": 1,
             }).json()
-            for page in data.get("query", {}).get("pages", []):
+            query = data.get("query", {})
+            # final title -> every title originally asked for that leads
+            # to it. Several inputs can collapse onto one page ("Foo_bar"
+            # and "foo bar" both normalise to "Foo bar"), and each hop
+            # (normalisation, then redirect) chains back to the input, so
+            # this is a list per destination rather than a single value.
+            origins: dict[str, list[str]] = {}
+            for step in ("normalized", "redirects"):
+                for entry in query.get(step, []) or []:
+                    src, dst = entry.get("from"), entry.get("to")
+                    if src and dst:
+                        origins.setdefault(dst, []).extend(
+                            origins.pop(src, None) or [src])
+            for page in query.get("pages", []):
                 qid = (page.get("pageprops") or {}).get("wikibase_item")
-                if qid:
-                    result[page.get("title", "")] = qid
+                if not qid:
+                    continue
+                final = page.get("title", "")
+                for asked in origins.get(final, [final]):
+                    result[asked] = qid
+                # The canonical title is always usable as a key too, so a
+                # caller that passed it verbatim still finds its entry.
+                result.setdefault(final, qid)
     return result
 
 

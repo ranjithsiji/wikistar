@@ -432,6 +432,13 @@ class SuggestedPage(Base):
     # Optional heading this page is grouped under on the campaign page
     # (e.g. "Districts", "Rivers"); empty string = the default group.
     section: Mapped[str] = mapped_column(String(255), default="")
+    # For suggested articles: the connected Wikidata item, resolved once
+    # when the list is saved. Matching a submission by QID rather than by
+    # title makes the bonus independent of spelling and of which language
+    # edition the participant wrote in. Empty when the article has no
+    # connected item (or the lookup failed) — matching falls back to the
+    # title then. Unused for suggested items, whose title *is* the QID.
+    qid: Mapped[str] = mapped_column(String(32), default="")
 
     campaign: Mapped[Campaign] = relationship(back_populates="suggested_pages")
 
