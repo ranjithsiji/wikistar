@@ -91,6 +91,10 @@ async function save () {
     })).data
     languages.value = prefs.preferred_languages
     homeWikis.value = prefs.home_wikis || []
+    // Keeps the "set your preferences" prompt in sync without refetching
+    // /api/me — and re-arms it if the user cleared everything again.
+    auth.setHasPreferences(
+      languages.value.length > 0 || homeWikis.value.length > 0)
     notice.value = 'Preferences saved.'
   } catch (e) {
     error.value = errorMessage(e)

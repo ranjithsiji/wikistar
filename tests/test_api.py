@@ -484,6 +484,29 @@ def test_personal_dashboard(client):
     assert all(c["status"] == "draft" for c in approvals)
 
 
+def test_me_reports_whether_preferences_are_set(client):
+    """Drives the "set your preferences" prompt, so it must flip as soon
+    as either preference is set and flip back if they are all cleared."""
+    logout()
+    assert client.get("/api/me").json["user"] is None
+
+    login("PrefsFlag")
+    assert client.get("/api/me").json["user"]["has_preferences"] is False
+
+    # either preference alone counts as "configured"
+    client.put("/api/me/preferences", json={"preferred_languages": ["ml"]})
+    assert client.get("/api/me").json["user"]["has_preferences"] is True
+
+    client.put("/api/me/preferences",
+               json={"preferred_languages": [], "home_wikis": ["ml"]})
+    assert client.get("/api/me").json["user"]["has_preferences"] is True
+
+    # clearing everything re-arms the prompt
+    client.put("/api/me/preferences",
+               json={"preferred_languages": [], "home_wikis": []})
+    assert client.get("/api/me").json["user"]["has_preferences"] is False
+
+
 def test_preferences_and_suggested_links(client, monkeypatch):
     logout()
     assert client.get("/api/me/preferences").status_code == 401

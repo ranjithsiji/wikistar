@@ -49,5 +49,10 @@ def me():
     user = get_current_user()
     if user is None:
         return {"user": None}
+    # has_preferences drives the "set your preferences" prompt. Reported
+    # here, on a call the app already makes on every load, rather than
+    # costing a second request just to find out whether to nudge.
     return {"user": {"id": user.id, "username": user.username,
-                     "is_admin": user.is_admin}}
+                     "is_admin": user.is_admin,
+                     "has_preferences": bool(user.preferred_languages
+                                             or user.home_wikis)}}

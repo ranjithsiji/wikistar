@@ -1,11 +1,32 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { CdxMessage } from '@wikimedia/codex'
+import { useRoute } from 'vue-router'
 import NavBar from './components/NavBar.vue'
 import AppFooter from './components/AppFooter.vue'
 import { useAuthStore } from './store'
 
 const auth = useAuthStore()
+const route = useRoute()
+
+// Dismissal is remembered per browser so the prompt does not reappear on
+// every page load for someone who has decided to skip it. Setting any
+// preference clears the condition anyway.
+const PREFS_PROMPT_KEY = 'wikistar:prefs-prompt-dismissed'
+const prefsPromptDismissed = ref(
+  localStorage.getItem(PREFS_PROMPT_KEY) === '1')
+
+const showPreferencesPrompt = computed(() =>
+  auth.needsPreferences
+  && !prefsPromptDismissed.value
+  && route.path !== '/preferences')
+
+function dismissPreferencesPrompt () {
+  prefsPromptDismissed.value = true
+  try {
+    localStorage.setItem(PREFS_PROMPT_KEY, '1')
+  } catch { /* private mode: dismissing for this session is enough */ }
+}
 
 // The OAuth callback bounces home with ?login=cancelled|failed when the
 // user rejects the request on meta or the token exchange breaks.
@@ -39,6 +60,20 @@ onMounted(() => {
       <cdx-message :type="loginNoticeType" :allow-user-dismiss="true"
                    @user-dismissed="loginNotice = ''">
         {{ loginNotice }}
+      </cdx-message>
+    </div>
+    <!-- One-time nudge for a logged-in user who has set no preferences.
+         Hidden on the preferences page itself, where it would be noise. -->
+    <div v-if="showPreferencesPrompt" class="max-w-6xl w-full mx-auto px-4 pt-4">
+      <cdx-message type="notice" :allow-user-dismiss="true"
+                   @user-dismissed="dismissPreferencesPrompt">
+        You have not set your preferences yet. Choosing your languages and
+        home wikis tailors the suggested articles and language pickers to
+        the projects you work on.
+        <router-link to="/preferences"
+                     class="text-link-700 dark:text-link-400 hover:underline font-medium">
+          Set your preferences
+        </router-link>
       </cdx-message>
     </div>
     <main class="max-w-6xl w-full mx-auto px-4 py-6 flex-1">
