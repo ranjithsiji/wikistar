@@ -6,9 +6,47 @@ import UserAvatar from '../UserAvatar.vue'
 const props = defineProps({
   leaderboard: { type: Array, required: true },
   currentUsername: { type: String, default: '' },
-  showPodium: { type: Boolean, default: true }
+  showPodium: { type: Boolean, default: true },
+  // Needed to build each participant's on-wiki contributions link:
+  // which wiki, and the campaign window to scope it to.
+  campaign: { type: Object, default: null }
 })
 const emit = defineEmits(['show-details'])
+
+// Link to a participant's contributions, limited to the campaign
+// period: Special:Contributions takes the bounds as start/end dates, so
+// the list opens on the work that counts here rather than the user's
+// entire history.
+//
+// A multi-language campaign has no single target wiki -- entries come
+// from whichever Wikipedia the participant wrote in -- so those link to
+// the cross-wiki view on Meta instead of picking one wiki and being
+// wrong for everyone who used another.
+function contributionsUrl (username) {
+  const campaign = props.campaign
+  if (!campaign || !username) return null
+  if (campaign.settings?.multi_language) {
+    return 'https://meta.wikimedia.org/wiki/Special:CentralAuth/' +
+      encodeURIComponent(username.replace(/ /g, '_'))
+  }
+  const domain = campaign.wiki_domain
+  if (!domain) return null
+  const params = new URLSearchParams({
+    target: username,
+    start: campaign.start_date || '',
+    end: campaign.end_date || ''
+  })
+  return `https://${domain}/wiki/Special:Contributions?${params}`
+}
+
+// The tooltip has to describe whichever of the two links this is.
+function contributionsTitle (username) {
+  if (props.campaign?.settings?.multi_language) {
+    return `See ${username}'s accounts and contributions across wikis`
+  }
+  return `See ${username}'s contributions to ` +
+    `${props.campaign?.wiki_domain} during the campaign`
+}
 
 const lbColumns = [
   { id: 'rank', label: '#', textAlign: 'number' },
@@ -165,8 +203,14 @@ const leadMargin = computed(() => {
                    :style="{ width: `${(item / maxSubmissions) * 100}%` }"></div>
             </div>
           </template>
-          <template #item-submission_count="{ item }">
-            <span class="tabular-nums whitespace-nowrap">{{ item }}</span>
+          <template #item-submission_count="{ item, row }">
+            <a v-if="contributionsUrl(row.username)"
+               :href="contributionsUrl(row.username)" target="_blank" rel="noopener"
+               class="tabular-nums whitespace-nowrap text-link-700 dark:text-link-400 hover:underline"
+               :title="contributionsTitle(row.username)">
+              {{ item }}
+            </a>
+            <span v-else class="tabular-nums whitespace-nowrap">{{ item }}</span>
           </template>
           <template #item-bytes_added="{ item }">
             <span class="tabular-nums">{{ item.toLocaleString() }}</span>
