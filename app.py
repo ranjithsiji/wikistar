@@ -6,6 +6,8 @@ Toolforge (classic python webservice): clone the repo to
 ~/www/python/src and install requirements.txt into ~/www/python/venv;
 uwsgi serves the `app` callable below directly.
 """
+import tomllib
+
 from flask import Flask, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -15,6 +17,20 @@ from core.db import Base, db_session, engine, sync_schema
 from core.webutil import register_errors
 from routers import (admin, auth as auth_routes, campaigns, claims, dashboard,
                      reviews, submissions)
+
+def _read_version() -> str:
+    """The version from pyproject.toml — the one place it is edited on a
+    release. Read from the file rather than importlib.metadata: the app
+    runs from a plain clone on Toolforge, never installed as a
+    distribution, so package metadata does not exist there."""
+    try:
+        with open(ROOT_DIR / "pyproject.toml", "rb") as f:
+            return tomllib.load(f)["project"]["version"]
+    except Exception:
+        return "unknown"
+
+
+APP_VERSION = _read_version()
 
 app = Flask(__name__)
 app.secret_key = settings.secret_key
@@ -49,7 +65,7 @@ def _remove_db_session(exc):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 # ---- serve the built SPA ---------------------------------------------------
