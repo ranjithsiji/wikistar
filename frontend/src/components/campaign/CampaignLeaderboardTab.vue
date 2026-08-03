@@ -13,6 +13,11 @@ const emit = defineEmits(['show-details'])
 const lbColumns = [
   { id: 'rank', label: '#', textAlign: 'number' },
   { id: 'username', label: 'Participant', allowSort: true },
+  // The bar is its own column so the counts beside it line up in a
+  // clean numeric column instead of being pushed around by bar width.
+  // It has no sort of its own: it renders the same value as
+  // "Submissions", which is the sortable one.
+  { id: 'submission_bar', label: 'Share', textAlign: 'number' },
   { id: 'submission_count', label: 'Submissions', textAlign: 'number', allowSort: true },
   { id: 'bytes_added', label: 'Bytes', textAlign: 'number', allowSort: true },
   { id: 'points', label: 'Points', textAlign: 'number', allowSort: true }
@@ -20,7 +25,8 @@ const lbColumns = [
 const lbSort = ref({})
 const lbRows = computed(() => {
   const rows = props.leaderboard.map(r => ({
-    rank: r.rank, username: r.user.username, submission_count: r.submission_count,
+    rank: r.rank, username: r.user.username,
+    submission_bar: r.submission_count, submission_count: r.submission_count,
     bytes_added: r.bytes_added, points: r.points, user: r.user
   }))
   const [key, dir] = Object.entries(lbSort.value)[0] || []
@@ -132,7 +138,9 @@ const leadMargin = computed(() => {
                    :columns="lbColumns" :data="lbRows"
                    :sort="lbSort" @update:sort="onLbSort">
           <template #item-rank="{ item }">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold tabular-nums"
+            <!-- min-w keeps the top-3 medals circular while letting a
+                 three-digit rank widen rather than wrap. -->
+            <span class="inline-flex items-center justify-center min-w-6 h-6 px-1 rounded-full text-xs font-bold tabular-nums whitespace-nowrap"
                   :class="item === 1 ? 'bg-blue-700 text-white'
                     : item === 2 ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
                     : item === 3 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
@@ -148,14 +156,17 @@ const leadMargin = computed(() => {
               {{ item }}
             </button>
           </template>
-          <template #item-submission_count="{ item }">
-            <div class="flex items-center gap-2 justify-end">
-              <div class="w-16 h-2 rounded bg-neutral-100 dark:bg-neutral-800 shrink-0">
-                <div class="h-2 rounded bg-blue-600 dark:bg-blue-500"
-                     :style="{ width: `${(item / maxSubmissions) * 100}%` }"></div>
-              </div>
-              <span class="tabular-nums w-6 text-right shrink-0">{{ item }}</span>
+          <template #item-submission_bar="{ item }">
+            <div class="w-16 h-2 rounded bg-neutral-100 dark:bg-neutral-800 inline-block align-middle"
+                 role="img"
+                 :aria-label="`${item} of ${maxSubmissions} submissions by the most active participant`"
+                 :title="`${item} submissions`">
+              <div class="h-2 rounded bg-blue-600 dark:bg-blue-500"
+                   :style="{ width: `${(item / maxSubmissions) * 100}%` }"></div>
             </div>
+          </template>
+          <template #item-submission_count="{ item }">
+            <span class="tabular-nums whitespace-nowrap">{{ item }}</span>
           </template>
           <template #item-bytes_added="{ item }">
             <span class="tabular-nums">{{ item.toLocaleString() }}</span>
