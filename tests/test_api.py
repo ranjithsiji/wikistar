@@ -1587,3 +1587,77 @@ def test_article_earns_bonus_via_suggested_item_sitelink(client, monkeypatch):
     assert sub["points"] == 15
     assert any(l["label"] == "Article from the suggested list"
                for l in sub["breakdown"])
+
+
+def test_leaderboard_cache_invalidates_on_new_points(client):
+    """The leaderboard is memoised per process; a write that changes
+    points must invalidate it, or the standings would show stale totals
+    until the entry aged out."""
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Cache Invalidation Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Erin")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Kathakali", "kind": "article"}).json
+    first = client.get(f"/api/campaigns/{slug}/leaderboard").json
+    assert first[0]["user"]["username"] == "Erin"
+    baseline = first[0]["points"]
+    # a second read is served from cache and must agree
+    assert client.get(f"/api/campaigns/{slug}/leaderboard").json == first
+
+    # an organizer override changes the total -> the cached board is stale
+    login("Alice")
+    assert client.post(f"/api/submissions/{sub['id']}/moderate",
+                       json={"points_override": baseline + 25}).status_code == 200
+    logout()
+    after = client.get(f"/api/campaigns/{slug}/leaderboard").json
+    assert after[0]["points"] == baseline + 25
+
+    # ...and so does a second submission by another participant
+    login("Frank")
+    client.post(f"/api/campaigns/{slug}/submissions",
+                json={"title": "Theyyam", "kind": "article"})
+    board = client.get(f"/api/campaigns/{slug}/leaderboard").json
+    assert {r["user"]["username"] for r in board} == {"Erin", "Frank"}
+
+
+def test_json_responses_are_gzipped_only_when_accepted(client):
+    """Large JSON bodies are compressed on the way out (the submissions
+    list of a big campaign is ~250 KB uncompressed), but only for
+    clients that asked for it, and never in a way that changes the
+    decoded body."""
+    import gzip
+    import json
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Gzip Contest",
+        # a long suggested list makes the detail payload exceed the
+        # minimum size worth compressing
+        suggested_articles=[f"Article number {i}" for i in range(300)],
+    )).json["slug"]
+
+    accepted = client.get(f"/api/campaigns/{slug}",
+                          headers={"Accept-Encoding": "gzip"})
+    assert accepted.headers.get("Content-Encoding") == "gzip"
+    # added to Vary, not replacing what Flask already set there ("Cookie"
+    # on session responses — dropping it would let a shared cache serve
+    # one user's response to another)
+    vary = accepted.headers.get("Vary", "")
+    assert "Accept-Encoding" in vary and "Cookie" in vary
+    body = json.loads(gzip.decompress(accepted.get_data()))
+    assert body["slug"] == slug
+
+    plain = client.get(f"/api/campaigns/{slug}",
+                       headers={"Accept-Encoding": "identity"})
+    assert plain.headers.get("Content-Encoding") is None
+    # both clients see exactly the same data
+    assert plain.get_json() == body
+
+    # small bodies are not worth compressing
+    health = client.get("/api/health", headers={"Accept-Encoding": "gzip"})
+    assert health.headers.get("Content-Encoding") is None

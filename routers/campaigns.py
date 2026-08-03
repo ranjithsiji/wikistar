@@ -50,6 +50,7 @@ from routers.common import (
     get_or_create_user,
     load_submissions,
     suggested_titles,
+    visible_campaigns,
 )
 from domain.schemas import CampaignIn, CampaignStats, MemberAddIn
 from domain.scoring import (
@@ -91,7 +92,7 @@ def site_stats():
 def list_campaigns():
     db, user = get_db(), get_current_user()
     campaigns = db.query(Campaign).order_by(Campaign.start_date.desc()).all()
-    visible = [c for c in campaigns if can_see_campaign(db, c, user)]
+    visible = visible_campaigns(db, campaigns, user)
     counts = campaign_counts(db, visible)
     return respond([campaign_summary(db, c, counts[c.id]) for c in visible])
 

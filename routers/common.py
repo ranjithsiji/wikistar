@@ -9,6 +9,7 @@ from domain.models import (
     AuditLog,
     Campaign,
     CampaignStatus,
+    Claim,
     MemberRole,
     Review,
     Submission,
@@ -161,7 +162,15 @@ def campaign_detail_out(db: Session, campaign: Campaign,
     return out
 
 
-def can_see_campaign(db: Session, campaign: Campaign, user: User | None) -> bool:
+def can_see_campaign(db: Session, campaign: Campaign, user: User | None,
+                     check_rights: bool = True) -> bool:
+    """Whether `user` may see this campaign.
+
+    check_rights=False skips the on-wiki sysop lookup that decides
+    whether a non-organizer may see a *draft*. Callers filtering a long
+    list use it to avoid a blocking API call per draft row; see
+    visible_campaigns, which resolves the rights once for the whole list.
+    """
     if campaign.status not in (CampaignStatus.draft, CampaignStatus.rejected):
         return True
     if user is None:
@@ -174,11 +183,103 @@ def can_see_campaign(db: Session, campaign: Campaign, user: User | None) -> bool
         return True
     # Drafts awaiting approval are visible to whoever could approve them
     # (jury: the target wiki's sysops; multi-language/self: any sysop).
-    if campaign.status == CampaignStatus.draft:
+    if campaign.status == CampaignStatus.draft and check_rights:
         from integrations import wiki_rights
 
         return wiki_rights.can_approve_campaign(user, campaign)[0]
     return False
+
+
+def visible_campaigns(db: Session, campaigns: list[Campaign],
+                      user: User | None) -> list[Campaign]:
+    """Filter a campaign list to what `user` may see.
+
+    The sysop-rights lookup that reveals other people's drafts hits the
+    CentralAuth API, so it is done only if a draft actually survives the
+    cheap checks — and its one result is reused for every remaining
+    draft, instead of a blocking call per row.
+    """
+    decided: dict[int, bool] = {}
+    undecided: list[Campaign] = []
+    for c in campaigns:
+        if can_see_campaign(db, c, user, check_rights=False):
+            decided[c.id] = True
+        elif c.status == CampaignStatus.draft and user is not None:
+            undecided.append(c)
+    if undecided:
+        from integrations import wiki_rights
+
+        # can_approve_campaign consults the campaign's own scoring mode
+        # and target wiki, but resolves the user's rights through a
+        # process-wide cache — so this is one API call per request at
+        # worst, not one per draft.
+        for c in undecided:
+            decided[c.id] = wiki_rights.can_approve_campaign(user, c)[0]
+    return [c for c in campaigns if decided.get(c.id)]
+
+
+_LEADERBOARD_CACHE: dict[int, tuple[tuple, list[LeaderboardRow]]] = {}
+_LEADERBOARD_CACHE_MAX = 64
+
+
+def _leaderboard_version(db: Session, campaign: Campaign) -> tuple:
+    """A key that changes whenever anything the leaderboard is computed
+    from changes.
+
+    Deriving the key from the data — rather than expiring on a timer —
+    means a new review shows up in the standings immediately, instead of
+    users seeing points that lag by the length of a TTL.
+
+    updated_at deliberately plays no part: these are DATETIME columns, so
+    MariaDB truncates them to whole seconds, and two writes inside the
+    same second are indistinguishable. The key sums the values that
+    actually decide points instead, which cannot collapse that way.
+    """
+    # Enum columns are grouped and counted rather than summed: a status
+    # flip must change the key even when it doesn't move any number.
+    sub_agg = (
+        db.query(func.count(Submission.id),
+                 func.coalesce(func.sum(Submission.bytes_added), 0),
+                 func.coalesce(func.sum(Submission.points_override), 0),
+                 func.count(Submission.points_override),
+                 func.coalesce(func.sum(Submission.page_len), 0),
+                 # SUM over the boolean, not COUNT(...) FILTER: MariaDB
+                 # has no FILTER clause.
+                 func.coalesce(func.sum(Submission.is_new_page), 0))
+        .filter(Submission.campaign_id == campaign.id).one())
+    sub_status = tuple(
+        db.query(Submission.status, func.count(Submission.id))
+        .filter(Submission.campaign_id == campaign.id)
+        .group_by(Submission.status).order_by(Submission.status).all())
+    review_agg = (
+        db.query(func.count(Review.id),
+                 func.coalesce(func.sum(Review.total), 0))
+        .join(Submission, Review.submission_id == Submission.id)
+        .filter(Submission.campaign_id == campaign.id).one())
+    review_decisions = tuple(
+        db.query(Review.decision, func.count(Review.id))
+        .join(Submission, Review.submission_id == Submission.id)
+        .filter(Submission.campaign_id == campaign.id)
+        .group_by(Review.decision).order_by(Review.decision).all())
+    claim_agg = (
+        db.query(func.count(Claim.id),
+                 func.coalesce(func.sum(Claim.points_claimed), 0),
+                 func.coalesce(func.sum(Claim.points_final), 0),
+                 func.coalesce(func.sum(Claim.quantity), 0))
+        .join(Submission, Claim.submission_id == Submission.id)
+        .filter(Submission.campaign_id == campaign.id).one())
+    claim_status = tuple(
+        db.query(Claim.status, func.count(Claim.id))
+        .join(Submission, Claim.submission_id == Submission.id)
+        .filter(Submission.campaign_id == campaign.id)
+        .group_by(Claim.status).order_by(Claim.status).all())
+    # The campaign's own row covers rules, settings and suggested pages:
+    # every edit path reassigns a campaign column, and a rule/settings
+    # write cascades to it through the ORM.
+    return (campaign.updated_at, campaign.scoring_mode,
+            tuple(sub_agg), sub_status,
+            tuple(review_agg), review_decisions,
+            tuple(claim_agg), claim_status)
 
 
 def compute_leaderboard(db: Session, campaign: Campaign,
@@ -186,7 +287,20 @@ def compute_leaderboard(db: Session, campaign: Campaign,
                         ) -> list[LeaderboardRow]:
     """Pass `subs` when the caller already holds the campaign's loaded
     submissions (e.g. the stats endpoint) — they are the heaviest thing
-    this loads, and reloading them doubled that endpoint's DB work."""
+    this loads, and reloading them doubled that endpoint's DB work.
+
+    Results are memoised per process against a version key derived from
+    the underlying rows, so repeat calls (the dashboard scores every
+    campaign a user takes part in) skip the reload and rescoring while
+    never serving a standing that a write has already invalidated.
+    """
+    if subs is None:
+        version = _leaderboard_version(db, campaign)
+        cached = _LEADERBOARD_CACHE.get(campaign.id)
+        if cached is not None and cached[0] == version:
+            return cached[1]
+    else:
+        version = None
     settings = campaign.effective_settings
     totals: dict[int, dict] = {}
     if subs is None:
@@ -213,4 +327,8 @@ def compute_leaderboard(db: Session, campaign: Campaign,
             rank=rank, user=UserOut.model_validate(e["user"]),
             submission_count=e["submission_count"], points=e["points"],
             bytes_added=e["bytes_added"]))
+    if version is not None:
+        if len(_LEADERBOARD_CACHE) >= _LEADERBOARD_CACHE_MAX:
+            _LEADERBOARD_CACHE.clear()  # crude bound; entries are cheap to rebuild
+        _LEADERBOARD_CACHE[campaign.id] = (version, rows)
     return rows

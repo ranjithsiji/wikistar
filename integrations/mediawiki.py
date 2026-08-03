@@ -62,25 +62,40 @@ class PageMetadata:
 
 _SYSOP_CACHE: dict[str, tuple[float, set[str]]] = {}
 _SYSOP_CACHE_TTL = 300.0  # seconds
+# A failed lookup is remembered too, for much longer than a request
+# takes but far less than a success. Without this, a meta.wikimedia.org
+# outage costs one full 15 s timeout for every draft campaign checked in
+# a request — the list endpoints resolve rights for a whole list, so the
+# failures would add up into a page that takes minutes to answer.
+_SYSOP_FAILURE_TTL = 20.0
+_SYSOP_FAILED: dict[str, float] = {}
 
 
 def fetch_sysop_wikis(username: str) -> set[str]:
     """Domains where the user holds local sysop rights, resolved through
     CentralAuth (meta.wikimedia.org globaluserinfo), exactly like
     Fountain's GetSysopWikis. Global sysops and stewards yield "*".
-    Results are cached briefly; failures raise httpx.HTTPError."""
+    Results are cached briefly; failures raise httpx.HTTPError (and are
+    themselves briefly remembered, so a wiki outage fails fast)."""
     import time
 
     cached = _SYSOP_CACHE.get(username)
     if cached and cached[0] > time.monotonic():
         return cached[1]
+    failed_until = _SYSOP_FAILED.get(username)
+    if failed_until is not None and failed_until > time.monotonic():
+        raise httpx.HTTPError("sysop rights lookup recently failed")
 
-    with _client() as client:
-        data = client.get(api_url("meta.wikimedia.org"), params={
-            "action": "query", "format": "json", "formatversion": 2,
-            "meta": "globaluserinfo", "guiuser": username,
-            "guiprop": "merged|groups",
-        }).json()
+    try:
+        with _client() as client:
+            data = client.get(api_url("meta.wikimedia.org"), params={
+                "action": "query", "format": "json", "formatversion": 2,
+                "meta": "globaluserinfo", "guiuser": username,
+                "guiprop": "merged|groups",
+            }).json()
+    except Exception:
+        _SYSOP_FAILED[username] = time.monotonic() + _SYSOP_FAILURE_TTL
+        raise
     info = data.get("query", {}).get("globaluserinfo", {})
     domains: set[str] = set()
     for wiki in info.get("merged", []):
@@ -90,6 +105,7 @@ def fetch_sysop_wikis(username: str) -> set[str]:
     if {"global-sysop", "steward"} & set(info.get("groups") or []):
         domains.add("*")
     _SYSOP_CACHE[username] = (time.monotonic() + _SYSOP_CACHE_TTL, domains)
+    _SYSOP_FAILED.pop(username, None)
     return domains
 
 

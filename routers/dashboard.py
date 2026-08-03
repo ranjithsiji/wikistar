@@ -185,6 +185,8 @@ def approval():
               .filter(Campaign.status == CampaignStatus.draft)
               .order_by(Campaign.start_date.desc())
               .all())
+    # can_approve_campaign resolves the user's on-wiki rights through a
+    # process-wide cache, so the whole list costs one API call at worst.
     visible = [c for c in drafts
                if wiki_rights.can_approve_campaign(user, c)[0]]
     counts = campaign_counts(db, visible)
