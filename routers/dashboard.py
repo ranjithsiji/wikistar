@@ -13,6 +13,7 @@ Five sections, all scoped to the logged-in user:
 import re
 
 from flask import Blueprint, request
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
 from integrations import wiki_rights
@@ -24,10 +25,12 @@ from domain.models import (
     CampaignMember,
     CampaignStatus,
     MemberRole,
+    Review,
     ScoringMode,
     Submission,
 )
-from routers.common import campaign_summary, compute_leaderboard, submission_out
+from routers.common import (campaign_counts, campaign_summary,
+                            compute_leaderboard, submission_out)
 
 bp = Blueprint("dashboard", __name__, url_prefix="/api/me")
 
@@ -69,8 +72,8 @@ def save_preferences():
     return respond({"preferred_languages": langs, "home_wikis": wikis})
 
 
-def _summary(campaign: Campaign) -> dict:
-    return jsonable(campaign_summary(campaign))
+def _summary(db, campaign: Campaign, counts: dict | None = None) -> dict:
+    return jsonable(campaign_summary(db, campaign, counts))
 
 
 @bp.get("/participation")
@@ -84,6 +87,7 @@ def participation():
         .order_by(Campaign.end_date.desc())
         .all()
     )
+    counts = campaign_counts(db, campaigns)
     out = []
     for c in campaigns:
         # Fountain's HiddenMarks: in anonymous jury campaigns only
@@ -106,7 +110,8 @@ def participation():
                     for r in board
                     if me.rank - 1 <= r.rank <= me.rank + 1
                 ]
-        out.append({**_summary(c), "hidden_marks": hidden, "rows": rows, "mine": mine})
+        out.append({**_summary(db, c, counts[c.id]), "hidden_marks": hidden,
+                    "rows": rows, "mine": mine})
     return respond(out)
 
 
@@ -148,18 +153,17 @@ def evaluation():
         .order_by(Campaign.end_date.desc())
         .all()
     )
+    counts = campaign_counts(db, campaigns)
     out = []
     for c in campaigns:
-        subs = (db.query(Submission)
-                .filter_by(campaign_id=c.id)
-                .options(selectinload(Submission.reviews))
-                .all())
-        missing = sum(
-            1 for s in subs
-            if s.user_id != user.id
-            and all(r.reviewer_id != user.id for r in s.reviews)
+        missing = (
+            db.query(func.count(Submission.id))
+            .filter(Submission.campaign_id == c.id,
+                    Submission.user_id != user.id,
+                    ~Submission.reviews.any(Review.reviewer_id == user.id))
+            .scalar()
         )
-        out.append({**_summary(c), "missing": missing})
+        out.append({**_summary(db, c, counts[c.id]), "missing": missing})
     return respond(out)
 
 
@@ -170,7 +174,8 @@ def created():
                  .filter_by(created_by=user.id)
                  .order_by(Campaign.start_date.desc())
                  .all())
-    return respond([_summary(c) for c in campaigns])
+    counts = campaign_counts(db, campaigns)
+    return respond([_summary(db, c, counts[c.id]) for c in campaigns])
 
 
 @bp.get("/approval")
@@ -180,5 +185,7 @@ def approval():
               .filter(Campaign.status == CampaignStatus.draft)
               .order_by(Campaign.start_date.desc())
               .all())
-    return respond([_summary(c) for c in drafts
-                    if wiki_rights.can_approve_campaign(user, c)[0]])
+    visible = [c for c in drafts
+               if wiki_rights.can_approve_campaign(user, c)[0]]
+    counts = campaign_counts(db, visible)
+    return respond([_summary(db, c, counts[c.id]) for c in visible])

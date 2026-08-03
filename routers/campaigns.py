@@ -11,6 +11,7 @@ join                 any logged-in user (both jury and self modes)
 leaderboard          public unless show_leaderboard is off
 """
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, request
 from sqlalchemy import func
@@ -40,6 +41,7 @@ from domain.models import (
 )
 from routers.common import (
     audit,
+    campaign_counts,
     campaign_detail_out,
     campaign_summary,
     can_see_campaign,
@@ -89,8 +91,9 @@ def site_stats():
 def list_campaigns():
     db, user = get_db(), get_current_user()
     campaigns = db.query(Campaign).order_by(Campaign.start_date.desc()).all()
-    return respond([campaign_summary(c) for c in campaigns
-                    if can_see_campaign(db, c, user)])
+    visible = [c for c in campaigns if can_see_campaign(db, c, user)]
+    counts = campaign_counts(db, visible)
+    return respond([campaign_summary(db, c, counts[c.id]) for c in visible])
 
 
 def _validated_settings(payload: CampaignIn) -> dict:
@@ -564,32 +567,41 @@ def participant_details(slug: str, user_id: int):
     settings = campaign.effective_settings
     subs = [s for s in load_submissions(db, campaign.id)
             if s.user_id == user_id]
+
+    def fetch_details(kind: SubmissionKind, wiki_domain: str, title: str,
+                      metrics) -> tuple[dict | None, bool]:
+        try:
+            if kind == SubmissionKind.article:
+                return mediawiki.fetch_article_details(wiki_domain, title), False
+            if kind == SubmissionKind.wikidata_item:
+                return mediawiki.fetch_wikidata_details(title), False
+            if kind == SubmissionKind.commons_file:
+                return mediawiki.fetch_commons_details(title), False
+            # Bulk kinds: the stored activity counts are the details.
+            return metrics, False
+        except Exception:
+            return None, True
+
+    # Each article/item costs 1–2 wiki round-trips; fetched concurrently
+    # rather than serially, so the popup arrives in roughly one fetch's
+    # time instead of submissions × round-trips. Only plain values cross
+    # the thread boundary — no ORM objects, no db session.
+    args = [(s.kind, s.wiki_domain, s.title, s.metrics) for s in subs]
+    with ThreadPoolExecutor(max_workers=min(8, len(subs) or 1)) as pool:
+        fetched = list(pool.map(lambda a: fetch_details(*a), args))
+
     out = []
-    for sub in subs:
+    for sub, (details, failed) in zip(subs, fetched):
         bd = compute_breakdown(sub, campaign.rules,
                                suggested_titles(campaign, sub.kind),
                                campaign.scoring_mode, settings)
-        entry = {
+        out.append({
             "id": sub.id, "kind": sub.kind, "title": sub.title,
             "url": sub.url, "wiki_domain": sub.wiki_domain,
             "status": sub.status, "points": bd.total,
-            "submitted_at": sub.submitted_at, "details": None,
-            "fetch_failed": False,
-        }
-        try:
-            if sub.kind == SubmissionKind.article:
-                entry["details"] = mediawiki.fetch_article_details(
-                    sub.wiki_domain, sub.title)
-            elif sub.kind == SubmissionKind.wikidata_item:
-                entry["details"] = mediawiki.fetch_wikidata_details(sub.title)
-            elif sub.kind == SubmissionKind.commons_file:
-                entry["details"] = mediawiki.fetch_commons_details(sub.title)
-            else:
-                # Bulk kinds: the stored activity counts are the details.
-                entry["details"] = sub.metrics
-        except Exception:
-            entry["fetch_failed"] = True
-        out.append(entry)
+            "submitted_at": sub.submitted_at, "details": details,
+            "fetch_failed": failed,
+        })
     return respond(out)
 
 
@@ -639,5 +651,5 @@ def campaign_stats(slug: str):
         by_language=dict(by_language),
         timeline=[{"date": d, "submissions": n}
                   for d, n in sorted(timeline.items())],
-        top_contributors=compute_leaderboard(db, campaign)[:10],
+        top_contributors=compute_leaderboard(db, campaign, subs)[:10],
     ))

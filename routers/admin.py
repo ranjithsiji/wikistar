@@ -8,7 +8,8 @@ from core.db import get_db
 from core.webutil import HTTPException, jsonable, respond
 from domain.models import (AuditLog, Campaign, CampaignStatus, Claim, Review,
                            Submission, SubmissionKind, User)
-from routers.common import audit, campaign_summary, submission_out
+from routers.common import (audit, campaign_counts, campaign_summary,
+                            submission_out)
 
 bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -23,9 +24,10 @@ def campaigns():
     """Every campaign regardless of status, for the admin editathon list."""
     db = get_db()
     rows = db.query(Campaign).order_by(Campaign.start_date.desc()).all()
+    counts = campaign_counts(db, rows)
     out = []
     for c in rows:
-        summary = jsonable(campaign_summary(c))
+        summary = jsonable(campaign_summary(db, c, counts[c.id]))
         summary["created_by_username"] = c.creator.username if c.creator else None
         out.append(summary)
     return respond(out)

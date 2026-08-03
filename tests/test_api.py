@@ -1166,8 +1166,8 @@ def test_wikidata_bulk_submission(client, monkeypatch):
 def test_suggested_item_bonus_needs_5_real_edits_end_to_end(client, monkeypatch):
     activity = {"Q500": {"statements": 2, "terms": 1}}  # 3 total, below 5
     monkeypatch.setattr(
-        mediawiki, "fetch_wikidata_user_activity",
-        lambda username, start, end, max_edits=None: activity)
+        mediawiki, "fetch_item_user_edits",
+        lambda qid, username, start, end: activity[qid])
 
     login("Alice")
     slug = client.post("/api/campaigns", json=make_campaign_payload(
@@ -1201,9 +1201,8 @@ def test_wikidata_item_with_zero_byte_delta_but_real_edits_is_accepted(client, m
     # size -- bytes_added alone must not be the only accepted evidence of
     # a real contribution for wikidata_item submissions.
     monkeypatch.setattr(
-        mediawiki, "fetch_wikidata_user_activity",
-        lambda username, start, end, max_edits=None: {
-            "Q501": {"statements": 1, "terms": 0}})
+        mediawiki, "fetch_item_user_edits",
+        lambda qid, username, start, end: {"statements": 1, "terms": 0})
 
     login("Alice")
     slug = client.post("/api/campaigns", json=make_campaign_payload(

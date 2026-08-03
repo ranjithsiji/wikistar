@@ -1,5 +1,6 @@
 """Helpers shared by the routers: lookups, serializers, audit logging."""
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from core.webutil import HTTPException
@@ -9,6 +10,7 @@ from domain.models import (
     Campaign,
     CampaignStatus,
     MemberRole,
+    Review,
     Submission,
     SubmissionKind,
     User,
@@ -97,18 +99,43 @@ def submission_out(campaign: Campaign, sub: Submission,
     return out
 
 
-def campaign_counts(campaign: Campaign) -> dict:
-    subs = campaign.submissions
-    return dict(
-        submission_count=len(subs),
-        participant_count=len({s.user_id for s in subs}),
-        review_count=sum(len(s.reviews) for s in subs),
-    )
+def campaign_counts(db: Session, campaigns: list[Campaign]) -> dict[int, dict]:
+    """Submission / participant / review counts for many campaigns at
+    once, in two grouped aggregate queries. Counting through the ORM
+    relationships instead would hydrate every submission row and then
+    lazy-load each submission's reviews — campaigns × (1 + submissions)
+    queries on a campaign list page."""
+    counts = {c.id: dict(submission_count=0, participant_count=0,
+                         review_count=0)
+              for c in campaigns}
+    if not counts:
+        return counts
+    ids = list(counts)
+    rows = (db.query(Submission.campaign_id,
+                     func.count(Submission.id),
+                     func.count(func.distinct(Submission.user_id)))
+            .filter(Submission.campaign_id.in_(ids))
+            .group_by(Submission.campaign_id))
+    for cid, sub_count, user_count in rows:
+        counts[cid].update(submission_count=sub_count,
+                           participant_count=user_count)
+    rows = (db.query(Submission.campaign_id, func.count(Review.id))
+            .join(Review, Review.submission_id == Submission.id)
+            .filter(Submission.campaign_id.in_(ids))
+            .group_by(Submission.campaign_id))
+    for cid, review_count in rows:
+        counts[cid]["review_count"] = review_count
+    return counts
 
 
-def campaign_summary(campaign: Campaign) -> CampaignSummary:
+def campaign_summary(db: Session, campaign: Campaign,
+                     counts: dict | None = None) -> CampaignSummary:
+    """One campaign's summary card. For lists, precompute `counts` for
+    all campaigns with campaign_counts() and pass each campaign's entry."""
     out = CampaignSummary.model_validate(campaign)
-    for key, value in campaign_counts(campaign).items():
+    if counts is None:
+        counts = campaign_counts(db, [campaign])[campaign.id]
+    for key, value in counts.items():
         setattr(out, key, value)
     return out
 
@@ -118,7 +145,7 @@ def campaign_detail_out(db: Session, campaign: Campaign,
     from auth import campaign_roles  # local import to avoid cycle at startup
 
     out = CampaignDetail.model_validate(campaign)
-    for key, value in campaign_counts(campaign).items():
+    for key, value in campaign_counts(db, [campaign])[campaign.id].items():
         setattr(out, key, value)
     out.settings = campaign.effective_settings
     out.created_by_username = campaign.creator.username if campaign.creator else None
@@ -154,10 +181,17 @@ def can_see_campaign(db: Session, campaign: Campaign, user: User | None) -> bool
     return False
 
 
-def compute_leaderboard(db: Session, campaign: Campaign) -> list[LeaderboardRow]:
+def compute_leaderboard(db: Session, campaign: Campaign,
+                        subs: list[Submission] | None = None
+                        ) -> list[LeaderboardRow]:
+    """Pass `subs` when the caller already holds the campaign's loaded
+    submissions (e.g. the stats endpoint) — they are the heaviest thing
+    this loads, and reloading them doubled that endpoint's DB work."""
     settings = campaign.effective_settings
     totals: dict[int, dict] = {}
-    for sub in load_submissions(db, campaign.id):
+    if subs is None:
+        subs = load_submissions(db, campaign.id)
+    for sub in subs:
         if sub.status.value == "rejected":
             continue
         bd = compute_breakdown(sub, campaign.rules,

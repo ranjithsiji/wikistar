@@ -5,7 +5,9 @@ Used to verify submissions instead of trusting user input:
   * how many bytes the participant added during the campaign window
   * whether the participant created the page during the window
 """
+import os
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 
@@ -20,8 +22,21 @@ def api_url(domain: str) -> str:
     return f"https://{domain}/w/api.php"
 
 
-def _client() -> httpx.Client:
-    return httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+_pool: httpx.Client | None = None
+_pool_pid: int | None = None
+
+
+@contextmanager
+def _client():
+    """Yield the shared keep-alive client instead of opening a fresh one
+    (= a new TCP + TLS handshake) per fetch. Rebuilt per process: uwsgi
+    forks workers after import, and a socket must never be shared."""
+    global _pool, _pool_pid
+    if _pool is None or _pool_pid != os.getpid():
+        _pool = httpx.Client(headers={"User-Agent": USER_AGENT},
+                             timeout=TIMEOUT)
+        _pool_pid = os.getpid()
+    yield _pool
 
 
 def _iso(d: date, end: bool = False) -> str:
@@ -310,6 +325,43 @@ def fetch_wikidata_user_activity(username: str, start: date, end: date,
         elif _TERM_RE.match(comment):
             entry["terms"] += 1
     return {q: v for q, v in out.items() if v["statements"] or v["terms"]}
+
+
+def fetch_item_user_edits(qid: str, username: str, start: date,
+                          end: date) -> dict:
+    """Statement/term edit counts by one user on one Wikidata item:
+    {"statements": n, "terms": n}, classified from the auto-summaries.
+
+    Answers the same question as fetch_wikidata_user_activity()[qid],
+    but by filtering the item's own history by user (one call for
+    almost any item) instead of walking the user's whole contribution
+    history in the window — dozens of paginated calls for an active
+    editor, which made submitting/recalculating an item crawl."""
+    counts = {"statements": 0, "terms": 0}
+    params = {
+        "action": "query", "format": "json", "formatversion": 2,
+        "prop": "revisions", "titles": qid,
+        "rvuser": username, "rvprop": "comment",
+        "rvstart": _iso(start), "rvend": _iso(end, end=True),
+        "rvdir": "newer", "rvlimit": "max",
+    }
+    with _client() as client:
+        while True:
+            data = client.get(api_url("www.wikidata.org"),
+                              params=params).json()
+            pages = data.get("query", {}).get("pages", [])
+            revs = pages[0].get("revisions") if pages else None
+            for rev in revs or []:
+                comment = rev.get("comment", "")
+                if _STATEMENT_RE.match(comment):
+                    counts["statements"] += 1
+                elif _TERM_RE.match(comment):
+                    counts["terms"] += 1
+            cont = data.get("continue")
+            if not cont:
+                break
+            params.update(cont)
+    return counts
 
 
 def fetch_eligible_qids(qids: list[str], any_of: list[str]) -> set[str]:

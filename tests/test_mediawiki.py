@@ -238,3 +238,39 @@ def test_wikibase_items_keyed_by_the_title_asked_for(monkeypatch):
     assert result["usa"] == "Q30"
     assert result["United States"] == "Q30"
     assert "Nowhere" not in result
+
+
+def test_fetch_item_user_edits_classifies_and_filters(monkeypatch):
+    # One item's history filtered by user (rvuser): statement edits and
+    # term edits are classified by auto-summary, anything else ignored.
+    seen_params = {}
+    payload = {"query": {"pages": [{"title": "Q500", "revisions": [
+        {"comment": "/* wbsetclaim-create:2||1 */ [[Property:P31]]: [[Q5]]"},
+        {"comment": "/* wbsetlabel-add:1|ml */ label"},
+        {"comment": "/* wbsetdescription-set:1|en */ desc"},
+        {"comment": "reverted vandalism"},  # manual edit: neither bucket
+    ]}]}}
+
+    class FakeResponse:
+        def json(self):
+            return payload
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, url, params=None, **k):
+            seen_params.update(params or {})
+            return FakeResponse()
+
+    monkeypatch.setattr(mediawiki, "_client", FakeClient)
+    counts = mediawiki.fetch_item_user_edits(
+        "Q500", "Dana", date(2026, 1, 1), date(2026, 1, 31))
+
+    assert counts == {"statements": 1, "terms": 2}
+    # the request asks the item's own history for just this user's edits
+    assert seen_params["titles"] == "Q500"
+    assert seen_params["rvuser"] == "Dana"

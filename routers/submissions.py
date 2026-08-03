@@ -210,11 +210,11 @@ def _fetch_wikidata_item_metrics(sub: Submission, campaign: Campaign,
     suggested-list bonus's real-contribution gate (a title/QID match alone
     isn't a contribution — the submitter must have actually edited it)."""
     try:
-        activity = mediawiki.fetch_wikidata_user_activity(
-            username, campaign.start_date, campaign.end_date)
-        entry = (activity or {}).get(sub.title.upper(),
-                                     {"statements": 0, "terms": 0})
-        sub.metrics = {"statements": entry["statements"], "terms": entry["terms"]}
+        entry = mediawiki.fetch_item_user_edits(
+            sub.title.upper(), username,
+            campaign.start_date, campaign.end_date)
+        sub.metrics = {"statements": entry["statements"],
+                       "terms": entry["terms"]}
     except Exception:
         pass
 

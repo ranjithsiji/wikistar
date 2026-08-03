@@ -118,10 +118,17 @@ async function load () {
     ])
     campaign.value = campaignRes.data
     submissions.value = submissionsRes.data
-    // Overview stat tiles; best-effort, never blocks the page.
-    api.campaignStats(props.slug)
-      .then(r => { stats.value = r.data })
-      .catch(() => {})
+    // Overview stat tiles; best-effort, never blocks the page. One
+    // retry: a transient timeout otherwise leaves the tiles empty until
+    // the user reloads the whole page.
+    const loadStats = (retriesLeft) => {
+      api.campaignStats(props.slug)
+        .then(r => { stats.value = r.data })
+        .catch(() => {
+          if (retriesLeft > 0) setTimeout(() => loadStats(retriesLeft - 1), 4000)
+        })
+    }
+    loadStats(1)
     // Leaderboard preview on Overview; silent if private (403) or empty.
     api.leaderboard(props.slug)
       .then(r => { leaderboard.value = r.data })
