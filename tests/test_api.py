@@ -1661,3 +1661,50 @@ def test_json_responses_are_gzipped_only_when_accepted(client):
     # small bodies are not worth compressing
     health = client.get("/api/health", headers={"Accept-Encoding": "gzip"})
     assert health.headers.get("Content-Encoding") is None
+
+
+def test_admin_can_repair_wiki_domain_and_note(client):
+    """The admin edit tool fixes more than a typo: a multi-language entry
+    filed against the wrong project needs its wiki corrected, and the
+    metadata (including the connected Wikidata item, which decides the
+    suggested-list bonus) must follow the page it now points at."""
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Repair Contest",
+        settings={"multi_language": True})).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Stub", "kind": "article",
+                            "language": "ml"}).json
+    assert sub["wiki_domain"] == "ml.wikipedia.org"
+
+    login("Root", is_admin=True)
+    # move it to another project and fix the title in one edit
+    r = client.put(f"/api/admin/submissions/{sub['id']}",
+                   json={"title": "Kathakali", "wiki_domain": "ta.wikipedia.org"})
+    assert r.status_code == 200, r.text
+    assert r.json["wiki_domain"] == "ta.wikipedia.org"
+    assert r.json["title"] == "Kathakali"
+    # metadata refetched for the corrected page
+    assert r.json["bytes_added"] == 5000
+
+    # a malformed domain is refused rather than stored
+    assert client.put(f"/api/admin/submissions/{sub['id']}",
+                      json={"wiki_domain": "not a domain"}).status_code == 400
+
+    # omitted fields are left alone: setting only a note keeps the title
+    r = client.put(f"/api/admin/submissions/{sub['id']}",
+                   json={"moderation_note": "  title fixed by admin  "})
+    assert r.status_code == 200, r.text
+    assert r.json["title"] == "Kathakali"
+    assert r.json["wiki_domain"] == "ta.wikipedia.org"
+    assert r.json["moderation_note"] == "title fixed by admin"
+
+    # and an empty note clears it
+    r = client.put(f"/api/admin/submissions/{sub['id']}",
+                   json={"moderation_note": ""})
+    assert r.json["moderation_note"] is None

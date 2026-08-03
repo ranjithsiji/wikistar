@@ -1,4 +1,6 @@
 """Site administration: stats, audit log, user and submission control."""
+import re
+
 from flask import Blueprint, request
 from sqlalchemy import desc, func
 
@@ -124,32 +126,59 @@ def set_admin(user_id: int):
                     "is_admin": target.is_admin})
 
 
+_WIKI_DOMAIN_RE = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$")
+
+
 @bp.put("/submissions/<int:submission_id>")
 def edit_submission(submission_id: int):
-    """Admin repair tool: rename a submitted page (typo fixes, moved
-    articles). The wiki metadata is refetched for the new title."""
+    """Admin repair tool: fix a submitted page's title, the wiki it was
+    filed against, or its moderation note (typo fixes, moved articles, a
+    multi-language entry filed against the wrong project). Wiki metadata
+    is refetched for the corrected page, so points follow the repair.
+
+    Fields are optional; only the ones present in the body are changed.
+    """
     db, acting = get_db(), require_admin()
     sub = db.get(Submission, submission_id)
     if sub is None:
         raise HTTPException(404, "Submission not found")
     data = request.get_json(silent=True) or {}
-    title = str(data.get("title") or "").strip()
-    if not title:
-        raise HTTPException(400, "A title is required")
-    duplicate = (db.query(Submission)
-                 .filter_by(campaign_id=sub.campaign_id, user_id=sub.user_id,
-                            wiki_domain=sub.wiki_domain, title=title)
-                 .filter(Submission.id != sub.id).first())
-    if duplicate:
-        raise HTTPException(409, "This participant already submitted "
-                                 "that title")
-    old_title = sub.title
+
+    old_title, old_domain = sub.title, sub.wiki_domain
+    title = old_title
+    if "title" in data:
+        title = str(data.get("title") or "").strip()
+        if not title:
+            raise HTTPException(400, "A title is required")
+    domain = old_domain
+    if "wiki_domain" in data:
+        domain = str(data.get("wiki_domain") or "").strip().lower()
+        if not _WIKI_DOMAIN_RE.match(domain):
+            raise HTTPException(
+                400, "The wiki must be a domain like ml.wikipedia.org")
+
+    if (title, domain) != (old_title, old_domain):
+        duplicate = (db.query(Submission)
+                     .filter_by(campaign_id=sub.campaign_id,
+                                user_id=sub.user_id,
+                                wiki_domain=domain, title=title)
+                     .filter(Submission.id != sub.id).first())
+        if duplicate:
+            raise HTTPException(409, "This participant already submitted "
+                                     "that title")
     sub.title = title
-    if sub.kind in (SubmissionKind.article, SubmissionKind.wikidata_item,
-                    SubmissionKind.commons_file):
+    sub.wiki_domain = domain
+    if "moderation_note" in data:
+        note = str(data.get("moderation_note") or "").strip()
+        sub.moderation_note = note or None
+
+    if ((title, domain) != (old_title, old_domain)
+            and sub.kind in (SubmissionKind.article,
+                             SubmissionKind.wikidata_item,
+                             SubmissionKind.commons_file)):
         try:
             meta = mediawiki.fetch_page_metadata(
-                sub.wiki_domain, title, sub.user.username,
+                domain, title, sub.user.username,
                 sub.campaign.start_date, sub.campaign.end_date)
             if meta.exists:
                 sub.page_id = meta.page_id
@@ -158,10 +187,14 @@ def edit_submission(submission_id: int):
                 sub.base_rev_id = meta.base_rev_id
                 sub.bytes_added = meta.bytes_added
                 sub.is_new_page = meta.is_new_page
+                # The connected item decides the suggested-list bonus, so
+                # it has to follow the page the submission now points at.
+                sub.wikidata_qid = meta.wikidata_qid
         except Exception:
             pass
     audit(db, acting, "edit_submission", "submission", sub.id,
-          {"campaign": sub.campaign.slug, "from": old_title, "to": title})
+          {"campaign": sub.campaign.slug, "from": old_title, "to": title,
+           "from_wiki": old_domain, "to_wiki": domain})
     db.commit()
     db.refresh(sub)
     return respond(submission_out(sub.campaign, sub))
