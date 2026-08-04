@@ -159,7 +159,9 @@ def _fetch_bulk_metrics(sub: Submission, campaign: Campaign,
     settings = campaign.effective_settings
     try:
         if sub.kind == SubmissionKind.wikidata_edits:
-            cap = int(settings.get("max_wikidata_edits_auto", 50) or 0)
+            # effective_settings already merges the registry defaults, so a
+            # literal fallback here would only ever disagree with them.
+            cap = int(settings.get("max_wikidata_edits_auto") or 0)
             activity = mediawiki.fetch_wikidata_user_activity(
                 username, campaign.start_date, campaign.end_date,
                 max_edits=cap or None)
@@ -671,28 +673,33 @@ def recalculate_all_bulk_wikidata(slug: str):
         campaign_id=campaign.id,
         kind=SubmissionKind.wikidata_edits).all()
     if not subs:
-        return respond({"refreshed": 0, "over_limit": 0, "failed": 0,
-                        "total": 0})
+        return respond({"refreshed": 0, "skipped": 0, "failed": 0,
+                        "total": 0, "cap": 0})
 
-    cap = int(campaign.effective_settings.get("max_wikidata_edits_auto", 50)
-              or 0)
+    # The sweep walks every participant inside one request, so it uses the
+    # lower cap: a heavy editor costs ~1 s per 500 edits, and the whole
+    # campaign has to come back before the request times out. Recalculating
+    # one participant is not bounded that way and uses the higher cap.
+    settings = campaign.effective_settings
+    cap = int(settings.get("max_wikidata_edits_sweep") or 0)
     names = [s.user.username for s in subs]
-    with ThreadPoolExecutor(max_workers=min(8, len(names))) as pool:
+    with ThreadPoolExecutor(max_workers=min(16, len(names))) as pool:
         fetched = list(pool.map(
             lambda n: _wikidata_activity_for(n, campaign.start_date,
                                              campaign.end_date, cap), names))
 
     any_of = _eligibility_any_of(campaign)
-    refreshed = over_limit = failed = 0
+    refreshed = skipped = failed = 0
     for sub, (activity, error) in zip(subs, fetched):
         if error:
             failed += 1
             continue
-        if activity is None:                      # past the auto-scoring cap
-            sub.metrics = {"over_limit": True, "limit": cap}
-            over_limit += 1
-            refreshed += 1
-            sub.metadata_fetched_at = datetime.now(timezone.utc)
+        if activity is None:
+            # Past the sweep's cap. Left exactly as it was: overwriting good
+            # counts with {"over_limit": true} would destroy a score the
+            # higher individual cap can still compute. Recalculate this
+            # participant on their own row instead.
+            skipped += 1
             continue
         own = _individually_submitted_qids(db, campaign, sub.user_id)
         excluded = sorted(own & set(activity))
@@ -717,7 +724,7 @@ def recalculate_all_bulk_wikidata(slug: str):
 
     audit(db, user, "recalculate_bulk_all", "campaign", campaign.id,
           {"campaign": slug, "refreshed": refreshed,
-           "over_limit": over_limit, "failed": failed})
+           "skipped": skipped, "failed": failed})
     db.commit()
-    return respond({"refreshed": refreshed, "over_limit": over_limit,
-                    "failed": failed, "total": len(subs)})
+    return respond({"refreshed": refreshed, "skipped": skipped,
+                    "failed": failed, "total": len(subs), "cap": cap})

@@ -182,7 +182,11 @@ async function recalculateAll () {
     const r = await api.recalculateAllBulkWikidata(props.campaign.slug)
     const d = r.data || {}
     notice.value = `Recalculated ${d.refreshed || 0} of ${d.total || 0}` +
-      (d.over_limit ? `, ${d.over_limit} need manual scoring` : '') +
+      // Skipped rows keep their existing counts — say what to do about them.
+      (d.skipped
+        ? `, ${d.skipped} over ${d.cap} edits left unchanged (recalculate `
+          + 'those individually)'
+        : '') +
       (d.failed ? `, ${d.failed} failed` : '') + '.'
     emit('refresh')
   } catch (e) {

@@ -39,13 +39,23 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         label="Accept submissions after the end date",
         help="e.g. to register Good Article nominations decided later."),
     "max_wikidata_edits_auto": dict(
-        type="int", default=50, category="participation",
+        type="int", default=5000, category="participation",
         label="Max Wikidata edits for automatic scoring",
         help="Bulk Wikidata submissions by users with more edits than this "
-             "in the campaign period (e.g. QuickStatements/OpenRefine runs) "
-             "are not scored automatically — the coordinator reviews the "
-             "contributions and enters the points manually. 0 disables "
-             "the cap."),
+             "in the campaign period are not scored automatically — the "
+             "coordinator reviews the contributions and enters the points "
+             "manually. Only the user's Wikidata article-namespace edits are "
+             "walked, 500 per request, so this costs roughly a second per "
+             "500 edits. Applies when one participant is recalculated; a "
+             "campaign-wide sweep uses the lower cap below. 0 disables it."),
+    "max_wikidata_edits_sweep": dict(
+        type="int", default=500, category="participation",
+        label="Max Wikidata edits when recalculating everyone",
+        help="The same cap for the 'Recalculate all' sweep, which walks "
+             "every participant in one request and so has to stay bounded. "
+             "Participants above it are left untouched by the sweep rather "
+             "than marked unscorable — recalculate them individually, where "
+             "the higher cap applies. 0 disables it."),
     "max_commons_uploads_auto": dict(
         type="int", default=100, category="participation",
         label="Max Commons uploads for automatic scoring",

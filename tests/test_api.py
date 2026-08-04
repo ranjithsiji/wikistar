@@ -1830,7 +1830,8 @@ def test_recalculate_all_bulk_wikidata(client, monkeypatch):
     login("Alice")
     r = client.post(f"/api/campaigns/{slug}/bulk-wikidata/recalculate-all")
     assert r.status_code == 200, r.text
-    assert r.json == {"refreshed": 1, "over_limit": 0, "failed": 0, "total": 1}
+    assert r.json == {"refreshed": 1, "skipped": 0, "failed": 0,
+                      "total": 1, "cap": 500}
 
     subs = client.get(f"/api/campaigns/{slug}/submissions").json
     bulk = [s for s in subs if s["kind"] == "wikidata_edits"][0]
@@ -1865,3 +1866,51 @@ def test_bulk_submission_exposes_last_recalculated(client, monkeypatch):
     r = client.post(f"/api/submissions/{sub['id']}/recalculate")
     assert r.status_code == 200, r.text
     assert r.json["metadata_fetched_at"] >= first
+
+
+def test_sweep_skips_heavy_editors_without_losing_their_counts(client, monkeypatch):
+    # The sweep is bounded by the lower cap, but a participant over it must
+    # keep the counts an individual recalculation already computed --
+    # overwriting them with over_limit would destroy a real score.
+    calls = {}
+    def activity(username, start, end, max_edits=None):
+        calls[max_edits] = calls.get(max_edits, 0) + 1
+        # More edits than the sweep cap allows -> the fetcher bails out.
+        if max_edits is not None and max_edits <= 500:
+            return None
+        return {"Q900": {"statements": 20, "terms": 0}}
+    monkeypatch.setattr(mediawiki, "fetch_wikidata_user_activity", activity)
+    monkeypatch.setattr(mediawiki, "fetch_eligible_qids",
+                        lambda qids, any_of: set(qids))
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Heavy Editor Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # Submitting uses the individual cap (5000), so the counts come through.
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"kind": "wikidata_edits"}).json
+    assert sub["metrics"]["statements"] == 20
+    assert sub["points"] == 4                      # floor(20/5)
+
+    # The sweep hits the 500 cap for this user and leaves the row alone.
+    login("Alice")
+    r = client.post(f"/api/campaigns/{slug}/bulk-wikidata/recalculate-all")
+    assert r.status_code == 200, r.text
+    assert r.json["skipped"] == 1
+    assert r.json["refreshed"] == 0
+    assert r.json["cap"] == 500
+
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    bulk = [s for s in subs if s["kind"] == "wikidata_edits"][0]
+    assert bulk["metrics"]["statements"] == 20     # not clobbered
+    assert bulk["points"] == 4
+
+    # Recalculating that one participant uses the higher cap and works.
+    r = client.post(f"/api/submissions/{sub['id']}/recalculate")
+    assert r.status_code == 200
+    assert r.json["metrics"]["statements"] == 20
