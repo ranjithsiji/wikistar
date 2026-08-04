@@ -25,6 +25,10 @@ const campaign = ref(null)
 const submissions = ref([])
 const leaderboard = ref([])
 const stats = ref(null)
+// 'loading' until the stats call settles; 'failed' once the retry is also
+// exhausted. The Overview hides the tiles entirely on 'failed' rather than
+// leaving a row of em-dashes on the page.
+const statsState = ref('loading')
 const detailsUser = ref(null)   // leaderboard row whose popup is open
 const error = ref('')
 const notice = ref('')
@@ -123,9 +127,13 @@ async function load () {
     // the user reloads the whole page.
     const loadStats = (retriesLeft) => {
       api.campaignStats(props.slug)
-        .then(r => { stats.value = r.data })
+        .then(r => { stats.value = r.data; statsState.value = 'ready' })
         .catch(() => {
-          if (retriesLeft > 0) setTimeout(() => loadStats(retriesLeft - 1), 4000)
+          if (retriesLeft > 0) {
+            setTimeout(() => loadStats(retriesLeft - 1), 4000)
+          } else {
+            statsState.value = 'failed'
+          }
         })
     }
     loadStats(1)
@@ -400,7 +408,8 @@ const statusStyles = {
 
     <!-- OVERVIEW -->
     <CampaignOverviewTab v-if="tab === 'overview'"
-                        :campaign="campaign" :stats="stats" :leaderboard="leaderboard"
+                        :campaign="campaign" :stats="stats" :stats-state="statsState"
+                        :leaderboard="leaderboard"
                         @view-leaderboard="selectTab('leaderboard')"
                         @show-details="detailsUser = $event" />
 

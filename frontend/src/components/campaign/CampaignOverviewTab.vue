@@ -5,6 +5,8 @@ import { CdxButton, CdxTable } from '@wikimedia/codex'
 const props = defineProps({
   campaign: { type: Object, required: true },
   stats: { type: Object, default: null },
+  // 'loading' | 'ready' | 'failed' — see CampaignView.vue.
+  statsState: { type: String, default: 'ready' },
   leaderboard: { type: Array, required: true }
 })
 const emit = defineEmits(['view-leaderboard', 'show-details'])
@@ -41,14 +43,22 @@ const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
 
 <template>
   <div class="space-y-4">
-    <!-- headline statistics: left-aligned, bottom accent bar per tile -->
-    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+    <!-- Headline statistics: left-aligned, bottom accent bar per tile.
+         Skipped entirely when the stats request failed — a row of blank
+         tiles reads as "this campaign has no activity", which is wrong. -->
+    <div v-if="statsState !== 'failed'" class="grid grid-cols-2 sm:grid-cols-5 gap-3">
       <div v-for="t in overviewTiles" :key="t.label" class="card overflow-hidden">
         <div class="p-4">
           <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             {{ t.label }}
           </div>
-          <div class="text-3xl font-extrabold tabular-nums mt-1" :class="tileClasses[t.color].text">
+          <!-- pulsing bar stands in for the number until stats arrive -->
+          <div v-if="statsState === 'loading'"
+               class="h-8 mt-1 flex items-center" aria-hidden="true">
+            <span class="block h-6 w-16 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+          </div>
+          <div v-else class="text-3xl font-extrabold tabular-nums mt-1"
+               :class="tileClasses[t.color].text">
             {{ t.value ?? '—' }}
           </div>
         </div>
@@ -98,16 +108,24 @@ const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
         </div>
       </div>
 
-      <!-- leaderboard preview: top 5, link through to the full tab -->
-      <div class="card p-4" v-if="leaderboardPreview.length">
+      <!-- Leaderboard preview: top 5, link through to the full tab. The card
+           keeps its column even with no rows — hiding it left a wide blank
+           gap beside the sidebar. -->
+      <div class="card p-4">
         <div class="flex items-center justify-between mb-2">
           <h4 class="font-semibold text-base">Leaderboard preview</h4>
-          <cdx-button action="progressive" weight="quiet" size="small"
+          <cdx-button v-if="leaderboardPreview.length"
+                      action="progressive" weight="quiet" size="small"
                       @click="emit('view-leaderboard')">
             View full leaderboard →
           </cdx-button>
         </div>
-        <cdx-table caption="Top participants" :hide-caption="true"
+        <p v-if="!leaderboardPreview.length"
+           class="text-sm text-neutral-500 dark:text-neutral-400 py-6 text-center">
+          No leaderboard to show yet.
+        </p>
+        <cdx-table v-if="leaderboardPreview.length"
+                   caption="Top participants" :hide-caption="true"
                    :columns="lbPreviewColumns" :data="lbPreviewRows">
           <template #item-rank="{ item }">
             <span v-if="item === 1"
