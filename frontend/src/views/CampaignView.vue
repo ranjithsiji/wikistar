@@ -24,6 +24,9 @@ const auth = useAuthStore()
 
 const campaign = ref(null)
 const submissions = ref([])
+// The submissions list arrives after the page has already painted, so the
+// tabs that render it have to say "loading" rather than "none yet".
+const submissionsLoading = ref(true)
 const leaderboard = ref([])
 const stats = ref(null)
 // 'loading' until the stats call settles; 'failed' once the retry is also
@@ -126,11 +129,17 @@ const canApprove = ref(false)
 
 async function load () {
   try {
-    const [campaignRes, submissionsRes] = await Promise.all([
-      api.getCampaign(props.slug), api.listSubmissions(props.slug)
-    ])
-    campaign.value = campaignRes.data
-    submissions.value = submissionsRes.data
+    // The header, tab bar and About panel need only the campaign itself,
+    // which is small and quick. Awaiting the submissions list alongside it
+    // held the whole page on a spinner until every submission had arrived
+    // — a thousand-row payload the landing view does not even render.
+    // Fetch both at once, but paint as soon as the campaign lands.
+    submissionsLoading.value = true
+    api.listSubmissions(props.slug)
+      .then(r => { submissions.value = r.data })
+      .catch(() => { submissions.value = [] })
+      .finally(() => { submissionsLoading.value = false })
+    campaign.value = (await api.getCampaign(props.slug)).data
     // Overview stat tiles; best-effort, never blocks the page. One
     // retry: a transient timeout otherwise leaves the tiles empty until
     // the user reloads the whole page.
@@ -436,6 +445,7 @@ const statusStyles = {
     <!-- SUBMISSIONS -->
     <CampaignSubmissionsTab v-if="tab === 'submissions'"
                         :campaign="campaign" :submissions="submissions"
+                        :loading="submissionsLoading"
                         :is-logged-in="auth.isLoggedIn" :current-username="auth.user?.username || ''"
                         :is-organizer="isOrganizer" :is-jury="isJury"
                         :self-mode="selfMode" :criteria="criteria"

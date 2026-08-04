@@ -9,6 +9,9 @@ import SubmissionPreview from '../SubmissionPreview.vue'
 const props = defineProps({
   campaign: { type: Object, required: true },
   submissions: { type: Array, required: true },
+  // True while the list is still in flight: the page now paints before it
+  // arrives, and an empty list mid-flight is not "no submissions yet".
+  loading: { type: Boolean, default: false },
   isLoggedIn: { type: Boolean, required: true },
   currentUsername: { type: String, default: '' },
   isOrganizer: { type: Boolean, required: true },
@@ -293,7 +296,11 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
       </span>
     </div>
 
-    <p v-if="!shownSubmissions.length" class="text-neutral-600 dark:text-neutral-300">
+    <p v-if="loading && !pageSubmissions.length"
+       class="text-neutral-600 dark:text-neutral-300">
+      Loading submissions…
+    </p>
+    <p v-else-if="!shownSubmissions.length" class="text-neutral-600 dark:text-neutral-300">
       {{ pageSubmissions.length ? 'No submissions match these filters.' : 'No submissions yet.' }}
     </p>
 
