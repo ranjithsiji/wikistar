@@ -186,16 +186,31 @@
      (+ .tab-underline-active) with no .tab-panel box. */
   .tab-underline-group {
     @apply flex items-stretch gap-1 border-b border-neutral-200 dark:border-neutral-800;
+    /* The bar still scrolls when the tabs outgrow the width, but the track
+       itself is hidden — an always-visible scrollbar sat in the empty space
+       to the right of the last tab and read as a stray control. */
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;       /* old Edge */
+  }
+  .tab-underline-group::-webkit-scrollbar {
+    display: none;                  /* Chrome/Safari */
   }
   .tab-underline {
-    @apply px-4 py-2.5 -mb-px border-b-2 border-transparent text-sm font-medium
+    @apply px-4 py-2.5 -mb-px rounded-t-lg border-b-2 border-transparent text-sm font-medium
            text-neutral-600 dark:text-neutral-300
-           hover:text-neutral-900 dark:hover:text-neutral-100
-           hover:border-neutral-300 dark:hover:border-neutral-700
+           hover:text-blue-700 dark:hover:text-blue-400
+           hover:bg-blue-50/70 dark:hover:bg-blue-950/40
+           hover:border-blue-300 dark:hover:border-blue-800
            cursor-pointer whitespace-nowrap transition-colors bg-transparent;
   }
+  /* The active tab keeps the red rule but also carries a soft red wash, so it
+     stays legible as "you are here" without relying on the underline alone. */
   .tab-underline-active {
-    @apply text-red-700 dark:text-red-500 border-red-700 dark:border-red-500 font-semibold;
+    @apply text-red-700 dark:text-red-500 border-red-700 dark:border-red-500 font-semibold
+           bg-red-50 dark:bg-red-950/40
+           hover:text-red-700 dark:hover:text-red-500
+           hover:bg-red-50 dark:hover:bg-red-950/40
+           hover:border-red-700 dark:hover:border-red-500;
   }
   /* Admin screens are visually distinct from the participant-facing app:
      an amber accent rail down the left plus an "Admin area" chip, so it
