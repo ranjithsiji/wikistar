@@ -7,7 +7,7 @@ schemas, and responses are serialized from pydantic models.
 """
 import gzip
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 
 from flask import Response, jsonify, request
@@ -48,7 +48,15 @@ def jsonable(obj):
         return obj.model_dump(mode="json")
     if isinstance(obj, Enum):
         return obj.value
-    if isinstance(obj, (date, datetime)):
+    if isinstance(obj, datetime):
+        # Timestamps are UTC but stored in a naive column, so isoformat()
+        # would emit no offset and the browser would read it as local time.
+        # Stamp the UTC these values already carry. (date has no time of
+        # day, so it is unaffected — hence the separate branch below.)
+        if obj.tzinfo is None:
+            obj = obj.replace(tzinfo=timezone.utc)
+        return obj.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    if isinstance(obj, date):
         return obj.isoformat()
     if isinstance(obj, dict):
         return {k: jsonable(v) for k, v in obj.items()}

@@ -1,7 +1,27 @@
 """Pydantic request/response schemas (API contract)."""
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (BaseModel, ConfigDict, Field, PlainSerializer,
+                      field_validator)
+
+
+def _as_utc(value: datetime) -> str:
+    """Serialize a timestamp so the browser cannot read it as local time.
+
+    Timestamps are stored UTC in a plain DateTime column, which MySQL hands
+    back naive. isoformat() then omits any offset, and `new Date(...)` in
+    the browser reads an offset-less string as *local* time — so a reader
+    in UTC+5:30 saw every timestamp shifted by 5.5 hours, and a row
+    recalculated a moment ago still read "6 h ago". Stamp the UTC the
+    values already carry.
+    """
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+UtcDatetime = Annotated[datetime, PlainSerializer(_as_utc, return_type=str)]
 
 from domain.models import (
     CampaignStatus,
@@ -160,7 +180,7 @@ class ReviewOut(ORMModel):
     total: float
     decision: ReviewDecision
     comment: str | None
-    updated_at: datetime
+    updated_at: UtcDatetime
 
 
 class ClaimIn(BaseModel):
@@ -197,10 +217,10 @@ class SubmissionOut(ORMModel):
     status: SubmissionStatus
     moderation_note: str | None = None
     points_override: float | None
-    submitted_at: datetime
+    submitted_at: UtcDatetime
     # When the wiki data behind this submission was last fetched — for bulk
     # submissions that is when its counts were last recalculated.
-    metadata_fetched_at: datetime | None = None
+    metadata_fetched_at: UtcDatetime | None = None
     reviews: list[ReviewOut] = []
     claims: list[ClaimOut] = []
     points: float = 0

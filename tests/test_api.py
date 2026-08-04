@@ -1914,3 +1914,37 @@ def test_sweep_skips_heavy_editors_without_losing_their_counts(client, monkeypat
     r = client.post(f"/api/submissions/{sub['id']}/recalculate")
     assert r.status_code == 200
     assert r.json["metrics"]["statements"] == 20
+
+
+def test_timestamps_are_serialized_as_utc(client, monkeypatch):
+    # Timestamps live in a naive DateTime column, so isoformat() emitted no
+    # offset and `new Date(...)` in the browser read them as local time --
+    # a row recalculated seconds ago still displayed as hours old to a
+    # reader east of UTC. Every timestamp must carry its zone.
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_user_activity",
+        lambda username, start, end, max_edits=None: {
+            "Q950": {"statements": 5, "terms": 0}})
+    monkeypatch.setattr(mediawiki, "fetch_eligible_qids",
+                        lambda qids, any_of: set(qids))
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="UTC Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"kind": "wikidata_edits"}).json
+    for field in ("submitted_at", "metadata_fetched_at"):
+        assert sub[field].endswith("Z"), (field, sub[field])
+
+    # ...and still after a round-trip through the database, which is where
+    # the tzinfo was being lost.
+    listed = client.get(f"/api/campaigns/{slug}/submissions").json[0]
+    assert listed["metadata_fetched_at"].endswith("Z")
+    recalculated = client.post(
+        f"/api/submissions/{sub['id']}/recalculate").json
+    assert recalculated["metadata_fetched_at"].endswith("Z")
