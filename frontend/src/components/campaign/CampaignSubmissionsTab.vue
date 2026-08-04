@@ -28,7 +28,17 @@ const needsListReview = (s) =>
   && !suggestedQids.value.has(s.title.toUpperCase())
 
 const onlyMine = ref(false)
-const wikidataOnly = ref(false)
+const filterKind = ref('')
+// Bulk kinds are included so a "Wikidata edits" submission can actually be
+// found in this list — the old "Wikidata only" checkbox matched
+// wikidata_item alone and hid them.
+const KIND_FILTERS = [
+  ['article', 'Articles'],
+  ['wikidata_item', 'Wikidata items'],
+  ['wikidata_edits', 'Wikidata bulk'],
+  ['commons_file', 'Commons files'],
+  ['commons_edits', 'Commons bulk']
+]
 const expanded = ref(null)
 // Article details (created/updated dates + editors, bytes, words) for the
 // expanded submission card — fetched from the wiki on demand, once per
@@ -120,10 +130,17 @@ const shownSubmissions = computed(() => {
   if (onlyMine.value) list = list.filter(s => s.user.username === props.currentUsername)
   if (filterUser.value) list = list.filter(s => s.user.username === filterUser.value)
   if (filterLang.value) list = list.filter(s => submissionLang(s) === filterLang.value)
-  if (wikidataOnly.value) list = list.filter(s => s.kind === 'wikidata_item')
+  if (filterKind.value) list = list.filter(s => s.kind === filterKind.value)
   const test = REVIEW_TESTS[filterReview.value]
   if (test) list = list.filter(s => test(s, props.currentUsername))
   return list
+})
+
+// Per-type counts, so an empty type is visibly empty rather than selectable.
+const kindCounts = computed(() => {
+  const counts = {}
+  for (const s of props.submissions) counts[s.kind] = (counts[s.kind] || 0) + 1
+  return counts
 })
 
 // Counts for the filter dropdown, so the size of each backlog is visible
@@ -188,8 +205,17 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
       <label v-if="isLoggedIn" class="flex items-center gap-2 text-sm cursor-pointer">
         <input type="checkbox" v-model="onlyMine" /> Show only my submissions
       </label>
-      <label class="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" v-model="wikidataOnly" /> Wikidata only
+      <!-- Type filter: "Wikidata only" used to be a checkbox matching just
+           wikidata_item, which left bulk submissions unfindable here. -->
+      <label class="flex items-center gap-2 text-sm">
+        Type
+        <select v-model="filterKind" class="input !w-52 !py-1">
+          <option value="">All types</option>
+          <option v-for="[key, label] in KIND_FILTERS" :key="key" :value="key"
+                  :disabled="!kindCounts[key]">
+            {{ label }} ({{ kindCounts[key] || 0 }})
+          </option>
+        </select>
       </label>
       <!-- coordinator filter: one participant's submissions -->
       <label v-if="isOrganizer && submitterNames.length"
@@ -219,7 +245,7 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
           </option>
         </select>
       </label>
-      <span v-if="filterUser || filterLang || wikidataOnly || filterReview"
+      <span v-if="filterUser || filterLang || filterKind || filterReview"
             class="text-xs text-neutral-600 dark:text-neutral-300">
         {{ shownSubmissions.length }} of {{ submissions.length }} submissions
       </span>

@@ -13,6 +13,7 @@ import CampaignRulesTab from '../components/campaign/CampaignRulesTab.vue'
 import CampaignSuggestedTab from '../components/campaign/CampaignSuggestedTab.vue'
 import CampaignSubmissionsTab from '../components/campaign/CampaignSubmissionsTab.vue'
 import CampaignLeaderboardTab from '../components/campaign/CampaignLeaderboardTab.vue'
+import CampaignBulkTab from '../components/campaign/CampaignBulkTab.vue'
 
 const props = defineProps({
   slug: { type: String, required: true },
@@ -109,6 +110,9 @@ const tabs = computed(() => {
   if (campaign.value?.suggested_articles.length || campaign.value?.suggested_items.length) {
     t.push(['suggested', 'Suggested articles'])
   }
+  // Only meaningful when the campaign actually scores Wikidata edits —
+  // same rule check the submit form and the backend use.
+  if (allowWikidataEdits.value) t.push(['bulk', 'Wikidata bulk'])
   t.push(['leaderboard', 'Leaderboard'], ['rules', 'Scoring rules'], ['stats', 'Statistics'])
   return t
 })
@@ -468,6 +472,14 @@ const statusStyles = {
                         :leaderboard="leaderboard" :current-username="auth.user?.username || ''"
                         :show-podium="campaign.settings.show_leaderboard_podium"
                         :campaign="campaign"
+                        @show-details="detailsUser = $event" />
+
+    <!-- WIKIDATA BULK -->
+    <CampaignBulkTab v-if="tab === 'bulk'"
+                        :campaign="campaign" :submissions="submissions"
+                        :is-organizer="isOrganizer" :is-logged-in="auth.isLoggedIn"
+                        :current-username="auth.user?.username || ''"
+                        @refresh="reloadSubmissions"
                         @show-details="detailsUser = $event" />
 
     <!-- STATISTICS -->

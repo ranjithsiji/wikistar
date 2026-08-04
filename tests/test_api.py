@@ -1798,3 +1798,41 @@ def test_admin_can_repair_wiki_domain_and_note(client):
     r = client.put(f"/api/admin/submissions/{sub['id']}",
                    json={"moderation_note": ""})
     assert r.json["moderation_note"] is None
+
+
+def test_recalculate_all_bulk_wikidata(client, monkeypatch):
+    counts = {"Dana": {"Q300": {"statements": 5, "terms": 0}}}
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_user_activity",
+        lambda username, start, end, max_edits=None: counts.get(username, {}))
+    monkeypatch.setattr(mediawiki, "fetch_eligible_qids",
+                        lambda qids, any_of: set(qids))
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Recalc All Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"kind": "wikidata_edits"}).json
+    assert sub["points"] == 1                      # floor(5/5)
+
+    # a participant may not sweep the campaign
+    assert client.post(
+        f"/api/campaigns/{slug}/bulk-wikidata/recalculate-all"
+    ).status_code == 403
+
+    # more edits land on the wiki, then the organizer recalculates everyone
+    counts["Dana"]["Q300"] = {"statements": 15, "terms": 0}
+    login("Alice")
+    r = client.post(f"/api/campaigns/{slug}/bulk-wikidata/recalculate-all")
+    assert r.status_code == 200, r.text
+    assert r.json == {"refreshed": 1, "over_limit": 0, "failed": 0, "total": 1}
+
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    bulk = [s for s in subs if s["kind"] == "wikidata_edits"][0]
+    assert bulk["metrics"]["statements"] == 15
+    assert bulk["points"] == 3                     # floor(15/5)

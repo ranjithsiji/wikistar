@@ -52,6 +52,10 @@ export default {
     } }),
   campaignStats: (slug) => http.get(`/api/campaigns/${slug}/stats`),
 
+  // Refresh every Wikidata bulk submission in a campaign (organizers).
+  recalculateAllBulkWikidata: (slug) =>
+    http.post(`/api/campaigns/${slug}/bulk-wikidata/recalculate-all`),
+
   // submissions
   listSubmissions: (slug) => http.get(`/api/campaigns/${slug}/submissions`),
   createSubmission: (slug, data) => http.post(`/api/campaigns/${slug}/submissions`, data),

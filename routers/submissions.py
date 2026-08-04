@@ -6,6 +6,7 @@ metadata is fetched from the MediaWiki API at submission time and can
 be refreshed; a failed fetch never blocks the submission.
 """
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 
 from flask import Blueprint
@@ -633,3 +634,90 @@ def moderate_submission(submission_id: int):
     db.commit()
     db.refresh(sub)
     return respond(submission_out(campaign, sub))
+
+
+def _wikidata_activity_for(username: str, campaign_start, campaign_end,
+                           cap: int) -> tuple[dict | None, bool]:
+    """One user's raw Wikidata activity. Plain arguments and a plain
+    return value only: this runs on a worker thread, which has neither the
+    request's DB session nor safe access to ORM objects."""
+    try:
+        activity = mediawiki.fetch_wikidata_user_activity(
+            username, campaign_start, campaign_end, max_edits=cap or None)
+        return activity, False
+    except Exception:
+        return None, True
+
+
+@bp.post("/campaigns/<slug>/bulk-wikidata/recalculate-all")
+def recalculate_all_bulk_wikidata(slug: str):
+    """Refresh every Wikidata bulk submission in the campaign.
+
+    Each participant's counts come from their own contribution history, so
+    there is no batch API to ask once — this is inherently a loop over
+    users. Walking them one after another takes a paginated round-trip
+    each and gets slow well before a campaign's fortieth participant, so
+    the wiki fetches run concurrently and only the results are applied
+    here, on the request thread that owns the session.
+
+    Only existing bulk submissions are refreshed; adding a missing one
+    stays a deliberate per-participant action.
+    """
+    db, user = get_db(), require_user()
+    campaign = get_campaign_or_404(db, slug)
+    require_organizer(db, campaign, user)
+
+    subs = db.query(Submission).filter_by(
+        campaign_id=campaign.id,
+        kind=SubmissionKind.wikidata_edits).all()
+    if not subs:
+        return respond({"refreshed": 0, "over_limit": 0, "failed": 0,
+                        "total": 0})
+
+    cap = int(campaign.effective_settings.get("max_wikidata_edits_auto", 50)
+              or 0)
+    names = [s.user.username for s in subs]
+    with ThreadPoolExecutor(max_workers=min(8, len(names))) as pool:
+        fetched = list(pool.map(
+            lambda n: _wikidata_activity_for(n, campaign.start_date,
+                                             campaign.end_date, cap), names))
+
+    any_of = _eligibility_any_of(campaign)
+    refreshed = over_limit = failed = 0
+    for sub, (activity, error) in zip(subs, fetched):
+        if error:
+            failed += 1
+            continue
+        if activity is None:                      # past the auto-scoring cap
+            sub.metrics = {"over_limit": True, "limit": cap}
+            over_limit += 1
+            refreshed += 1
+            sub.metadata_fetched_at = datetime.now(timezone.utc)
+            continue
+        own = _individually_submitted_qids(db, campaign, sub.user_id)
+        excluded = sorted(own & set(activity))
+        activity = {q: v for q, v in activity.items() if q not in own}
+        try:
+            eligible = (mediawiki.fetch_eligible_qids(sorted(activity), any_of)
+                        if activity else set())
+        except Exception:
+            failed += 1
+            continue
+        sub.metrics = {
+            "statements": sum(v["statements"] for q, v in activity.items()
+                              if q in eligible),
+            "terms": sum(v["terms"] for q, v in activity.items()
+                         if q in eligible),
+            "edited_qids": len(activity),
+            "eligible_qids": sorted(eligible),
+            "excluded_qids": excluded,
+        }
+        sub.metadata_fetched_at = datetime.now(timezone.utc)
+        refreshed += 1
+
+    audit(db, user, "recalculate_bulk_all", "campaign", campaign.id,
+          {"campaign": slug, "refreshed": refreshed,
+           "over_limit": over_limit, "failed": failed})
+    db.commit()
+    return respond({"refreshed": refreshed, "over_limit": over_limit,
+                    "failed": failed, "total": len(subs)})
