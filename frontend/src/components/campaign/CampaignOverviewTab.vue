@@ -51,7 +51,6 @@ const overviewTiles = computed(() => [
   { label: 'Participants', value: props.campaign?.participant_count, color: 'green',
     instant: true },
   { label: 'Total points', value: props.stats?.total_points, color: 'violet' },
-  { label: 'Bytes added', value: props.stats?.total_bytes_added?.toLocaleString(), color: 'red' },
   { label: 'Days left', value: daysLeftLabel.value, color: 'amber', instant: true }
 ])
 
@@ -75,7 +74,7 @@ const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
          Tiles marked `instant` read from the campaign itself and are
          always shown; the rest wait on /stats and are dropped entirely if
          it fails, since a row of blank tiles reads as "no activity". -->
-    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <template v-for="t in overviewTiles" :key="t.label">
         <div v-if="t.instant || statsState !== 'failed'" class="card overflow-hidden">
           <div class="p-4">
