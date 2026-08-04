@@ -135,12 +135,14 @@ async function load () {
     // held the whole page on a spinner until every submission had arrived
     // — a thousand-row payload the landing view does not even render.
     // Fetch both at once, but paint as soon as the campaign lands.
-    submissionsLoading.value = true
-    api.listSubmissions(props.slug)
-      .then(r => { submissions.value = r.data })
-      .catch(() => { submissions.value = [] })
-      .finally(() => { submissionsLoading.value = false })
-    campaign.value = (await api.getCampaign(props.slug)).data
+    // Everything the Overview draws is requested up front, before the
+    // first await. These used to be issued after the campaign had come
+    // back, which queued the small, visible ones (stats, leaderboard)
+    // behind both that round-trip and the thousand-row submissions list
+    // already occupying the browser's connections — so the stat tiles
+    // were the last thing to fill in despite being the cheapest to
+    // produce (~100 ms, ~3 KB on the wire).
+
     // Overview stat tiles; best-effort, never blocks the page. One
     // retry: a transient timeout otherwise leaves the tiles empty until
     // the user reloads the whole page.
@@ -164,6 +166,14 @@ async function load () {
       .then(r => { leaderboard.value = r.data })
       .catch(() => {})
       .finally(() => { leaderboardLoading.value = false })
+    // The heaviest response, and the one the landing view does not draw:
+    // requested last so it cannot delay the tiles above it.
+    submissionsLoading.value = true
+    api.listSubmissions(props.slug)
+      .then(r => { submissions.value = r.data })
+      .catch(() => { submissions.value = [] })
+      .finally(() => { submissionsLoading.value = false })
+    campaign.value = (await api.getCampaign(props.slug)).data
     if (!newLanguage.value) newLanguage.value = campaign.value.language
     // Fountain model: approval needs on-wiki admin rights (jury: sysop on
     // the target wiki; self: sysop on any Wikipedia), or site admin.

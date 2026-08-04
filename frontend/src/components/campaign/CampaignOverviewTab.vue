@@ -22,12 +22,37 @@ const tileClasses = {
   amber: { bar: 'bg-amber-500 dark:bg-amber-500', text: 'text-amber-700 dark:text-amber-400' },
   red: { bar: 'bg-red-700 dark:bg-red-600', text: 'text-red-700 dark:text-red-500' }
 }
+// Whole days from today to the end date, in the viewer's own timezone.
+// The campaign carries its dates, so this needs no request at all.
+const daysLeft = computed(() => {
+  const end = props.campaign?.end_date
+  if (!end) return null
+  const [y, m, d] = end.split('-').map(Number)
+  if (!y || !m || !d) return null
+  const endOfDay = new Date(y, m - 1, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((endOfDay - today) / 86400000)
+})
+const daysLeftLabel = computed(() => {
+  const n = daysLeft.value
+  if (n === null) return null
+  if (n < 0) return 'Ended'
+  if (n === 0) return 'Last day'
+  return String(n)
+})
+
+// Submissions and participants come with the campaign itself, so those
+// two tiles fill immediately; only the rest wait on /stats. They used to
+// sit blank alongside a header already displaying the same two numbers.
 const overviewTiles = computed(() => [
-  { label: 'Submissions', value: props.stats?.submissions, color: 'blue' },
-  { label: 'Participants', value: props.stats?.participants, color: 'green' },
+  { label: 'Submissions', value: props.campaign?.submission_count, color: 'blue',
+    instant: true },
+  { label: 'Participants', value: props.campaign?.participant_count, color: 'green',
+    instant: true },
   { label: 'Total points', value: props.stats?.total_points, color: 'violet' },
   { label: 'Bytes added', value: props.stats?.total_bytes_added?.toLocaleString(), color: 'red' },
-  { label: 'Languages', value: props.stats?.languages, color: 'amber' }
+  { label: 'Days left', value: daysLeftLabel.value, color: 'amber', instant: true }
 ])
 
 const leaderboardPreview = computed(() => props.leaderboard.slice(0, 5))
@@ -47,26 +72,29 @@ const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
 <template>
   <div class="space-y-4">
     <!-- Headline statistics: left-aligned, bottom accent bar per tile.
-         Skipped entirely when the stats request failed — a row of blank
-         tiles reads as "this campaign has no activity", which is wrong. -->
-    <div v-if="statsState !== 'failed'" class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-      <div v-for="t in overviewTiles" :key="t.label" class="card overflow-hidden">
-        <div class="p-4">
-          <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-            {{ t.label }}
+         Tiles marked `instant` read from the campaign itself and are
+         always shown; the rest wait on /stats and are dropped entirely if
+         it fails, since a row of blank tiles reads as "no activity". -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <template v-for="t in overviewTiles" :key="t.label">
+        <div v-if="t.instant || statsState !== 'failed'" class="card overflow-hidden">
+          <div class="p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+              {{ t.label }}
+            </div>
+            <!-- pulsing bar stands in for the number until stats arrive -->
+            <div v-if="!t.instant && statsState === 'loading'"
+                 class="h-8 mt-1 flex items-center" aria-hidden="true">
+              <span class="block h-6 w-16 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+            </div>
+            <div v-else class="text-3xl font-extrabold tabular-nums mt-1"
+                 :class="tileClasses[t.color].text">
+              {{ t.value ?? '—' }}
+            </div>
           </div>
-          <!-- pulsing bar stands in for the number until stats arrive -->
-          <div v-if="statsState === 'loading'"
-               class="h-8 mt-1 flex items-center" aria-hidden="true">
-            <span class="block h-6 w-16 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
-          </div>
-          <div v-else class="text-3xl font-extrabold tabular-nums mt-1"
-               :class="tileClasses[t.color].text">
-            {{ t.value ?? '—' }}
-          </div>
+          <div class="h-1" :class="tileClasses[t.color].bar"></div>
         </div>
-        <div class="h-1" :class="tileClasses[t.color].bar"></div>
-      </div>
+      </template>
     </div>
 
     <!-- sidebar (about + people) + leaderboard preview -->
