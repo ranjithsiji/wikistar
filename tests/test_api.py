@@ -1836,3 +1836,32 @@ def test_recalculate_all_bulk_wikidata(client, monkeypatch):
     bulk = [s for s in subs if s["kind"] == "wikidata_edits"][0]
     assert bulk["metrics"]["statements"] == 15
     assert bulk["points"] == 3                     # floor(15/5)
+
+
+def test_bulk_submission_exposes_last_recalculated(client, monkeypatch):
+    # The bulk tab shows when each participant's counts were last fetched,
+    # so metadata_fetched_at has to survive serialization.
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_user_activity",
+        lambda username, start, end, max_edits=None: {
+            "Q400": {"statements": 5, "terms": 0}})
+    monkeypatch.setattr(mediawiki, "fetch_eligible_qids",
+                        lambda qids, any_of: set(qids))
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Fetched At Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"kind": "wikidata_edits"}).json
+    assert sub["metadata_fetched_at"], sub
+
+    # a single-participant recalculate moves it forward
+    first = sub["metadata_fetched_at"]
+    r = client.post(f"/api/submissions/{sub['id']}/recalculate")
+    assert r.status_code == 200, r.text
+    assert r.json["metadata_fetched_at"] >= first

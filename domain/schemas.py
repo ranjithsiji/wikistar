@@ -198,6 +198,9 @@ class SubmissionOut(ORMModel):
     moderation_note: str | None = None
     points_override: float | None
     submitted_at: datetime
+    # When the wiki data behind this submission was last fetched — for bulk
+    # submissions that is when its counts were last recalculated.
+    metadata_fetched_at: datetime | None = None
     reviews: list[ReviewOut] = []
     claims: list[ClaimOut] = []
     points: float = 0
