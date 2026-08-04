@@ -345,11 +345,16 @@ async function add (username) {
                cap was raised, Recalculate usually scores it now — say that
                rather than "needs manual scoring", which sent organizers off
                to enter points by hand for work the tool can count. -->
+          <!-- Name the limit in the badge itself. A campaign saved before
+               the limit was raised keeps its old value as a stored
+               override, which silently beats the new default — seeing
+               "over 50" rather than "over 5000" is what identifies that. -->
           <span v-if="row.over_limit"
                 class="badge ml-2 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300"
-                :title="'Counted against a limit of ' + (row.limit || '?')
-                  + ' edits. Recalculate to score it against the current limit.'">
-            not counted — recalculate
+                title="Recalculate to score this against the current limit.
+ If the limit shown is lower than expected, this campaign stores its own
+ value for it — change it in the campaign settings.">
+            over {{ row.limit ?? '?' }} edits — not counted
           </span>
         </template>
         <template #item-points="{ item }">
