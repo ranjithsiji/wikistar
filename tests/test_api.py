@@ -1196,6 +1196,96 @@ def test_suggested_item_bonus_needs_5_real_edits_end_to_end(client, monkeypatch)
                for l in r.json["breakdown"])
 
 
+def test_item_edits_score_from_fetched_metrics(client, monkeypatch):
+    # Q6427374 in the wild: 7 statement edits and 2 term edits on one
+    # suggested item. The per_unit rules must score from the counts the
+    # engine already fetched, without the participant filing any claim.
+    monkeypatch.setattr(
+        mediawiki, "fetch_item_user_edits",
+        lambda qid, username, start, end: {"statements": 7, "terms": 2})
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Item Auto Score Contest",
+        suggested_items=["Q6427374"])).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"title": "Q6427374", "kind": "wikidata_item"}).json
+    labels = {l["label"]: l for l in sub["breakdown"]}
+    # 7 statements -> floor(7/5) = 1 pt; 2 terms -> floor(2/5) = 0 (no line)
+    assert labels["Statements added"]["points"] == 1
+    assert labels["Statements added"]["source"] == "auto"
+    assert "Labels / descriptions / aliases" not in labels
+    # plus the suggested-list bonus: 9 edits clears the 5-edit gate
+    assert labels["Item from the suggested list"]["points"] == 5
+    assert sub["points"] == 6
+
+
+def test_bulk_excludes_individually_submitted_items(client, monkeypatch):
+    # An item submitted on its own is scored there; the same edits must not
+    # be counted a second time in the user's bulk total.
+    monkeypatch.setattr(
+        mediawiki, "fetch_item_user_edits",
+        lambda qid, username, start, end: {"statements": 10, "terms": 0})
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_user_activity",
+        lambda username, start, end, max_edits=None: {
+            "Q700": {"statements": 10, "terms": 0},   # submitted individually
+            "Q800": {"statements": 5, "terms": 0},    # only in the bulk run
+        })
+    monkeypatch.setattr(mediawiki, "fetch_eligible_qids",
+                        lambda qids, any_of: set(qids))
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Bulk Dedup Contest",
+        suggested_items=["Q700"])).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    client.post(f"/api/campaigns/{slug}/submissions",
+                json={"title": "Q700", "kind": "wikidata_item"})
+    bulk = client.post(f"/api/campaigns/{slug}/submissions",
+                       json={"kind": "wikidata_edits"}).json
+    # Q700's 10 statements are excluded; only Q800's 5 remain -> 1 point
+    assert bulk["metrics"]["statements"] == 5
+    assert bulk["metrics"]["excluded_qids"] == ["Q700"]
+    assert bulk["points"] == 1
+
+
+def test_suggested_items_only_rejects_unlisted_item(client, monkeypatch):
+    monkeypatch.setattr(
+        mediawiki, "fetch_item_user_edits",
+        lambda qid, username, start, end: {"statements": 9, "terms": 0})
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Suggested Only Contest",
+        suggested_items=["Q900"],
+        settings={"allow_wikidata_items": True,
+                  "suggested_items_only": True})).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    # not on the suggested list -> rejected
+    r = client.post(f"/api/campaigns/{slug}/submissions",
+                    json={"title": "Q999", "kind": "wikidata_item"})
+    assert r.status_code == 400
+    assert "suggested list" in r.text
+    # the listed item is accepted
+    assert client.post(f"/api/campaigns/{slug}/submissions",
+                       json={"title": "Q900",
+                             "kind": "wikidata_item"}).status_code == 201
+
+
 def test_wikidata_item_with_zero_byte_delta_but_real_edits_is_accepted(client, monkeypatch):
     # Statement/label edits don't always change a Wikidata entity's page
     # size -- bytes_added alone must not be the only accepted evidence of

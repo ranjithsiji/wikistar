@@ -71,6 +71,13 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         type="bool", default=False, category="eligibility",
         label="Submitter must be the article's creator",
         help="Checked against the first revision of the page."),
+    "suggested_items_only": dict(
+        type="bool", default=False, category="eligibility",
+        label="Wikidata items must be from the suggested list",
+        help="Individual Wikidata item submissions are rejected unless the "
+             "item is on the campaign's suggested list. Bulk Wikidata "
+             "submissions are unaffected — those are filtered by the "
+             "topic eligibility rule instead."),
 
     # -- jury review ---------------------------------------------------------
     "min_reviews_per_submission": dict(

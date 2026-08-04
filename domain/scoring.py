@@ -96,6 +96,12 @@ RULE_KIND = {
     SubmissionKind.commons_edits: SubmissionKind.commons_file,
 }
 
+# A single wikidata_item submission stores the submitter's statement/term
+# edit counts on that one item (routers/submissions.py fetches them from the
+# item's history), in the same shape the bulk kind uses — so its per_unit
+# rules score from exactly the same metric mapping.
+ITEM_METRICS = BULK_KIND_METRICS[SubmissionKind.wikidata_edits]
+
 
 @dataclass
 class PointLine:
@@ -251,6 +257,29 @@ def compute_breakdown(
                 contributed = submission.is_new_page or edits >= MIN_SUGGESTED_ITEM_EDITS
             if on_list and contributed:
                 bd.add(PointLine(rule.id, rule.label, "auto", 1, float(rule.points)))
+            continue
+
+        # A single Wikidata item carries the same measured counts as a bulk
+        # wikidata_edits submission (fetched into Submission.metrics when the
+        # item is submitted or refreshed), so score its per_unit rules from
+        # those counts too. Without this the statement/term rules fell
+        # through to the claims path below and scored nothing unless the
+        # participant re-entered by hand what the engine had already
+        # measured — while the suggested-list gate above was reading the very
+        # same metrics.
+        if (rule.rule_type == RuleType.per_unit
+                and submission.kind == SubmissionKind.wikidata_item
+                and rule.metric in ITEM_METRICS
+                and (submission.metrics or {}).get(ITEM_METRICS[rule.metric])
+                is not None):
+            value = (submission.metrics or {})[ITEM_METRICS[rule.metric]]
+            units, pts = per_unit_points(rule, value)
+            if pts:
+                bd.add(PointLine(rule.id, rule.label, "auto", units, pts))
+            # Measured from the wiki history, so never also take a claim for
+            # the same rule. When the fetch has not run (or failed) there is
+            # no measurement to prefer, and the claims path below still
+            # applies — that is the only way such a submission can score.
             continue
 
         # Claims exist only in self/hybrid mode; never count them in jury

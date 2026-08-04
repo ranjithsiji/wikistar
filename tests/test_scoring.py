@@ -121,6 +121,30 @@ def test_suggested_item_created_with_10_statements_is_10_points():
     assert total_suggested(sub, {"q126"}) == 10  # 3 + 5 + 2
 
 
+def test_item_statement_and_term_edits_score_without_claims():
+    # Q6427374-style case: the submitter made 7 statement edits and 2
+    # term edits on one item, all counted from the wiki history into
+    # Submission.metrics. Those per_unit rules must score from the fetched
+    # metrics, exactly as they do for a bulk wikidata_edits submission —
+    # the participant should not have to also claim what the engine
+    # already measured.
+    sub = make_submission(kind=SubmissionKind.wikidata_item, title="Q6427374")
+    sub.metrics = {"statements": 7, "terms": 2}
+    # 7 statements -> floor(7/5) = 1 point; 2 terms -> floor(2/5) = 0.
+    assert total(sub) == 1
+    # ...and with the suggested-list bonus (9 edits clears the gate).
+    assert total_suggested(sub, {"q6427374"}) == 6
+
+
+def test_item_metrics_are_not_double_counted_with_claims():
+    # A claim on a rule the engine already scored from metrics must not
+    # add a second line for the same work.
+    sub = make_submission(kind=SubmissionKind.wikidata_item, title="Q555")
+    sub.metrics = {"statements": 10, "terms": 0}
+    claim(sub, "Statements added", quantity=10)
+    assert total(sub) == 2
+
+
 def test_suggested_item_bonus_needs_5_real_edits():
     # metrics (statements + terms) come from the live Wikidata fetch, not
     # claims -- this is the actual gate compute_breakdown enforces for a

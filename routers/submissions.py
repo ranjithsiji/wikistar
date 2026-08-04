@@ -31,15 +31,17 @@ from domain.models import (
     ScoringMode,
     Submission,
     SubmissionKind,
+    SubmissionStatus,
     User,
 )
-from domain.scoring import BULK_KIND_METRICS
+from domain.scoring import BULK_KIND_METRICS, normalize_title
 from routers.common import (
     audit,
     get_campaign_or_404,
     get_or_create_user,
     load_submissions,
     submission_out,
+    suggested_titles,
 )
 from domain.schemas import SubmissionIn, SubmissionModerationIn
 
@@ -131,8 +133,23 @@ def _depicts_targets(campaign: Campaign) -> list[str]:
     return []
 
 
+def _individually_submitted_qids(db: Session, campaign: Campaign,
+                                 user_id: int) -> set[str]:
+    """QIDs this user already submitted individually in this campaign.
+
+    Their edits are scored on those submissions, so counting them again in
+    the user's bulk total would pay twice for the same work."""
+    rows = db.query(Submission.title).filter(
+        Submission.campaign_id == campaign.id,
+        Submission.user_id == user_id,
+        Submission.kind == SubmissionKind.wikidata_item,
+        Submission.status != SubmissionStatus.rejected,
+    ).all()
+    return {(t or "").strip().upper() for (t,) in rows}
+
+
 def _fetch_bulk_metrics(sub: Submission, campaign: Campaign,
-                        username: str) -> None:
+                        username: str, db: Session | None = None) -> None:
     """Best-effort activity counts for a bulk submission. Users whose
     edit volume exceeds the campaign's auto-scoring cap (QuickStatements
     / OpenRefine runs, mass uploads) get {"over_limit": true} instead of
@@ -148,6 +165,12 @@ def _fetch_bulk_metrics(sub: Submission, campaign: Campaign,
             if activity is None:
                 sub.metrics = {"over_limit": True, "limit": cap}
             else:
+                # Items the user submitted on their own are scored there;
+                # drop them here so the same edits are not paid twice.
+                own = (_individually_submitted_qids(db, campaign, sub.user_id)
+                       if db is not None else set())
+                excluded = sorted(own & set(activity))
+                activity = {q: v for q, v in activity.items() if q not in own}
                 eligible = (mediawiki.fetch_eligible_qids(
                     sorted(activity), _eligibility_any_of(campaign))
                     if activity else set())
@@ -159,6 +182,7 @@ def _fetch_bulk_metrics(sub: Submission, campaign: Campaign,
                                  if q in eligible),
                     "edited_qids": len(activity),
                     "eligible_qids": sorted(eligible),
+                    "excluded_qids": excluded,
                 }
         else:
             cap = int(settings.get("max_commons_uploads_auto", 100) or 0)
@@ -246,6 +270,19 @@ def _check_eligibility(sub: Submission, campaign: Campaign, user: User,
             raise HTTPException(
                 400, "No edits by you were found on this page during the "
                      "campaign period")
+        # Optional: restrict individual Wikidata item submissions to the
+        # campaign's suggested list, so participants work the curated
+        # backlog rather than any item they happen to have edited. Bulk
+        # wikidata_edits submissions are unaffected — those are gated by
+        # the property/eligibility constraints instead.
+        if (settings.get("suggested_items_only")
+                and sub.kind == SubmissionKind.wikidata_item):
+            listed = suggested_titles(campaign, SubmissionKind.wikidata_item)
+            title = (sub.title or "").strip().upper()
+            if normalize_title(sub.title) not in listed and title not in listed:
+                raise HTTPException(
+                    400, "This campaign only accepts Wikidata items from its "
+                         "suggested list")
         if (settings.get("require_page_created_during_campaign")
                 and not sub.is_new_page):
             raise HTTPException(
@@ -376,7 +413,7 @@ def create_submission(slug: str):
         title=title, wiki_domain=wiki_domain,
     )
     if payload.kind in BULK_KINDS:
-        _fetch_bulk_metrics(sub, campaign, participant.username)
+        _fetch_bulk_metrics(sub, campaign, participant.username, db)
     else:
         meta = _fetch_metadata(sub, campaign, participant.username)
         _check_eligibility(sub, campaign, participant, settings, meta)
@@ -534,7 +571,7 @@ def refresh_metadata(submission_id: int):
     if sub.user_id != user.id:
         require_organizer(db, campaign, user)
     if sub.kind in BULK_KINDS:
-        _fetch_bulk_metrics(sub, campaign, sub.user.username)
+        _fetch_bulk_metrics(sub, campaign, sub.user.username, db)
     else:
         _fetch_metadata(sub, campaign, sub.user.username)
     db.commit()
@@ -557,7 +594,7 @@ def recalculate_points(submission_id: int):
     if not is_owner:
         require_organizer(db, campaign, user)
     if sub.kind in BULK_KINDS:
-        _fetch_bulk_metrics(sub, campaign, sub.user.username)
+        _fetch_bulk_metrics(sub, campaign, sub.user.username, db)
     else:
         _fetch_metadata(sub, campaign, sub.user.username)
     had_override = sub.points_override is not None
