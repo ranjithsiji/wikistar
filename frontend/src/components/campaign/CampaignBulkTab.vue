@@ -129,6 +129,20 @@ const recalcOne = ref(0)          // submission id in flight
 // is the individual Recalculate, which uses the higher cap.
 const stuckRows = computed(() => rows.value.filter(r => r.over_limit))
 
+// The two limits actually in force for this campaign. A campaign saved
+// before a limit's default changed keeps its old value as a stored
+// override, which silently beats the new default — so show the effective
+// numbers rather than letting an organizer assume the defaults apply.
+const autoCap = computed(() =>
+  props.campaign?.settings?.max_wikidata_edits_auto ?? null)
+const sweepCap = computed(() =>
+  props.campaign?.settings?.max_wikidata_edits_sweep ?? null)
+// The individual limit is meant to be the generous one; when it is not,
+// recalculating a heavy editor cannot succeed however often it is tried.
+const capsLookWrong = computed(() =>
+  autoCap.value !== null && sweepCap.value !== null
+  && autoCap.value <= sweepCap.value)
+
 async function recalculate (id, username) {
   recalcOne.value = id
   error.value = ''
@@ -328,6 +342,21 @@ async function add (username) {
         {{ stuckRows.length }} participant(s) have more edits than the
         campaign-wide limit and are skipped by "Recalculate all" — use
         Recalculate on each of those rows to score them individually.
+      </p>
+      <!-- The individual limit is supposed to be the generous one. When a
+           campaign carries an old stored value it can end up at or below
+           the sweep limit, and then no amount of recalculating helps. -->
+      <p v-if="isOrganizer && capsLookWrong"
+         class="text-xs rounded-lg border border-amber-300 dark:border-amber-800
+                bg-amber-50 dark:bg-amber-950/40 p-3 mb-2
+                text-amber-900 dark:text-amber-300">
+        This campaign limits a single recalculation to
+        <strong>{{ autoCap }}</strong> edits, which is not above the
+        campaign-wide limit of <strong>{{ sweepCap }}</strong> — so a
+        participant with more edits than that can never be scored
+        automatically. These are stored campaign settings and override the
+        defaults: raise "Max Wikidata edits for automatic scoring" under
+        Participation in the campaign settings.
       </p>
       <p v-if="recalcBusy" class="text-xs text-neutral-600 dark:text-neutral-300 mb-2">
         Fetching each participant's Wikidata history — this can take a
