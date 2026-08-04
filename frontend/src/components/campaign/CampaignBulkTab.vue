@@ -23,6 +23,14 @@ const busy = ref('')          // username currently being added, or 'mine'
 // makes the list correct immediately; the reload then reconciles it.
 const justAdded = ref(new Set())
 
+// Freshly recalculated rows, by submission id. The recalculate response
+// already carries the updated submission, but `refresh` is an event rather
+// than a promise, so the table would otherwise keep showing the old counts
+// and time until the parent's reload happened to land — and keep them for
+// good if it failed. Applying the response here makes the row correct
+// immediately; an entry is dropped once the reload confirms it.
+const updated = ref({})
+
 const bulkSubs = computed(() =>
   props.submissions.filter(s => s.kind === 'wikidata_edits'))
 
@@ -30,12 +38,28 @@ const bulkSubs = computed(() =>
 // suppressing it locally — otherwise a submission later deleted could
 // never reappear here.
 watch(bulkSubs, (subs) => {
-  if (!justAdded.value.size) return
-  const confirmed = new Set(subs.map(s => s.user.username))
-  const pending = [...justAdded.value].filter(n => !confirmed.has(n))
-  if (pending.length !== justAdded.value.size) {
-    justAdded.value = new Set(pending)
+  if (justAdded.value.size) {
+    const confirmed = new Set(subs.map(s => s.user.username))
+    const pending = [...justAdded.value].filter(n => !confirmed.has(n))
+    if (pending.length !== justAdded.value.size) {
+      justAdded.value = new Set(pending)
+    }
   }
+  // Drop a local copy once the reloaded row is at least as fresh, so the
+  // override cannot mask a later change made elsewhere.
+  const ids = Object.keys(updated.value)
+  if (!ids.length) return
+  const still = {}
+  for (const id of ids) {
+    const server = subs.find(s => String(s.id) === String(id))
+    // Gone from the list (withdrawn/deleted) — nothing left to override.
+    if (!server) continue
+    const local = updated.value[id]
+    if (!(server.metadata_fetched_at >= local.metadata_fetched_at)) {
+      still[id] = local
+    }
+  }
+  if (Object.keys(still).length !== ids.length) updated.value = still
 })
 
 // Everyone who submitted anything, minus everyone who already has a bulk
@@ -63,18 +87,22 @@ const columns = [
   { id: 'fetched', label: 'Last recalculated' },
   { id: 'actions', label: '' }
 ]
-const rows = computed(() => bulkSubs.value.map(s => ({
-  username: s.user.username,
-  statements: s.metrics?.over_limit ? '—' : (s.metrics?.statements ?? 0),
-  terms: s.metrics?.over_limit ? '—' : (s.metrics?.terms ?? 0),
-  excluded: s.metrics?.excluded_qids?.length ?? 0,
-  points: s.points,
-  fetched: s.metadata_fetched_at || '',
-  actions: s.id,
-  id: s.id,
-  over_limit: !!s.metrics?.over_limit,
-  user: s.user
-})))
+const rows = computed(() => bulkSubs.value.map(raw => {
+  // Prefer a just-recalculated copy over the list's stale one.
+  const s = updated.value[raw.id] || raw
+  return {
+    username: s.user.username,
+    statements: s.metrics?.over_limit ? '—' : (s.metrics?.statements ?? 0),
+    terms: s.metrics?.over_limit ? '—' : (s.metrics?.terms ?? 0),
+    excluded: s.metrics?.excluded_qids?.length ?? 0,
+    points: s.points,
+    fetched: s.metadata_fetched_at || '',
+    actions: s.id,
+    id: s.id,
+    over_limit: !!s.metrics?.over_limit,
+    user: s.user
+  }
+}))
 
 // "3 hours ago" reads faster than a timestamp when the question is really
 // "is this stale?"; the exact time stays in the title attribute.
@@ -100,13 +128,46 @@ async function recalculate (id, username) {
   error.value = ''
   notice.value = ''
   try {
-    await api.recalculateSubmission(id)
+    const r = await api.recalculateSubmission(id)
+    if (r?.data) updated.value = { ...updated.value, [id]: r.data }
     notice.value = `Recalculated ${username}'s Wikidata edits.`
     emit('refresh')
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
     recalcOne.value = 0
+  }
+}
+
+// Removing a bulk submission. The backend already allows it (an owner may
+// withdraw their own while the campaign runs; an organizer may delete
+// any) — but with these rows off the submissions list, this tab is now
+// the only place the action exists.
+const removing = ref(0)
+const campaignActive = computed(() => props.campaign?.status === 'active')
+const canRemove = (row) =>
+  props.isOrganizer
+  || (row.user.username === props.currentUsername && campaignActive.value)
+async function remove (row) {
+  const mine = row.user.username === props.currentUsername
+  const question = mine
+    ? 'Withdraw your Wikidata edits submission? Its points are removed.'
+    : `Delete ${row.user.username}'s Wikidata edits submission? `
+      + 'Its points are removed.'
+  if (!confirm(question)) return
+  removing.value = row.id
+  error.value = ''
+  notice.value = ''
+  try {
+    await api.deleteSubmission(row.id)
+    notice.value = mine
+      ? 'Your Wikidata edits submission was withdrawn.'
+      : `Removed ${row.user.username}'s Wikidata edits submission.`
+    emit('refresh')
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    removing.value = 0
   }
 }
 
@@ -256,12 +317,24 @@ async function add (username) {
                 :title="exactTime(item)">{{ timeAgo(item) }}</span>
         </template>
         <template #item-actions="{ row }">
-          <cdx-button v-if="isOrganizer" weight="quiet" size="small"
-                      :disabled="recalcOne === row.id || recalcBusy"
-                      title="Refetch just this participant's Wikidata history"
-                      @click="recalculate(row.id, row.username)">
-            {{ recalcOne === row.id ? 'Recalculating…' : 'Recalculate' }}
-          </cdx-button>
+          <div class="flex items-center justify-end gap-1 whitespace-nowrap">
+            <cdx-button v-if="isOrganizer" weight="quiet" size="small"
+                        :disabled="recalcOne === row.id || recalcBusy"
+                        title="Refetch just this participant's Wikidata history"
+                        @click="recalculate(row.id, row.username)">
+              {{ recalcOne === row.id ? 'Recalculating…' : 'Recalculate' }}
+            </cdx-button>
+            <cdx-button v-if="canRemove(row)" weight="quiet" action="destructive"
+                        size="small" :disabled="removing === row.id"
+                        :title="row.user.username === currentUsername
+                          ? 'Withdraw your Wikidata edits submission'
+                          : 'Delete this participant\'s bulk submission'"
+                        @click="remove(row)">
+              {{ removing === row.id
+                ? '…'
+                : (row.user.username === currentUsername ? 'Withdraw' : 'Delete') }}
+            </cdx-button>
+          </div>
         </template>
       </cdx-table>
     </div>
