@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { CdxButton } from '@wikimedia/codex'
 import api from '../../api'
 import ClaimEditor from '../ClaimEditor.vue'
 import ReviewForm from '../ReviewForm.vue'
@@ -136,6 +137,37 @@ const shownSubmissions = computed(() => {
   return list
 })
 
+// Rendering every match is what actually hurts on a large campaign: a
+// thousand-submission list is a thousand expandable cards in the DOM. The
+// filters, counts and dropdowns above deliberately still run over the whole
+// list — paginating the data instead of the rendering would make them
+// describe only the current page.
+const PAGE_SIZE = 50
+const page = ref(1)
+const pageCount = computed(() =>
+  Math.max(1, Math.ceil(shownSubmissions.value.length / PAGE_SIZE)))
+// Any filter change resets to the first page; without this, narrowing a
+// filter while on page 7 shows an empty list. Watching the filter values
+// rather than the computed list: the list is a fresh array on every
+// recompute, so watching it would also reset the page on an unrelated
+// refresh (accepting a submission, saving a review).
+watch([onlyMine, filterUser, filterLang, filterKind, filterReview],
+      () => { page.value = 1 })
+// A refresh that shrinks the list can strand the reader past the end.
+watch(pageCount, (n) => { if (page.value > n) page.value = n })
+const pagedSubmissions = computed(() => {
+  if (juryTable.value) return shownSubmissions.value   // grouped by user
+  const start = (page.value - 1) * PAGE_SIZE
+  return shownSubmissions.value.slice(start, start + PAGE_SIZE)
+})
+const pageFrom = computed(() =>
+  shownSubmissions.value.length ? (page.value - 1) * PAGE_SIZE + 1 : 0)
+const pageTo = computed(() =>
+  Math.min(page.value * PAGE_SIZE, shownSubmissions.value.length))
+function goToPage (n) {
+  page.value = Math.min(Math.max(1, n), pageCount.value)
+}
+
 // Per-type counts, so an empty type is visibly empty rather than selectable.
 const kindCounts = computed(() => {
   const counts = {}
@@ -164,7 +196,7 @@ watch(filterUser, (name) => {
   if (name && !isUserExpanded(name)) expandedUsers.value.push(name)
 })
 const submissionGroups = computed(() => {
-  if (!juryTable.value) return [{ user: null, subs: shownSubmissions.value }]
+  if (!juryTable.value) return [{ user: null, subs: pagedSubmissions.value }]
   const map = new Map()
   for (const s of shownSubmissions.value) {
     const g = map.get(s.user.username)
@@ -540,6 +572,25 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
         </div>
       </div>
     </div>
+      </div>
+    </div>
+
+    <!-- Pager: flat list only. Jury mode groups by participant, which is
+         already bounded by the number of people in the campaign. -->
+    <div v-if="!juryTable && pageCount > 1"
+         class="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3
+                border-t border-neutral-200 dark:border-neutral-800">
+      <span class="text-xs text-neutral-600 dark:text-neutral-300 tabular-nums">
+        Showing {{ pageFrom }}–{{ pageTo }} of {{ shownSubmissions.length }}
+      </span>
+      <div class="flex items-center gap-1">
+        <cdx-button weight="quiet" size="small" :disabled="page === 1"
+                    @click="goToPage(page - 1)">← Previous</cdx-button>
+        <span class="text-sm px-2 tabular-nums">
+          Page {{ page }} of {{ pageCount }}
+        </span>
+        <cdx-button weight="quiet" size="small" :disabled="page === pageCount"
+                    @click="goToPage(page + 1)">Next →</cdx-button>
       </div>
     </div>
 
