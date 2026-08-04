@@ -1,4 +1,5 @@
 """Helpers shared by the routers: lookups, serializers, audit logging."""
+import json
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -251,6 +252,23 @@ def _leaderboard_version(db: Session, campaign: Campaign) -> tuple:
         db.query(Submission.status, func.count(Submission.id))
         .filter(Submission.campaign_id == campaign.id)
         .group_by(Submission.status).order_by(Submission.status).all())
+    # Bulk submissions score from Submission.metrics, and recalculating one
+    # writes nothing else the aggregates above can see — so without this a
+    # participant whose counts had just been fixed kept their cached score
+    # (typically 0, from a run that hit the edit limit).
+    #
+    # The metrics themselves are the key, not metadata_fetched_at: that is a
+    # DATETIME, truncated to whole seconds, so two fetches inside the same
+    # second are indistinguishable — the same trap documented above for
+    # updated_at. Serialising the counts cannot collapse that way.
+    metrics_agg = tuple(
+        (sid, json.dumps(m, sort_keys=True, default=str) if m else "")
+        for sid, m in
+        db.query(Submission.id, Submission.metrics)
+        .filter(Submission.campaign_id == campaign.id,
+                Submission.kind.in_([SubmissionKind.wikidata_edits,
+                                     SubmissionKind.commons_edits]))
+        .order_by(Submission.id).all())
     review_agg = (
         db.query(func.count(Review.id),
                  func.coalesce(func.sum(Review.total), 0))
@@ -277,7 +295,7 @@ def _leaderboard_version(db: Session, campaign: Campaign) -> tuple:
     # every edit path reassigns a campaign column, and a rule/settings
     # write cascades to it through the ORM.
     return (campaign.updated_at, campaign.scoring_mode,
-            tuple(sub_agg), sub_status,
+            tuple(sub_agg), sub_status, metrics_agg,
             tuple(review_agg), review_decisions,
             tuple(claim_agg), claim_status)
 

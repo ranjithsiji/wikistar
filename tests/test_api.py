@@ -1948,3 +1948,39 @@ def test_timestamps_are_serialized_as_utc(client, monkeypatch):
     recalculated = client.post(
         f"/api/submissions/{sub['id']}/recalculate").json
     assert recalculated["metadata_fetched_at"].endswith("Z")
+
+
+def test_recalculated_bulk_metrics_invalidate_the_leaderboard(client, monkeypatch):
+    # The leaderboard is memoised against a key derived from the rows it
+    # scores from. Bulk submissions score from Submission.metrics, which a
+    # recalculation rewrites without touching anything else the key covered
+    # -- so a participant whose counts had just been fixed kept their stale
+    # cached score.
+    counts = {"statements": 0, "terms": 0}
+    monkeypatch.setattr(
+        mediawiki, "fetch_wikidata_user_activity",
+        lambda username, start, end, max_edits=None: {"Q999": dict(counts)})
+    monkeypatch.setattr(mediawiki, "fetch_eligible_qids",
+                        lambda qids, any_of: set(qids))
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Cache Invalidation Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"kind": "wikidata_edits"}).json
+    assert sub["points"] == 0
+    # prime the leaderboard cache with the zero score
+    assert client.get(f"/api/campaigns/{slug}/leaderboard").json[0]["points"] == 0
+
+    # the wiki now reports real activity; recalculating rewrites metrics only
+    counts["statements"] = 20
+    assert client.post(
+        f"/api/submissions/{sub['id']}/recalculate").json["points"] == 4
+
+    board = client.get(f"/api/campaigns/{slug}/leaderboard").json
+    assert board[0]["points"] == 4, "leaderboard served a stale cached score"
