@@ -38,16 +38,22 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
         type="bool", default=False, category="participation",
         label="Accept submissions after the end date",
         help="e.g. to register Good Article nominations decided later."),
-    "max_wikidata_edits_auto": dict(
+    # Deliberately a new key rather than a new default on the old one.
+    # The editor posts the effective settings back on every save, so a
+    # campaign saved while an earlier default was in force has that value
+    # frozen as an explicit override that beats any later default — which
+    # is exactly how campaigns ended up capped at 50, then 500, while the
+    # registry said otherwise. No campaign can carry a stored override for
+    # a name that has never existed, so this one starts clean everywhere.
+    "wikidata_edit_limit_single": dict(
         type="int", default=5000, category="participation",
-        label="Max Wikidata edits for automatic scoring",
-        help="Bulk Wikidata submissions by users with more edits than this "
-             "in the campaign period are not scored automatically — the "
-             "coordinator reviews the contributions and enters the points "
-             "manually. Only the user's Wikidata article-namespace edits are "
-             "walked, 500 per request, so this costs roughly a second per "
-             "500 edits. Applies when one participant is recalculated; a "
-             "campaign-wide sweep uses the lower cap below. 0 disables it."),
+        label="Max Wikidata edits when recalculating one participant",
+        help="Recalculating a single participant walks only their own "
+             "Wikidata article-namespace edits, 500 per request — roughly a "
+             "second per 500 edits — so this can be generous. A participant "
+             "with more edits than this in the campaign period is not scored "
+             "automatically and needs a manual points override. 0 removes "
+             "the limit."),
     "max_wikidata_edits_sweep": dict(
         type="int", default=500, category="participation",
         label="Max Wikidata edits when recalculating everyone",
@@ -55,7 +61,7 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
              "every participant in one request and so has to stay bounded. "
              "Participants above it are left untouched by the sweep rather "
              "than marked unscorable — recalculate them individually, where "
-             "the higher cap applies. 0 disables it."),
+             "the higher limit applies. 0 disables it."),
     "max_commons_uploads_auto": dict(
         type="int", default=100, category="participation",
         label="Max Commons uploads for automatic scoring",
@@ -167,15 +173,34 @@ SETTING_DEFS: dict[str, dict[str, Any]] = {
 }
 
 
+# Settings that existed once and must no longer take effect. Stored rows
+# for them are ignored on read and dropped on the next save, rather than
+# being rejected as unknown — see validate_overrides.
+RETIRED_SETTINGS = frozenset({
+    # Replaced by wikidata_edit_limit_single. Campaigns carry stale values
+    # for this from when its default was 50, then 500, and honouring those
+    # capped scoring far below what the tool can now count.
+    "max_wikidata_edits_auto",
+})
+
+
 def defaults() -> dict[str, Any]:
     return {key: spec["default"] for key, spec in SETTING_DEFS.items()}
 
 
 def validate_overrides(overrides: dict[str, Any]) -> dict[str, Any]:
     """Type-check incoming settings; unknown keys and wrong types are
-    rejected with ValueError. Returns only values differing from default."""
+    rejected with ValueError. Returns only values differing from default.
+
+    Retired keys are dropped rather than rejected: campaigns still carry
+    stored rows for them, and the editor posts the whole effective
+    settings dict back, so rejecting one would make an untouched campaign
+    impossible to save.
+    """
     clean: dict[str, Any] = {}
     for key, value in (overrides or {}).items():
+        if key in RETIRED_SETTINGS:
+            continue
         spec = SETTING_DEFS.get(key)
         if spec is None:
             raise ValueError(f"Unknown setting: {key}")

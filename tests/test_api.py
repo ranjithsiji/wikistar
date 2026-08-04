@@ -1357,7 +1357,7 @@ def test_bulk_over_limit_needs_manual_scoring(client, monkeypatch):
     login("Alice")
     slug = client.post("/api/campaigns", json=make_campaign_payload(
         client, name="QS Flood Contest",
-        settings={"max_wikidata_edits_auto": 75})).json["slug"]
+        settings={"wikidata_edit_limit_single": 75})).json["slug"]
     login("Root", is_admin=True)
     SYSOP_WIKIS["Root"] = {"*"}
     assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
@@ -1984,3 +1984,49 @@ def test_recalculated_bulk_metrics_invalidate_the_leaderboard(client, monkeypatc
 
     board = client.get(f"/api/campaigns/{slug}/leaderboard").json
     assert board[0]["points"] == 4, "leaderboard served a stale cached score"
+
+
+def test_retired_edit_limit_is_ignored(client, monkeypatch):
+    # Campaigns carry a stored max_wikidata_edits_auto from when its
+    # default was far lower, and the editor writes it back on every save.
+    # Honouring it capped a single recalculation at that stale value, so
+    # recalculating a heavy editor could never succeed. The replacement key
+    # is read instead, and the retired row must not resurrect the old cap.
+    from core.db import SessionLocal
+    from domain.models import Campaign, CampaignSetting
+    from domain.settings_registry import validate_overrides
+
+    seen = {}
+    def activity(username, start, end, max_edits=None):
+        seen["max_edits"] = max_edits
+        return {"Q1": {"statements": 25, "terms": 0}}
+    monkeypatch.setattr(mediawiki, "fetch_wikidata_user_activity", activity)
+    monkeypatch.setattr(mediawiki, "fetch_eligible_qids",
+                        lambda qids, any_of: set(qids))
+
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="Legacy Limit Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # plant the legacy row exactly as a long-lived campaign carries it
+    db = SessionLocal()
+    campaign = db.query(Campaign).filter_by(slug=slug).one()
+    db.add(CampaignSetting(campaign_id=campaign.id,
+                           key="max_wikidata_edits_auto", value=500))
+    db.commit()
+    assert "max_wikidata_edits_auto" not in campaign.effective_settings
+    assert campaign.effective_settings["wikidata_edit_limit_single"] == 5000
+    db.close()
+
+    login("Dana")
+    sub = client.post(f"/api/campaigns/{slug}/submissions",
+                      json={"kind": "wikidata_edits"}).json
+    assert seen["max_edits"] == 5000, "the retired 500 reached the fetcher"
+    assert sub["points"] == 5                    # floor(25/5)
+
+    # the retired key is dropped rather than rejected, so a campaign
+    # carrying one can still be saved
+    assert validate_overrides({"max_wikidata_edits_auto": 500}) == {}

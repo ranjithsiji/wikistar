@@ -159,9 +159,12 @@ def _fetch_bulk_metrics(sub: Submission, campaign: Campaign,
     settings = campaign.effective_settings
     try:
         if sub.kind == SubmissionKind.wikidata_edits:
-            # effective_settings already merges the registry defaults, so a
-            # literal fallback here would only ever disagree with them.
-            cap = int(settings.get("max_wikidata_edits_auto") or 0)
+            # Only wikidata_edit_limit_single is honoured here. The former
+            # key is deliberately not consulted as a fallback: campaigns
+            # carry stale overrides for it from when its default was lower,
+            # and reading those is what made recalculating a heavy editor
+            # fail however often it was retried.
+            cap = int(settings.get("wikidata_edit_limit_single") or 0)
             activity = mediawiki.fetch_wikidata_user_activity(
                 username, campaign.start_date, campaign.end_date,
                 max_edits=cap or None)

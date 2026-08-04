@@ -175,11 +175,19 @@ class Campaign(Base):
 
     @property
     def effective_settings(self) -> dict:
-        """Registry defaults merged with this campaign's overrides."""
-        from domain.settings_registry import defaults
+        """Registry defaults merged with this campaign's overrides.
+
+        Rows for retired settings are skipped: they linger in the database
+        from before the setting was replaced, and letting one through
+        would keep applying a limit the campaign can no longer see or
+        edit.
+        """
+        from domain.settings_registry import RETIRED_SETTINGS, defaults
 
         merged = defaults()
         for row in self.settings_rows:
+            if row.key in RETIRED_SETTINGS:
+                continue
             merged[row.key] = row.value
         return merged
 

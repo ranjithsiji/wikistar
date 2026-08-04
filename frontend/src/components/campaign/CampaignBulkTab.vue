@@ -134,7 +134,7 @@ const stuckRows = computed(() => rows.value.filter(r => r.over_limit))
 // override, which silently beats the new default — so show the effective
 // numbers rather than letting an organizer assume the defaults apply.
 const autoCap = computed(() =>
-  props.campaign?.settings?.max_wikidata_edits_auto ?? null)
+  props.campaign?.settings?.wikidata_edit_limit_single ?? null)
 const sweepCap = computed(() =>
   props.campaign?.settings?.max_wikidata_edits_sweep ?? null)
 // The individual limit is meant to be the generous one; when it is not,
