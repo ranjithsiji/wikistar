@@ -100,6 +100,7 @@ const rows = computed(() => bulkSubs.value.map(raw => {
     actions: s.id,
     id: s.id,
     over_limit: !!s.metrics?.over_limit,
+    limit: s.metrics?.limit ?? null,
     user: s.user
   }
 }))
@@ -123,17 +124,42 @@ const exactTime = (iso) => (iso ? new Date(iso).toLocaleString() : '')
 // not need to re-walk everyone's contribution history, which is the whole
 // cost of "Recalculate all".
 const recalcOne = ref(0)          // submission id in flight
+// Rows the sweep deliberately leaves alone: it runs against the lower
+// sweep cap, so a participant above it is skipped every time. Scoring them
+// is the individual Recalculate, which uses the higher cap.
+const stuckRows = computed(() => rows.value.filter(r => r.over_limit))
+
 async function recalculate (id, username) {
   recalcOne.value = id
   error.value = ''
   notice.value = ''
   try {
     const r = await api.recalculateSubmission(id)
-    if (r?.data) updated.value = { ...updated.value, [id]: r.data }
-    notice.value = `Recalculated ${username}'s Wikidata edits.`
+    const sub = r?.data
+    if (sub) updated.value = { ...updated.value, [id]: sub }
+    // Report what actually came back. "Recalculated." alone left the
+    // organizer to read the row and guess whether it had worked — the
+    // interesting outcomes are a score, a genuine zero, and still being
+    // over the cap, which all look similar at a glance.
+    const m = sub?.metrics || {}
+    if (m.over_limit) {
+      error.value = `${username} has more than ${m.limit} Wikidata edits in `
+        + 'the campaign window — too many to score automatically. Enter the '
+        + 'points manually with a points override.'
+    } else {
+      const st = m.statements ?? 0
+      const tm = m.terms ?? 0
+      const detail = `${st} statement${st === 1 ? '' : 's'}, `
+        + `${tm} label/description edit${tm === 1 ? '' : 's'}`
+      notice.value = (st || tm)
+        ? `${username}: ${sub.points} point${sub.points === 1 ? '' : 's'} `
+          + `from ${detail}.`
+        : `${username}: no countable Wikidata edits found in the campaign `
+          + 'window (0 points).'
+    }
     emit('refresh')
   } catch (e) {
-    error.value = errorMessage(e)
+    error.value = `Could not recalculate ${username}: ${errorMessage(e)}`
   } finally {
     recalcOne.value = 0
   }
@@ -294,6 +320,15 @@ async function add (username) {
           {{ recalcBusy ? 'Recalculating…' : 'Recalculate all' }}
         </cdx-button>
       </div>
+      <!-- "Recalculate all" runs against the lower sweep cap by design, so
+           it never touches these rows. Say so, rather than leaving an
+           organizer to re-run it and wonder why nothing changes. -->
+      <p v-if="isOrganizer && stuckRows.length"
+         class="text-xs text-amber-700 dark:text-amber-400 mb-2">
+        {{ stuckRows.length }} participant(s) have more edits than the
+        campaign-wide limit and are skipped by "Recalculate all" — use
+        Recalculate on each of those rows to score them individually.
+      </p>
       <p v-if="recalcBusy" class="text-xs text-neutral-600 dark:text-neutral-300 mb-2">
         Fetching each participant's Wikidata history — this can take a
         few seconds.
@@ -306,9 +341,15 @@ async function add (username) {
         <template #item-username="{ item, row }">
           <button type="button" class="font-medium text-link-700 dark:text-link-400 hover:underline"
                   @click="emit('show-details', row.user)">{{ item }}</button>
+          <!-- The row was last counted against a cap it exceeded. Since the
+               cap was raised, Recalculate usually scores it now — say that
+               rather than "needs manual scoring", which sent organizers off
+               to enter points by hand for work the tool can count. -->
           <span v-if="row.over_limit"
-                class="badge ml-2 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300">
-            needs manual scoring
+                class="badge ml-2 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                :title="'Counted against a limit of ' + (row.limit || '?')
+                  + ' edits. Recalculate to score it against the current limit.'">
+            not counted — recalculate
           </span>
         </template>
         <template #item-points="{ item }">
