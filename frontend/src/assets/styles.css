@@ -178,6 +178,25 @@
     @apply bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800
            rounded-xl rounded-tl-none;
   }
+  /* Underline variant, used for the campaign's own navigation: the tabs read
+     as plain nav text on the page background with a coloured rule under the
+     active one, and a single hairline running the full width beneath. Lighter
+     than the folder look, which suits a bar the visitor navigates rather than
+     a set of panels they fill in. Use .tab-underline-group + .tab-underline
+     (+ .tab-underline-active) with no .tab-panel box. */
+  .tab-underline-group {
+    @apply flex items-stretch gap-1 border-b border-neutral-200 dark:border-neutral-800;
+  }
+  .tab-underline {
+    @apply px-4 py-2.5 -mb-px border-b-2 border-transparent text-sm font-medium
+           text-neutral-600 dark:text-neutral-300
+           hover:text-neutral-900 dark:hover:text-neutral-100
+           hover:border-neutral-300 dark:hover:border-neutral-700
+           cursor-pointer whitespace-nowrap transition-colors bg-transparent;
+  }
+  .tab-underline-active {
+    @apply text-red-700 dark:text-red-500 border-red-700 dark:border-red-500 font-semibold;
+  }
   /* Admin screens are visually distinct from the participant-facing app:
      an amber accent rail down the left plus an "Admin area" chip, so it
      is never ambiguous that an action here is site-wide. The active tab

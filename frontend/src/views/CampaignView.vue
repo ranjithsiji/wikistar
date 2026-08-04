@@ -385,15 +385,19 @@ const statusStyles = {
     <AppMessage v-model="error" type="error" />
     <AppMessage v-model="notice" type="success" />
 
-    <div class="tab-group w-fit max-w-full overflow-x-auto">
-      <button v-for="[key, label] in tabs" :key="key" class="tab"
-              :class="{ 'tab-active': tab === key }"
+    <!-- Campaign navigation uses the lighter underline style: these are
+         places to go, not steps in a form. The bar spans the full width and
+         the content sits in a plain card beneath it, rather than the folder
+         tabs' notched panel. -->
+    <div class="tab-underline-group max-w-full overflow-x-auto">
+      <button v-for="[key, label] in tabs" :key="key" class="tab-underline"
+              :class="{ 'tab-underline-active': tab === key }"
               @click="selectTab(key)">
         {{ label }}
       </button>
     </div>
 
-    <div class="tab-panel p-4">
+    <div class="card p-4 mt-4">
     <!-- submit form: on the campaign home page and the submissions tab.
          The Overview tab gets a highlighted "Contribute" CTA card; the
          Submissions tab keeps the plain working-list styling. -->
