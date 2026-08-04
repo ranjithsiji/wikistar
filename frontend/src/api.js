@@ -30,6 +30,9 @@ export default {
   // site-wide public stats (homepage hero)
   siteStats: () => http.get('/api/stats'),
 
+  // deployed backend version, shown in the footer
+  health: () => http.get('/api/health'),
+
   // campaigns
   listCampaigns: () => http.get('/api/campaigns'),
   getCampaign: (slug) => http.get(`/api/campaigns/${slug}`),
