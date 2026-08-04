@@ -5,6 +5,8 @@ import UserAvatar from '../UserAvatar.vue'
 
 const props = defineProps({
   leaderboard: { type: Array, required: true },
+  // True while the standings are in flight — the page paints first.
+  loading: { type: Boolean, default: false },
   currentUsername: { type: String, default: '' },
   showPodium: { type: Boolean, default: true },
   // Needed to build each participant's on-wiki contributions link:
@@ -100,7 +102,20 @@ const leadMargin = computed(() => {
 
 <template>
   <div class="space-y-4">
-    <p v-if="!leaderboard.length" class="text-neutral-600 dark:text-neutral-300">No points yet.</p>
+    <!-- Loading placeholder: an empty list while the request is in flight
+         is not the same as a campaign with no points. -->
+    <div v-if="loading && !leaderboard.length" class="card p-4"
+         aria-busy="true" aria-label="Loading leaderboard">
+      <div v-for="n in 6" :key="n"
+           class="flex items-center gap-3 py-2.5 border-b border-neutral-100
+                  dark:border-neutral-800 last:border-0">
+        <span class="h-4 w-6 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+        <span class="h-4 flex-1 max-w-48 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+        <span class="h-4 w-12 ml-auto rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+        <span class="h-4 w-16 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+      </div>
+    </div>
+    <p v-else-if="!leaderboard.length" class="text-neutral-600 dark:text-neutral-300">No points yet.</p>
 
     <template v-else>
       <!-- podium: top 3, 1st raised and highlighted in the middle -->

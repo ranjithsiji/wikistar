@@ -5,6 +5,9 @@ import { CdxButton, CdxTable } from '@wikimedia/codex'
 const props = defineProps({
   campaign: { type: Object, required: true },
   stats: { type: Object, default: null },
+  // The preview paints before the leaderboard request lands, so an empty
+  // list mid-flight is not the same as "there is no leaderboard".
+  leaderboardLoading: { type: Boolean, default: false },
   // 'loading' | 'ready' | 'failed' — see CampaignView.vue.
   statsState: { type: String, default: 'ready' },
   leaderboard: { type: Array, required: true }
@@ -120,7 +123,21 @@ const lbPreviewRows = computed(() => leaderboardPreview.value.map(r => ({
             View full leaderboard →
           </cdx-button>
         </div>
-        <p v-if="!leaderboardPreview.length"
+        <!-- Placeholder rows rather than a message: the preview is a table,
+             so a table-shaped skeleton reads as "this is filling in". -->
+        <div v-if="leaderboardLoading && !leaderboardPreview.length"
+             class="py-2" aria-busy="true" aria-label="Loading leaderboard">
+          <div v-for="n in 5" :key="n"
+               class="flex items-center gap-3 py-2 border-b border-neutral-100
+                      dark:border-neutral-800 last:border-0">
+            <span class="h-4 w-6 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+            <span class="h-4 flex-1 max-w-40 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+            <span class="h-4 w-10 ml-auto rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+            <span class="h-4 w-14 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+            <span class="h-4 w-10 rounded animate-pulse bg-neutral-200 dark:bg-neutral-700"></span>
+          </div>
+        </div>
+        <p v-else-if="!leaderboardPreview.length"
            class="text-sm text-neutral-500 dark:text-neutral-400 py-6 text-center">
           No leaderboard to show yet.
         </p>

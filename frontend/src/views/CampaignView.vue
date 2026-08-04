@@ -28,6 +28,7 @@ const submissions = ref([])
 // tabs that render it have to say "loading" rather than "none yet".
 const submissionsLoading = ref(true)
 const leaderboard = ref([])
+const leaderboardLoading = ref(true)
 const stats = ref(null)
 // 'loading' until the stats call settles; 'failed' once the retry is also
 // exhausted. The Overview hides the tiles entirely on 'failed' rather than
@@ -156,9 +157,13 @@ async function load () {
     }
     loadStats(1)
     // Leaderboard preview on Overview; silent if private (403) or empty.
+    // It arrives after the page has painted, so the preview needs to know
+    // the difference between "still coming" and "there is none".
+    leaderboardLoading.value = true
     api.leaderboard(props.slug)
       .then(r => { leaderboard.value = r.data })
       .catch(() => {})
+      .finally(() => { leaderboardLoading.value = false })
     if (!newLanguage.value) newLanguage.value = campaign.value.language
     // Fountain model: approval needs on-wiki admin rights (jury: sysop on
     // the target wiki; self: sysop on any Wikipedia), or site admin.
@@ -174,10 +179,13 @@ async function load () {
   }
 }
 async function loadLeaderboard () {
+  leaderboardLoading.value = true
   try {
     leaderboard.value = (await api.leaderboard(props.slug)).data
   } catch (e) {
     error.value = errorMessage(e)
+  } finally {
+    leaderboardLoading.value = false
   }
 }
 // Submission-only actions (accept/reject/refresh/recalculate/withdraw/
@@ -432,6 +440,7 @@ const statusStyles = {
     <CampaignOverviewTab v-if="tab === 'overview'"
                         :campaign="campaign" :stats="stats" :stats-state="statsState"
                         :leaderboard="leaderboard"
+                        :leaderboard-loading="leaderboardLoading"
                         @view-leaderboard="selectTab('leaderboard')"
                         @show-details="detailsUser = $event" />
 
@@ -484,7 +493,8 @@ const statusStyles = {
 
     <!-- LEADERBOARD -->
     <CampaignLeaderboardTab v-if="tab === 'leaderboard'"
-                        :leaderboard="leaderboard" :current-username="auth.user?.username || ''"
+                        :leaderboard="leaderboard" :loading="leaderboardLoading"
+                        :current-username="auth.user?.username || ''"
                         :show-podium="campaign.settings.show_leaderboard_podium"
                         :campaign="campaign"
                         @show-details="detailsUser = $event" />

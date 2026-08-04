@@ -234,3 +234,23 @@
     @apply px-3 py-2 text-sm;
   }
 }
+
+/* Indeterminate progress: a segment sliding along its track, for work
+   whose completion cannot be measured — the bulk sweep answers only once
+   every participant is done, so there is no real percentage to show.
+   Outside @layer components: these are plain keyframes, not utilities. */
+@keyframes indeterminate-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.indeterminate-bar {
+  animation: indeterminate-slide 1.4s ease-in-out infinite;
+}
+/* Respect a reduced-motion preference: keep the bar visible, stop moving it. */
+@media (prefers-reduced-motion: reduce) {
+  .indeterminate-bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}

@@ -213,6 +213,9 @@ async function remove (row) {
 
 // Organizers: re-fetch every existing bulk submission's counts. Each user
 // costs a contribution-history walk, so this can take a few seconds.
+// The server sweeps every participant in one request and answers only at
+// the end, so there is no honest "x of N" to show mid-flight — the UI runs
+// an indeterminate animation rather than inventing a count.
 const recalcBusy = ref(false)
 async function recalculateAll () {
   recalcBusy.value = true
@@ -358,10 +361,24 @@ async function add (username) {
         defaults: raise "Max Wikidata edits for automatic scoring" under
         Participation in the campaign settings.
       </p>
-      <p v-if="recalcBusy" class="text-xs text-neutral-600 dark:text-neutral-300 mb-2">
-        Fetching each participant's Wikidata history — this can take a
-        few seconds.
-      </p>
+      <!-- Indeterminate: the sweep answers only when every participant is
+           done, so there is no real progress figure to show. The moving
+           bar is there to say the request is still running. -->
+      <div v-if="recalcBusy" class="mb-3" aria-busy="true">
+        <p class="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300 mb-1.5">
+          <svg class="w-3.5 h-3.5 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Fetching each participant's Wikidata history — this can take a
+          few seconds.
+        </p>
+        <div class="h-1.5 w-full rounded-full overflow-hidden
+                    bg-neutral-200 dark:bg-neutral-800">
+          <div class="h-full w-2/5 rounded-full bg-blue-600 dark:bg-blue-500
+                      indeterminate-bar"></div>
+        </div>
+      </div>
       <p v-if="!bulkSubs.length" class="text-sm text-neutral-600 dark:text-neutral-300">
         No Wikidata bulk submissions yet.
       </p>
