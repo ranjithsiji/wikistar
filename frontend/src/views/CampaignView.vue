@@ -95,10 +95,15 @@ const participantNames = computed(() =>
 const reviewBacklog = computed(() => {
   if (!isJury.value) return []
   return submissions.value.filter(s =>
-    campaign.value?.scoring_mode === 'jury'
+    // Bulk submissions are auto-scored counts over the whole campaign
+    // window, not a page to review, and the submissions list no longer
+    // renders them — counting them here would report a backlog with rows
+    // that never appear.
+    !['wikidata_edits', 'commons_edits'].includes(s.kind)
+    && (campaign.value?.scoring_mode === 'jury'
       // A rejected submission is already decided — not a backlog.
       ? s.status !== 'rejected' && !s.reviews.length
-      : s.status === 'submitted')
+      : s.status === 'submitted'))
 })
 
 const tabs = computed(() => {

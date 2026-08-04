@@ -33,12 +33,12 @@ const filterKind = ref('')
 // Bulk kinds are included so a "Wikidata edits" submission can actually be
 // found in this list — the old "Wikidata only" checkbox matched
 // wikidata_item alone and hid them.
+// Bulk kinds are deliberately absent: they are shown on their own tab, so
+// this list never contains one to filter to.
 const KIND_FILTERS = [
   ['article', 'Articles'],
   ['wikidata_item', 'Wikidata items'],
-  ['wikidata_edits', 'Wikidata bulk'],
-  ['commons_file', 'Commons files'],
-  ['commons_edits', 'Commons bulk']
+  ['commons_file', 'Commons files']
 ]
 const expanded = ref(null)
 // Article details (created/updated dates + editors, bytes, words) for the
@@ -88,10 +88,20 @@ const englishName = (s) => {
 // Wikidata item.
 const previewSubmission = ref(null)
 
+// Bulk submissions are a per-participant summary of a whole campaign
+// window, not a page anyone can open, review or preview — they live on the
+// Wikidata bulk tab, which shows their counts properly. Listing them here
+// too put rows in the list that most of the row actions do not apply to.
+// Every filter, count and dropdown below derives from this, so they all
+// describe the same set of rows the list actually shows.
+const BULK_KINDS = ['wikidata_edits', 'commons_edits']
+const pageSubmissions = computed(() =>
+  props.submissions.filter(s => !BULK_KINDS.includes(s.kind)))
+
 // Coordinators can narrow the submission list to one participant.
 const filterUser = ref('')
 const submitterNames = computed(() =>
-  [...new Set(props.submissions.map(s => s.user.username))]
+  [...new Set(pageSubmissions.value.map(s => s.user.username))]
     .sort((a, b) => a.localeCompare(b)))
 
 // Language filter: the Wikipedia subdomain prefix, only meaningful for
@@ -100,7 +110,7 @@ const submitterNames = computed(() =>
 const submissionLang = (s) => s.kind === 'article' ? s.wiki_domain.split('.')[0] : ''
 const filterLang = ref('')
 const availableLangs = computed(() =>
-  [...new Set(props.submissions.map(submissionLang).filter(Boolean))].sort())
+  [...new Set(pageSubmissions.value.map(submissionLang).filter(Boolean))].sort())
 
 // Review-state filter, for organizers and jurors working through a
 // backlog. "Awaiting my review" is per-juror; the other two are
@@ -127,7 +137,7 @@ const REVIEW_TESTS = {
 }
 
 const shownSubmissions = computed(() => {
-  let list = props.submissions
+  let list = pageSubmissions.value
   if (onlyMine.value) list = list.filter(s => s.user.username === props.currentUsername)
   if (filterUser.value) list = list.filter(s => s.user.username === filterUser.value)
   if (filterLang.value) list = list.filter(s => submissionLang(s) === filterLang.value)
@@ -171,7 +181,7 @@ function goToPage (n) {
 // Per-type counts, so an empty type is visibly empty rather than selectable.
 const kindCounts = computed(() => {
   const counts = {}
-  for (const s of props.submissions) counts[s.kind] = (counts[s.kind] || 0) + 1
+  for (const s of pageSubmissions.value) counts[s.kind] = (counts[s.kind] || 0) + 1
   return counts
 })
 
@@ -179,7 +189,7 @@ const kindCounts = computed(() => {
 // without having to select it first.
 const reviewCounts = computed(() => Object.fromEntries(
   Object.entries(REVIEW_TESTS).map(([key, test]) => [
-    key, props.submissions.filter(s => test(s, props.currentUsername)).length
+    key, pageSubmissions.value.filter(s => test(s, props.currentUsername)).length
   ])))
 
 // Jury mode gets a Fountain-style table grouped by participant; self /
@@ -279,12 +289,12 @@ const isPending = (s, action) => props.pendingAction === `${s.id}:${action}`
       </label>
       <span v-if="filterUser || filterLang || filterKind || filterReview"
             class="text-xs text-neutral-600 dark:text-neutral-300">
-        {{ shownSubmissions.length }} of {{ submissions.length }} submissions
+        {{ shownSubmissions.length }} of {{ pageSubmissions.length }} submissions
       </span>
     </div>
 
     <p v-if="!shownSubmissions.length" class="text-neutral-600 dark:text-neutral-300">
-      {{ submissions.length ? 'No submissions match these filters.' : 'No submissions yet.' }}
+      {{ pageSubmissions.length ? 'No submissions match these filters.' : 'No submissions yet.' }}
     </p>
 
     <!-- jury mode: table header -->
