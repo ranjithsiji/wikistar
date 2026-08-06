@@ -26,10 +26,18 @@ or deleted without a redirect — than a real correction, and applying it
 silently strips a participant's points. Check those by hand, then pass
 --allow-zeroing to apply them.
 
+--flags-only writes just the creation-flag repairs this script exists
+for, skipping rows where only bytes_added drifted because the
+participant kept editing after submitting. That drift is real, but it is
+an ordinary rescore (recalculate_scores.py --refetch) rather than a bug
+fix, and it moves scores in both directions — worth applying
+deliberately rather than as a side effect of a repair.
+
 Usage (from the project root):
     uv run python scripts/backfill_new_pages.py --dry-run
     uv run python scripts/backfill_new_pages.py
     uv run python scripts/backfill_new_pages.py --campaign kcm26
+    uv run python scripts/backfill_new_pages.py --campaign kcm26 --flags-only
     uv run python scripts/backfill_new_pages.py --campaign kcm26 --allow-zeroing
 """
 import sys
@@ -54,6 +62,7 @@ def _arg(flag: str) -> str | None:
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
     allow_zeroing = "--allow-zeroing" in sys.argv
+    flags_only = "--flags-only" in sys.argv
     only_slug = _arg("--campaign")
 
     from core.db import SessionLocal, sync_schema
@@ -118,7 +127,7 @@ def main() -> None:
         # Now the database work, in short transactions over data already
         # in hand. Batched so a dropped connection costs one batch, not
         # the whole run.
-        changed = zeroed = 0
+        changed = zeroed = drift = 0
         batch = []
         for sub_id, meta in fetched.items():
             sub = db.get(Submission, sub_id)
@@ -128,6 +137,15 @@ def main() -> None:
             before = (sub.is_new_page, sub.bytes_added)
             after = (meta.is_new_page, meta.bytes_added)
             if before == after:
+                continue
+            # --flags-only: repair the creation flag this script exists
+            # for, and leave alone the rows that merely drifted because
+            # the participant kept editing after submitting. That drift
+            # is real, but it is an ordinary rescore
+            # (recalculate_scores.py --refetch), not a bug fix, and it
+            # moves scores both ways.
+            if flags_only and before[0] == after[0]:
+                drift += 1
                 continue
             # A recorded contribution that now reads as nothing is far
             # more often a bad fetch (a transient API answer, a page moved
@@ -159,18 +177,22 @@ def main() -> None:
                 db.commit()
                 batch = []
 
+        parts = [
+            f"{zeroed} would lose a recorded contribution "
+            f"({'applied' if allow_zeroing else 'skipped'})",
+        ]
+        if flags_only:
+            parts.append(f"{drift} byte-drift only (skipped)")
+        parts.append(f"{failed} fetch failure(s)")
+        summary = ", ".join(parts)
+
         if dry_run:
             db.rollback()
             print(f"\nDry run: {changed} submission(s) would change, "
-                  f"{zeroed} would lose a recorded contribution"
-                  f"{' (applied)' if allow_zeroing else ' (skipped)'}, "
-                  f"{failed} fetch failure(s). Nothing was written.")
+                  f"{summary}. Nothing was written.")
         else:
             db.commit()
-            print(f"\nUpdated {changed} submission(s), "
-                  f"{zeroed} would lose a recorded contribution"
-                  f"{' (applied)' if allow_zeroing else ' (skipped)'}, "
-                  f"{failed} fetch failure(s).")
+            print(f"\nUpdated {changed} submission(s), {summary}.")
     finally:
         db.close()
 

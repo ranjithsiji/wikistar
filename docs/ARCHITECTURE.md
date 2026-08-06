@@ -317,7 +317,7 @@ and writes nothing. All are idempotent and safe to re-run.
 | `recalculate_scores.py` | rescore from data already in the database | `--campaign` `--active` | no network; thousands of rows/second |
 | `recalculate_scores.py --refetch` | refetch each page's wiki metadata, then rescore | `--campaign` `--active` `--user` | several API round-trips per submission |
 | `recalculate_bulk.py` | recount Wikidata/Commons bulk submissions | `--campaign` `--active` `--user` `--kind` `--workers` | walks each participant's contribution history |
-| `backfill_new_pages.py` | re-detect `is_new_page` / `bytes_added` | `--campaign` `--allow-zeroing` | same as `--refetch` |
+| `backfill_new_pages.py` | re-detect `is_new_page` / `bytes_added` | `--campaign` `--flags-only` `--allow-zeroing` | same as `--refetch` |
 | `backfill_suggested_qids.py` | resolve suggested articles' Wikidata items | — | one batched call per wiki |
 
 The two `backfill_*` scripts are one-off repairs for data recorded before
@@ -345,6 +345,13 @@ by hand. `recalculate_bulk.py` has no request deadline, so it uses the
 generous `wikidata_edit_limit_single` cap (default 5000) and scores them.
 Participants still past that cap are reported as needing a manual points
 override — the campaign settings decide both caps.
+
+**Repair versus drift.** Re-fetching finds two different things: rows
+whose stored flags were wrong (the bug being repaired) and rows where
+`bytes_added` has simply moved because the participant kept editing after
+submitting. The second is real but is an ordinary rescore, not a fix, and
+it moves scores in both directions — `--flags-only` writes just the
+former so a repair does not quietly restate everyone's totals.
 
 **Never silently strip a score.** `backfill_new_pages.py` reports, but
 does not write, any row whose recorded contribution would drop to nothing
