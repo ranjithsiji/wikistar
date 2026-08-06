@@ -347,8 +347,10 @@ async function add (username) {
         nothing is counted twice.
       </p>
 
-      <!-- Participant: add my own if I missed it -->
-      <div v-if="isLoggedIn && !iHaveBulk && iHaveSubmitted"
+      <!-- Participant: add my own if I missed it. Gated on the rows
+           having arrived: until then every participant looks like they
+           have none, and this banner would flash at people who do. -->
+      <div v-if="!bulkLoading && isLoggedIn && !iHaveBulk && iHaveSubmitted"
            class="mt-3 rounded-lg border border-amber-300 dark:border-amber-800
                   bg-amber-50 dark:bg-amber-950/40 p-3 flex flex-wrap
                   items-center justify-between gap-2">
@@ -363,8 +365,20 @@ async function add (username) {
       </div>
     </div>
 
-    <!-- Organizers: who is missing one, with an Add button each -->
+    <!-- Organizers: who is missing one, with an Add button each.
+         `missing` is every participant minus those who already have a
+         bulk submission, so before the rows land it is *everyone* — the
+         whole grid would render and then empty out. Wait for the data
+         rather than flashing fifty Add buttons at an organizer whose
+         participants are already covered. -->
     <div v-if="isOrganizer" class="card p-4">
+      <template v-if="bulkLoading">
+        <h4 class="font-semibold text-base mb-2">No bulk submission yet</h4>
+        <p class="text-sm text-neutral-600 dark:text-neutral-300">
+          Loading participants…
+        </p>
+      </template>
+      <template v-else>
       <h4 class="font-semibold text-base mb-2">
         No bulk submission yet ({{ missing.length }})
       </h4>
@@ -392,6 +406,7 @@ async function add (username) {
             </cdx-button>
           </div>
         </div>
+      </template>
       </template>
     </div>
 
