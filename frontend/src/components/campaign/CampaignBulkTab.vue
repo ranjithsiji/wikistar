@@ -99,16 +99,25 @@ const iHaveSubmitted = computed(() =>
   (props.campaign.members || []).some(
     m => m.role === 'participant' && m.user.username === props.currentUsername))
 
+// Every column except the action buttons is sortable: an organizer
+// working a large campaign wants "who scores most", "who has the most
+// uncounted work" and "who has not been recalculated since the last
+// sweep" — each of those is a different column, so none of them can be
+// the one fixed order.
 const columns = [
-  { id: 'username', label: 'Participant' },
-  { id: 'statements', label: 'Statements', textAlign: 'number' },
-  { id: 'terms', label: 'Label/desc edits', textAlign: 'number' },
-  { id: 'excluded', label: 'Counted separately', textAlign: 'number' },
-  { id: 'points', label: 'Points', textAlign: 'number' },
-  { id: 'fetched', label: 'Last recalculated' },
+  { id: 'username', label: 'Participant', allowSort: true },
+  { id: 'statements', label: 'Statements', textAlign: 'number', allowSort: true },
+  { id: 'terms', label: 'Label/desc edits', textAlign: 'number', allowSort: true },
+  { id: 'excluded', label: 'Counted separately', textAlign: 'number', allowSort: true },
+  { id: 'points', label: 'Points', textAlign: 'number', allowSort: true },
+  { id: 'fetched', label: 'Last recalculated', allowSort: true },
   { id: 'actions', label: '' }
 ]
-const rows = computed(() => bulkSubs.value.map(raw => {
+// Highest score first: the ranking question is the common one, and it
+// matches how the leaderboard already presents participants.
+const sort = ref({ points: 'desc' })
+
+const allRows = computed(() => bulkSubs.value.map(raw => {
   // Prefer a just-recalculated copy over the list's stale one.
   const s = updated.value[raw.id] || raw
   return {
@@ -125,6 +134,45 @@ const rows = computed(() => bulkSubs.value.map(raw => {
     user: s.user
   }
 }))
+
+// Participant search: substring, case-insensitive, and underscores read
+// as spaces so a name pasted out of a wiki URL still matches.
+const search = ref('')
+const normalize = (s) => s.toLowerCase().replace(/_/g, ' ').trim()
+const filteredRows = computed(() => {
+  const needle = normalize(search.value)
+  if (!needle) return allRows.value
+  return allRows.value.filter(r => normalize(r.username).includes(needle))
+})
+
+// A row over the cap shows "—" rather than a count, so those cells sort
+// as missing data: always last, whichever direction is chosen, instead
+// of being ordered against numbers as a string.
+function compareValues (a, b) {
+  const aMissing = a === '—' || a === '' || a == null
+  const bMissing = b === '—' || b === '' || b == null
+  if (aMissing || bMissing) return aMissing && bMissing ? 0 : (aMissing ? 1 : -1)
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  return String(a).localeCompare(String(b), undefined, { numeric: true })
+}
+
+const rows = computed(() => {
+  const [key, direction] = Object.entries(sort.value)[0] || []
+  // Codex cycles a column through asc -> desc -> none; 'none' means the
+  // reader asked for the unsorted order back.
+  if (!key || direction === 'none') return filteredRows.value
+  const factor = direction === 'desc' ? -1 : 1
+  // Sorting a copy: the computed source must not be mutated in place.
+  return [...filteredRows.value].sort((x, y) => {
+    const missingLast = compareValues(x[key], y[key])
+    // Missing values stay at the bottom, so don't flip them with the
+    // direction: only genuine comparisons get the factor.
+    const xMissing = x[key] === '—' || x[key] === '' || x[key] == null
+    const yMissing = y[key] === '—' || y[key] === '' || y[key] == null
+    if (xMissing !== yMissing) return missingLast
+    return missingLast * factor
+  })
+})
 
 // "3 hours ago" reads faster than a timestamp when the question is really
 // "is this stale?"; the exact time stays in the title attribute.
@@ -407,8 +455,22 @@ async function add (username) {
       <p v-else-if="!bulkSubs.length" class="text-sm text-neutral-600 dark:text-neutral-300">
         No Wikidata bulk submissions yet.
       </p>
-      <cdx-table v-else caption="Wikidata bulk submissions" :hide-caption="true"
-                 :columns="columns" :data="rows">
+      <template v-else>
+        <div class="flex flex-wrap items-center gap-3 mb-2">
+          <label class="flex items-center gap-2 text-sm">
+            Find participant
+            <input v-model="search" type="search" class="input !w-56 !py-1"
+                   placeholder="Search by username" />
+          </label>
+          <span v-if="search" class="text-xs text-neutral-600 dark:text-neutral-300">
+            {{ rows.length }} of {{ allRows.length }} participants
+          </span>
+        </div>
+        <p v-if="!rows.length" class="text-sm text-neutral-600 dark:text-neutral-300">
+          No participant matches “{{ search }}”.
+        </p>
+        <cdx-table v-else caption="Wikidata bulk submissions" :hide-caption="true"
+                   :columns="columns" :data="rows" v-model:sort="sort">
         <template #item-username="{ item, row }">
           <button type="button" class="font-medium text-link-700 dark:text-link-400 hover:underline"
                   @click="emit('show-details', row.user)">{{ item }}</button>
@@ -457,7 +519,8 @@ async function add (username) {
             </cdx-button>
           </div>
         </template>
-      </cdx-table>
+        </cdx-table>
+      </template>
     </div>
   </div>
 </template>
