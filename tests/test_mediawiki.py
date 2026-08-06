@@ -47,6 +47,32 @@ def test_net_negative_floors_at_zero():
     assert _bytes_added(revs, base_size=1000, username="A") == 0
 
 
+def test_same_user_follows_mediawiki_name_normalisation():
+    # MediaWiki reads underscores as spaces and capitalises the first
+    # letter, so these all name one account. The wiki answers with its own
+    # spelling while the stored name comes from the OAuth profile, so a
+    # verbatim comparison could call a page's own creator a stranger.
+    assert mediawiki.same_user("Meenakshi nandhini", "Meenakshi_nandhini")
+    assert mediawiki.same_user("meenakshi nandhini", "Meenakshi nandhini")
+    assert mediawiki.same_user("Ranjith  siji", "Ranjith siji")
+    # Genuinely different people must never collapse together.
+    assert not mediawiki.same_user("Meenakshi", "Meenakshi nandhini")
+    assert not mediawiki.same_user("Alice", "Bob")
+    # Only the FIRST letter is case-insensitive; the rest is significant.
+    assert not mediawiki.same_user("Meenakshi Nandhini", "Meenakshi nandhini")
+    # A missing creator (deleted revision) is nobody, not a match.
+    assert not mediawiki.same_user(None, "Alice")
+    assert not mediawiki.same_user("", "")
+
+
+def test_bytes_are_credited_across_username_spellings():
+    # The revision history spells the user one way and the stored account
+    # another; the edits are still theirs.
+    revs = [{"user": "Meenakshi nandhini", "size": 4000}]
+    assert _bytes_added(revs, base_size=0,
+                        username="Meenakshi_nandhini") == 4000
+
+
 def test_feminism_in_kerala_matches_the_real_edit_history():
     # Real revision history of https://en.wikipedia.org/wiki/Feminism_in_Kerala
     # (oldest -> newest, from the MediaWiki API): Netha Hussain created the

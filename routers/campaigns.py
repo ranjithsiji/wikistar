@@ -643,12 +643,14 @@ def campaign_stats(slug: str):
                       .group_by(Submission.wiki_domain).all()):
         lang = domain.split(".")[0]
         by_language[lang] = by_language.get(lang, 0) + n
-    bytes_added, new_pages = (
-        db.query(func.coalesce(func.sum(Submission.bytes_added), 0),
-                 # SUM over the boolean, not COUNT(...) FILTER: MariaDB
-                 # has no FILTER clause.
-                 func.coalesce(func.sum(Submission.is_new_page), 0))
-        .filter(here).one())
+    bytes_added = (
+        db.query(func.coalesce(func.sum(Submission.bytes_added), 0))
+        .filter(here).scalar())
+    # Counted with a WHERE, not SUM(is_new_page): the column is mapped as
+    # Boolean, so SQLAlchemy coerces the sum back to a bool on the way out
+    # and every campaign with any new page at all reported exactly 1.
+    new_pages = (db.query(func.count(Submission.id))
+                 .filter(here, Submission.is_new_page.is_(True)).scalar())
     total_points = (
         db.query(func.coalesce(func.sum(Submission.points_cached), 0))
         .filter(here, Submission.status != SubmissionStatus.rejected)

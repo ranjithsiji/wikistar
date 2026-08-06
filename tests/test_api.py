@@ -255,6 +255,34 @@ def test_full_self_assessment_flow(client):
     assert len(stats["timeline"]) == 1
 
 
+def test_stats_counts_every_new_page(client):
+    """new_pages is a count of the rows flagged is_new_page.
+
+    It used to be SUM(is_new_page). The column is mapped as Boolean, so
+    SQLAlchemy coerced the sum back to a bool on the way out and the
+    statistics page reported exactly 1 new page for every campaign that
+    had any at all -- a campaign of 1291 submissions still read "1".
+    """
+    login("Alice")
+    slug = client.post("/api/campaigns", json=make_campaign_payload(
+        client, name="New Pages Contest")).json["slug"]
+    login("Root", is_admin=True)
+    SYSOP_WIKIS["Root"] = {"*"}
+    assert client.post(f"/api/campaigns/{slug}/approve").status_code == 200
+
+    # The stub creates a new page for any title it doesn't know, and an
+    # existing (not-new) one for "Kathakali" -- so this is 3 new, 1 not.
+    login("Dana")
+    for title in ("Fresh One", "Fresh Two", "Fresh Three", "Kathakali"):
+        r = client.post(f"/api/campaigns/{slug}/submissions",
+                        json={"title": title, "kind": "article"})
+        assert r.status_code == 201, (title, r.text)
+
+    stats = client.get(f"/api/campaigns/{slug}/stats").json
+    assert stats["submissions"] == 4
+    assert stats["new_pages"] == 3
+
+
 def test_jury_mode_flow(client):
     login("Alice")
     r = client.post("/api/campaigns", json=make_campaign_payload(

@@ -219,6 +219,25 @@ def _parse_ts(ts: str | None) -> datetime | None:
         tzinfo=timezone.utc)
 
 
+def same_user(a: str | None, b: str | None) -> bool:
+    """Whether two spellings name the same MediaWiki account.
+
+    MediaWiki reads underscores as spaces and always capitalises the
+    first letter, so "meenakshi_nandhini" and "Meenakshi nandhini" are
+    one account. The wiki answers with its own canonical spelling while
+    the stored username comes from the OAuth profile, so comparing them
+    verbatim can miss — and "did the submitter create this page?" then
+    answers no for a page they did create.
+    """
+    def norm(name: str | None) -> str:
+        if not name:
+            return ""
+        cleaned = " ".join(name.replace("_", " ").split())
+        return cleaned[:1].upper() + cleaned[1:]
+
+    return bool(norm(a)) and norm(a) == norm(b)
+
+
 def _first_revision(client: httpx.Client, domain: str, page_id: int) -> dict:
     data = client.get(api_url(domain), params={
         "action": "query", "format": "json", "formatversion": 2,
@@ -635,7 +654,7 @@ def _bytes_added(revs: list[dict], base_size: int, username: str) -> int:
     added = 0
     for rev in revs:
         size = rev.get("size", prev_size)
-        if rev.get("user") == username:
+        if same_user(rev.get("user"), username):
             added += size - prev_size
         prev_size = size
     return max(0, added)
@@ -705,7 +724,7 @@ def fetch_page_metadata(
                 meta.created_at = datetime.strptime(
                     ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         meta.is_new_page = (
-            meta.creator == username
+            same_user(meta.creator, username)
             and meta.created_at is not None
             and _iso(start) <= meta.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
             <= _iso(end, end=True)

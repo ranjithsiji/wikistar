@@ -305,7 +305,7 @@ def _check_eligibility(sub: Submission, campaign: Campaign, user: User,
                 400, f"The page is smaller than {min_bytes} bytes")
         if (settings.get("submitter_must_be_creator")
                 and meta is not None and meta.creator
-                and meta.creator != user.username):
+                and not mediawiki.same_user(meta.creator, user.username)):
             raise HTTPException(
                 400, "Only the creator of the page may submit it")
     registered_after = settings.get("submitter_registered_after") or ""
