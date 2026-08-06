@@ -201,6 +201,32 @@ class ClaimOut(ORMModel):
     points_final: float | None
 
 
+class SubmissionListOut(ORMModel):
+    """One row of the paged submissions list — everything the row header
+    renders and nothing more. The per-submission detail (breakdown,
+    reviews, claims) is fetched by the expanded card on demand, so a page
+    of rows is one SQL query over stored columns, points included
+    (Submission.points_cached)."""
+    id: int
+    campaign_id: int
+    kind: SubmissionKind
+    title: str
+    wiki_domain: str
+    url: str
+    user: UserOut
+    page_len: int | None
+    bytes_added: int
+    is_new_page: bool
+    wikidata_qid: str | None = None
+    metrics: dict | None = None
+    status: SubmissionStatus
+    moderation_note: str | None = None
+    points_override: float | None
+    submitted_at: UtcDatetime
+    metadata_fetched_at: UtcDatetime | None = None
+    points: float = 0
+
+
 class SubmissionOut(ORMModel):
     id: int
     campaign_id: int
@@ -257,6 +283,9 @@ class LeaderboardRow(BaseModel):
     submission_count: int
     points: float
     bytes_added: int = 0
+    # How many of this user's (non-rejected) submissions carry at least
+    # one review — the jury table's "reviewed x/y" column.
+    reviewed_count: int = 0
 
 
 class CampaignStats(BaseModel):

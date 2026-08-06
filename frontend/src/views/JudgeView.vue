@@ -24,18 +24,21 @@ const criteria = computed(() => campaign.value?.settings?.jury_criteria || [])
 const juryNames = computed(() =>
   campaign.value?.members.filter(m => m.role === 'jury').map(m => m.user.username) || [])
 
-// Everything reviewable by me: everyone else's submissions.
+// The queue is paged on the server (detail rows: the per-juror decision
+// squares need each submission's reviews). "Only awaiting my review" is
+// a server-side filter too, not a client sieve over a full download.
+const PAGE_SIZE = 100
+const page = ref(1)
+const pages = ref(1)
+const total = ref(0)
+const remaining = ref(0)      // campaign-wide: submissions awaiting my review
+const onlyUnreviewed = ref(false)
+
+// Everything reviewable by me on this page: everyone else's submissions.
 const queue = computed(() =>
   submissions.value.filter(s => s.user.username !== auth.user?.username))
 const myReview = (s) => s.reviews.find(r => r.reviewer.username === auth.user?.username)
-const reviewedByMe = computed(() => queue.value.filter(s => myReview(s)).length)
-const remaining = computed(() => queue.value.length - reviewedByMe.value)
-
-// Narrow the list to what I still have to review. The counts above stay
-// on the full queue, so the progress line keeps its meaning.
-const onlyUnreviewed = ref(false)
-const shownQueue = computed(() =>
-  onlyUnreviewed.value ? queue.value.filter(s => !myReview(s)) : queue.value)
+const shownQueue = computed(() => queue.value)
 
 const decisionStyles = {
   accept: 'bg-green-500 border-green-500',
@@ -48,8 +51,18 @@ function juryDecision (s, name) {
 
 async function load (keepSelection = false) {
   try {
-    campaign.value = (await api.getCampaign(props.slug)).data
-    submissions.value = (await api.listSubmissions(props.slug)).data
+    if (!campaign.value) {
+      campaign.value = (await api.getCampaign(props.slug)).data
+    }
+    const params = { page: page.value, per_page: PAGE_SIZE,
+                     exclude_bulk: 1, detail: 1, facets: 1 }
+    if (onlyUnreviewed.value) params.review = 'awaiting_me'
+    const { data } = await api.listSubmissions(props.slug, params)
+    submissions.value = data.items
+    total.value = data.total
+    pages.value = data.pages
+    if (page.value > data.pages) page.value = data.pages
+    remaining.value = data.facets?.review?.awaiting_me ?? 0
     if (keepSelection && selected.value) {
       selected.value = queue.value.find(s => s.id === selected.value.id) || selected.value
     } else {
@@ -60,6 +73,7 @@ async function load (keepSelection = false) {
   }
 }
 onMounted(load)
+watch([page, onlyUnreviewed], () => load())
 
 // ---- article pane ----------------------------------------------------------
 watch(selected, async (s) => {
@@ -140,8 +154,8 @@ async function saveReview (review) {
         </span>
         <span class="flex-1"></span>
         <span class="text-sm tabular-nums">
-          <b>{{ remaining }}</b> remaining / {{ queue.length }} submissions
-          · you reviewed <b>{{ reviewedByMe }}</b>
+          <b>{{ remaining }}</b> awaiting your review
+          · {{ total }} submissions
         </span>
         <span v-if="notice" class="text-sm text-green-700 dark:text-green-400">{{ notice }}</span>
         <span v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</span>
@@ -188,6 +202,18 @@ async function saveReview (review) {
               <template v-if="s.reviews.length"> · {{ s.reviews.length }} review(s)</template>
             </span>
           </button>
+          <!-- the queue is paged on the server -->
+          <div v-if="pages > 1"
+               class="flex items-center justify-between gap-2 px-3 py-2 text-sm
+                      border-t border-neutral-200 dark:border-neutral-800">
+            <button type="button" class="btn !py-0.5 !px-2 text-xs"
+                    :disabled="page === 1" @click="page -= 1">← Prev</button>
+            <span class="tabular-nums text-xs text-neutral-600 dark:text-neutral-300">
+              Page {{ page }} / {{ pages }}
+            </span>
+            <button type="button" class="btn !py-0.5 !px-2 text-xs"
+                    :disabled="page === pages" @click="page += 1">Next →</button>
+          </div>
         </aside>
 
         <!-- right: the article + review bar -->

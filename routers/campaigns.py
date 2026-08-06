@@ -10,7 +10,6 @@ approve/reject       admin
 join                 any logged-in user (both jury and self modes)
 leaderboard          public unless show_leaderboard is off
 """
-from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, request
@@ -31,11 +30,15 @@ from domain.models import (
     Campaign,
     CampaignMember,
     CampaignStatus,
+    Claim,
+    ClaimStatus,
     MemberRole,
+    Review,
     ScoringMode,
     ScoringRule,
     Submission,
     SubmissionKind,
+    SubmissionStatus,
     SuggestedPage,
     User,
 )
@@ -46,9 +49,11 @@ from routers.common import (
     campaign_summary,
     can_see_campaign,
     compute_leaderboard,
+    ensure_scored,
     get_campaign_or_404,
     get_or_create_user,
     load_submissions,
+    rescore_campaign,
     suggested_titles,
     visible_campaigns,
 )
@@ -216,8 +221,6 @@ def _resolve_suggested_qids(campaign: Campaign) -> None:
 def _replace_rules(db: Session, campaign: Campaign, payload: CampaignIn) -> None:
     """Upsert rules by id. Removed rules are deleted unless claims
     reference them, in which case they are deactivated to keep history."""
-    from domain.models import Claim
-
     existing = {r.id: r for r in campaign.rules}
     kept_ids: set[int] = set()
     for position, rule_in in enumerate(payload.rules):
@@ -324,6 +327,10 @@ def update_campaign(slug: str):
     _replace_jury(db, campaign, payload.jury_usernames, user)
     _replace_suggested(campaign, payload)
     _replace_rules(db, campaign, payload)
+    # Rules, settings and the suggested list all feed the score of every
+    # submission — refresh the cached points in the same transaction.
+    db.flush()
+    rescore_campaign(db, campaign)
     audit(db, user, "update", "campaign", campaign.id, {"slug": campaign.slug})
     db.commit()
     db.refresh(campaign)
@@ -608,49 +615,80 @@ def participant_details(slug: str, user_id: int):
 
 @bp.get("/campaigns/<slug>/stats")
 def campaign_stats(slug: str):
+    """Aggregate statistics for the overview tiles and the statistics
+    tab, computed with grouped SQL over the cached per-submission points
+    — nothing here loads or rescores submissions."""
     db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
     if not can_see_campaign(db, campaign, user):
         raise HTTPException(404, "Campaign not found")
-    settings = campaign.effective_settings
-    subs = load_submissions(db, campaign.id)
+    ensure_scored(db, campaign)
+    here = Submission.campaign_id == campaign.id
 
-    timeline = Counter(s.submitted_at.date().isoformat() for s in subs)
+    total_subs = db.query(func.count(Submission.id)).filter(here).scalar()
+    participants = (db.query(func.count(func.distinct(Submission.user_id)))
+                    .filter(here).scalar())
+    by_kind = {k.value: n for k, n in
+               db.query(Submission.kind, func.count(Submission.id))
+               .filter(here).group_by(Submission.kind).all()}
+    by_status = {s.value: n for s, n in
+                 db.query(Submission.status, func.count(Submission.id))
+                 .filter(here).group_by(Submission.status).all()}
     # Language is the Wikipedia subdomain prefix, only meaningful for
     # article submissions (Wikidata/Commons/bulk kinds aren't a language).
-    by_language = Counter(
-        s.wiki_domain.split(".")[0] for s in subs
-        if s.kind == SubmissionKind.article)
-    total_points = 0.0
-    reviews = claims = pending_claims = unreviewed = 0
-    for sub in subs:
-        reviews += len(sub.reviews)
-        claims += len(sub.claims)
-        pending_claims += sum(1 for c in sub.claims
-                              if c.status.value == "claimed")
-        if not sub.reviews and not sub.claims:
-            unreviewed += 1
-        if sub.status.value != "rejected":
-            bd = compute_breakdown(sub, campaign.rules,
-                                   suggested_titles(campaign, sub.kind),
-                                   campaign.scoring_mode, settings)
-            total_points = round(total_points + bd.total, 2)
+    by_language: dict[str, int] = {}
+    for domain, n in (db.query(Submission.wiki_domain,
+                               func.count(Submission.id))
+                      .filter(here, Submission.kind == SubmissionKind.article)
+                      .group_by(Submission.wiki_domain).all()):
+        lang = domain.split(".")[0]
+        by_language[lang] = by_language.get(lang, 0) + n
+    bytes_added, new_pages = (
+        db.query(func.coalesce(func.sum(Submission.bytes_added), 0),
+                 # SUM over the boolean, not COUNT(...) FILTER: MariaDB
+                 # has no FILTER clause.
+                 func.coalesce(func.sum(Submission.is_new_page), 0))
+        .filter(here).one())
+    total_points = (
+        db.query(func.coalesce(func.sum(Submission.points_cached), 0))
+        .filter(here, Submission.status != SubmissionStatus.rejected)
+        .scalar())
+    reviews = (db.query(func.count(Review.id))
+               .join(Submission, Review.submission_id == Submission.id)
+               .filter(here).scalar())
+    claims = (db.query(func.count(Claim.id))
+              .join(Submission, Claim.submission_id == Submission.id)
+              .filter(here).scalar())
+    pending_claims = (db.query(func.count(Claim.id))
+                      .join(Submission, Claim.submission_id == Submission.id)
+                      .filter(here, Claim.status == ClaimStatus.claimed)
+                      .scalar())
+    unreviewed = (db.query(func.count(Submission.id))
+                  .filter(here, ~Submission.reviews.any(),
+                          ~Submission.claims.any())
+                  .scalar())
+    timeline = [
+        {"date": d.isoformat() if hasattr(d, "isoformat") else str(d),
+         "submissions": n}
+        for d, n in db.query(func.date(Submission.submitted_at),
+                             func.count(Submission.id))
+        .filter(here).group_by(func.date(Submission.submitted_at))
+        .order_by(func.date(Submission.submitted_at)).all()]
 
     return respond(CampaignStats(
-        submissions=len(subs),
-        participants=len({s.user_id for s in subs}),
+        submissions=total_subs,
+        participants=participants,
         languages=len(by_language),
         reviews=reviews,
         claims=claims,
         pending_claims=pending_claims,
         unreviewed_submissions=unreviewed,
-        total_points=total_points,
-        total_bytes_added=sum(s.bytes_added or 0 for s in subs),
-        new_pages=sum(1 for s in subs if s.is_new_page),
-        by_kind=dict(Counter(s.kind.value for s in subs)),
-        by_status=dict(Counter(s.status.value for s in subs)),
-        by_language=dict(by_language),
-        timeline=[{"date": d, "submissions": n}
-                  for d, n in sorted(timeline.items())],
-        top_contributors=compute_leaderboard(db, campaign, subs)[:10],
+        total_points=round(float(total_points or 0), 2),
+        total_bytes_added=int(bytes_added or 0),
+        new_pages=int(new_pages or 0),
+        by_kind=by_kind,
+        by_status=by_status,
+        by_language=by_language,
+        timeline=timeline,
+        top_contributors=compute_leaderboard(db, campaign)[:10],
     ))

@@ -125,7 +125,7 @@ def my_submissions():
         db.query(Submission)
         .filter_by(user_id=user.id)
         .options(
-            selectinload(Submission.reviews),
+            selectinload(Submission.reviews).selectinload(Review.reviewer),
             selectinload(Submission.claims),
             selectinload(Submission.campaign),
         )

@@ -11,7 +11,7 @@ from core.webutil import HTTPException, jsonable, respond
 from domain.models import (AuditLog, Campaign, CampaignStatus, Claim, Review,
                            Submission, SubmissionKind, User)
 from routers.common import (audit, campaign_counts, campaign_summary,
-                            submission_out)
+                            rescore_submission, submission_out)
 
 bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -192,6 +192,7 @@ def edit_submission(submission_id: int):
                 sub.wikidata_qid = meta.wikidata_qid
         except Exception:
             pass
+    rescore_submission(sub.campaign, sub)
     audit(db, acting, "edit_submission", "submission", sub.id,
           {"campaign": sub.campaign.slug, "from": old_title, "to": title,
            "from_wiki": old_domain, "to_wiki": domain})

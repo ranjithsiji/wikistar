@@ -59,13 +59,19 @@ export default {
   recalculateAllBulkWikidata: (slug) =>
     http.post(`/api/campaigns/${slug}/bulk-wikidata/recalculate-all`),
 
-  // submissions
-  listSubmissions: (slug) => http.get(`/api/campaigns/${slug}/submissions`),
+  // submissions — the list is paged and filtered on the server; params:
+  // page, per_page, kind, exclude_bulk, user, mine, language, review, facets
+  listSubmissions: (slug, params = {}) =>
+    http.get(`/api/campaigns/${slug}/submissions`, { params }),
   createSubmission: (slug, data) => http.post(`/api/campaigns/${slug}/submissions`, data),
+  // full detail of one submission: breakdown, reviews, claims (expanded card)
+  getSubmission: (id) => http.get(`/api/submissions/${id}`),
   deleteSubmission: (id) => http.delete(`/api/submissions/${id}`),
   submissionDetails: (id) => http.get(`/api/submissions/${id}/details`),
   submissionPreview: (id) => http.get(`/api/submissions/${id}/preview`),
-  submissionEnglishNames: (slug) => http.get(`/api/campaigns/${slug}/submissions/english-names`),
+  submissionEnglishNames: (slug, ids) => http.get(
+    `/api/campaigns/${slug}/submissions/english-names`,
+    { params: ids?.length ? { ids: ids.join(',') } : {} }),
   refreshSubmission: (id) => http.post(`/api/submissions/${id}/refresh`),
   recalculateSubmission: (id) => http.post(`/api/submissions/${id}/recalculate`),
   moderateSubmission: (id, data) => http.post(`/api/submissions/${id}/moderate`, data),

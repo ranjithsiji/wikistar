@@ -1,11 +1,12 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { CdxButton, CdxTable } from '@wikimedia/codex'
 import api, { errorMessage } from '../../api'
 
 const props = defineProps({
   campaign: { type: Object, required: true },
-  submissions: { type: Array, required: true },
+  // Bumped by the parent when submissions changed elsewhere.
+  refreshTick: { type: Number, default: 0 },
   isOrganizer: { type: Boolean, default: false },
   currentUsername: { type: String, default: '' },
   isLoggedIn: { type: Boolean, default: false }
@@ -15,6 +16,25 @@ const emit = defineEmits(['refresh', 'show-details'])
 const error = ref('')
 const notice = ref('')
 const busy = ref('')          // username currently being added, or 'mine'
+
+// This tab loads its own rows: one paged request filtered to the bulk
+// kind — one row per participant, so a single (large-capped) page covers
+// any realistic campaign.
+const bulkSubs = ref([])
+const bulkLoading = ref(true)
+async function loadBulk () {
+  try {
+    const { data } = await api.listSubmissions(props.campaign.slug,
+      { kind: 'wikidata_edits', per_page: 500 })
+    bulkSubs.value = data.items
+  } catch (e) {
+    bulkSubs.value = []
+  } finally {
+    bulkLoading.value = false
+  }
+}
+onMounted(loadBulk)
+watch(() => props.refreshTick, loadBulk)
 
 // Names removed locally the moment their submission is created. `refresh`
 // is an event, not a promise — Vue does not await the parent's handler —
@@ -30,9 +50,6 @@ const justAdded = ref(new Set())
 // good if it failed. Applying the response here makes the row correct
 // immediately; an entry is dropped once the reload confirms it.
 const updated = ref({})
-
-const bulkSubs = computed(() =>
-  props.submissions.filter(s => s.kind === 'wikidata_edits'))
 
 // Once the reloaded list confirms a name has a bulk submission, stop
 // suppressing it locally — otherwise a submission later deleted could
@@ -62,13 +79,16 @@ watch(bulkSubs, (subs) => {
   if (Object.keys(still).length !== ids.length) updated.value = still
 })
 
-// Everyone who submitted anything, minus everyone who already has a bulk
-// submission: these are the participants whose Wikidata work outside their
-// individual submissions is currently uncounted.
+// Every participant without a bulk submission: their Wikidata work
+// outside individual submissions is currently uncounted. Participants
+// come from the campaign's member list (submitting auto-joins, so it
+// covers every submitter) rather than from loading all submissions.
 const missing = computed(() => {
   const withBulk = new Set(bulkSubs.value.map(s => s.user.username))
   const all = new Map()
-  for (const s of props.submissions) all.set(s.user.username, s.user)
+  for (const m of props.campaign.members || []) {
+    if (m.role === 'participant') all.set(m.user.username, m.user)
+  }
   return [...all.values()].filter(
     u => !withBulk.has(u.username) && !justAdded.value.has(u.username))
 })
@@ -76,7 +96,8 @@ const missing = computed(() => {
 const iHaveBulk = computed(() =>
   bulkSubs.value.some(s => s.user.username === props.currentUsername))
 const iHaveSubmitted = computed(() =>
-  props.submissions.some(s => s.user.username === props.currentUsername))
+  (props.campaign.members || []).some(
+    m => m.role === 'participant' && m.user.username === props.currentUsername))
 
 const columns = [
   { id: 'username', label: 'Participant' },
@@ -379,7 +400,11 @@ async function add (username) {
                       indeterminate-bar"></div>
         </div>
       </div>
-      <p v-if="!bulkSubs.length" class="text-sm text-neutral-600 dark:text-neutral-300">
+      <p v-if="bulkLoading && !bulkSubs.length"
+         class="text-sm text-neutral-600 dark:text-neutral-300">
+        Loading bulk submissions…
+      </p>
+      <p v-else-if="!bulkSubs.length" class="text-sm text-neutral-600 dark:text-neutral-300">
         No Wikidata bulk submissions yet.
       </p>
       <cdx-table v-else caption="Wikidata bulk submissions" :hide-caption="true"

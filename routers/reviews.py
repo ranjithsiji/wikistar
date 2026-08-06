@@ -12,7 +12,7 @@ from auth import require_jury, require_user
 from core.db import get_db
 from core.webutil import HTTPException, parse, respond
 from domain.models import CampaignStatus, Review, Submission
-from routers.common import audit
+from routers.common import audit, rescore_submission
 from domain.schemas import ReviewIn, ReviewOut
 from domain.scoring import review_total
 
@@ -56,6 +56,11 @@ def upsert_review(submission_id: int):
     audit(db, user, "review", "submission", sub.id,
           {"campaign": campaign.slug, "title": sub.title,
            "decision": payload.decision.value, "total": payload.total})
+    # Flush + expire so sub.reviews includes this write, then refresh the
+    # cached points the leaderboard and lists read.
+    db.flush()
+    db.expire(sub, ["reviews"])
+    rescore_submission(campaign, sub)
     db.commit()
     db.refresh(review)
     return respond(ReviewOut.model_validate(review))
@@ -74,5 +79,8 @@ def delete_own_review(submission_id: int):
     audit(db, user, "unreview", "submission", sub.id,
           {"campaign": sub.campaign.slug, "title": sub.title})
     db.delete(review)
+    db.flush()
+    db.expire(sub, ["reviews"])
+    rescore_submission(sub.campaign, sub)
     db.commit()
     return respond(None, 204)

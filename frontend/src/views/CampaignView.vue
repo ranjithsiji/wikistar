@@ -11,7 +11,8 @@ import CampaignSubmitForm from '../components/campaign/CampaignSubmitForm.vue'
 import CampaignOverviewTab from '../components/campaign/CampaignOverviewTab.vue'
 import CampaignRulesTab from '../components/campaign/CampaignRulesTab.vue'
 import CampaignSuggestedTab from '../components/campaign/CampaignSuggestedTab.vue'
-import CampaignSubmissionsTab from '../components/campaign/CampaignSubmissionsTab.vue'
+import SubmissionsListTab from '../components/campaign/SubmissionsListTab.vue'
+import SubmissionsJuryTab from '../components/campaign/SubmissionsJuryTab.vue'
 import CampaignLeaderboardTab from '../components/campaign/CampaignLeaderboardTab.vue'
 import CampaignBulkTab from '../components/campaign/CampaignBulkTab.vue'
 
@@ -23,10 +24,10 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const campaign = ref(null)
-const submissions = ref([])
-// The submissions list arrives after the page has already painted, so the
-// tabs that render it have to say "loading" rather than "none yet".
-const submissionsLoading = ref(true)
+// Submissions live inside the tab components now (the list is paged on
+// the server); this counter tells them "something changed, refetch what
+// you show". Bumped after every action that can change a submission.
+const submissionsTick = ref(0)
 const leaderboard = ref([])
 const leaderboardLoading = ref(true)
 const stats = ref(null)
@@ -92,24 +93,6 @@ const participantNames = computed(() =>
     .filter(m => m.role === 'participant')
     .map(m => m.user.username))])
 
-// Submissions still needing attention from whoever runs the campaign.
-// In jury mode that means "nobody has reviewed it"; in self-assessment
-// there are no jury reviews to wait on, so it means "not yet accepted or
-// rejected by an organizer" — hence the different tab name.
-const reviewBacklog = computed(() => {
-  if (!isJury.value) return []
-  return submissions.value.filter(s =>
-    // Bulk submissions are auto-scored counts over the whole campaign
-    // window, not a page to review, and the submissions list no longer
-    // renders them — counting them here would report a backlog with rows
-    // that never appear.
-    !['wikidata_edits', 'commons_edits'].includes(s.kind)
-    && (campaign.value?.scoring_mode === 'jury'
-      // A rejected submission is already decided — not a backlog.
-      ? s.status !== 'rejected' && !s.reviews.length
-      : s.status === 'submitted'))
-})
-
 const tabs = computed(() => {
   const t = [['overview', 'Overview'], ['submissions', 'Submissions']]
   if (isJury.value) {
@@ -166,13 +149,8 @@ async function load () {
       .then(r => { leaderboard.value = r.data })
       .catch(() => {})
       .finally(() => { leaderboardLoading.value = false })
-    // The heaviest response, and the one the landing view does not draw:
-    // requested last so it cannot delay the tiles above it.
-    submissionsLoading.value = true
-    api.listSubmissions(props.slug)
-      .then(r => { submissions.value = r.data })
-      .catch(() => { submissions.value = [] })
-      .finally(() => { submissionsLoading.value = false })
+    // Submissions are not loaded here: each tab fetches its own page
+    // from the server when it is opened.
     campaign.value = (await api.getCampaign(props.slug)).data
     if (!newLanguage.value) newLanguage.value = campaign.value.language
     // Fountain model: approval needs on-wiki admin rights (jury: sysop on
@@ -197,13 +175,6 @@ async function loadLeaderboard () {
   } finally {
     leaderboardLoading.value = false
   }
-}
-// Submission-only actions (accept/reject/refresh/recalculate/withdraw/
-// review/claims) only need submissions refreshed, not the whole
-// campaign — reloading campaign+approval-rights on every click made
-// "Accept" feel slow for no reason.
-async function reloadSubmissions () {
-  submissions.value = (await api.listSubmissions(props.slug)).data
 }
 onMounted(load)
 
@@ -246,6 +217,7 @@ async function run (fn, successMsg = '', pendingKey = '') {
     await fn()
     notice.value = successMsg
     await load()
+    submissionsTick.value += 1
     if (tab.value === 'leaderboard') await loadLeaderboard()
   } catch (e) {
     error.value = errorMessage(e)
@@ -253,9 +225,10 @@ async function run (fn, successMsg = '', pendingKey = '') {
     if (pendingKey) pendingAction.value = ''
   }
 }
-// Same as run(), but for actions that only change one submission —
-// refreshes just the submissions list (and the leaderboard, since points
-// may have changed) instead of the whole campaign.
+// Same as run(), but for actions that only change one submission: the
+// action's own response already reflects the change, so all that is left
+// is telling the tab components to refetch the page they show — no
+// campaign reload, no full-list reload.
 async function runSub (fn, successMsg = '', pendingKey = '') {
   error.value = ''
   notice.value = ''
@@ -263,7 +236,7 @@ async function runSub (fn, successMsg = '', pendingKey = '') {
   try {
     await fn()
     notice.value = successMsg
-    await reloadSubmissions()
+    submissionsTick.value += 1
     if (tab.value === 'leaderboard') await loadLeaderboard()
   } catch (e) {
     error.value = errorMessage(e)
@@ -461,10 +434,13 @@ const statusStyles = {
     <CampaignSuggestedTab v-if="tab === 'suggested'" :slug="slug" :campaign="campaign"
                         @error="error = $event" />
 
-    <!-- SUBMISSIONS -->
-    <CampaignSubmissionsTab v-if="tab === 'submissions'"
-                        :campaign="campaign" :submissions="submissions"
-                        :loading="submissionsLoading"
+    <!-- SUBMISSIONS: each scoring mode has its own component. Jury mode
+         groups by participant (rows from the leaderboard, submissions
+         loaded per user on expand); self/hybrid page a flat list. Both
+         fetch their own pages from the server. -->
+    <component :is="campaign.scoring_mode === 'jury' ? SubmissionsJuryTab : SubmissionsListTab"
+                        v-if="tab === 'submissions'"
+                        :campaign="campaign" :refresh-tick="submissionsTick"
                         :is-logged-in="auth.isLoggedIn" :current-username="auth.user?.username || ''"
                         :is-organizer="isOrganizer" :is-jury="isJury"
                         :self-mode="selfMode" :criteria="criteria"
@@ -474,32 +450,18 @@ const statusStyles = {
                         @save-review="saveReview" @save-claims="saveClaims"
                         @moderate-claim="moderateClaim" />
 
-    <!-- REVIEW BACKLOG: the same submissions list, pre-filtered to what
-         still needs attention, so it keeps every moderation control. -->
-    <template v-if="tab === 'review'">
-      <p class="text-sm text-neutral-600 dark:text-neutral-300 mb-3">
-        <template v-if="reviewBacklog.length">
-          {{ reviewBacklog.length }}
-          {{ campaign.scoring_mode === 'jury'
-            ? 'submission(s) no juror has reviewed yet.'
-            : 'submission(s) waiting to be accepted or rejected.' }}
-        </template>
-        <template v-else>
-          Nothing is waiting — every submission has been
-          {{ campaign.scoring_mode === 'jury' ? 'reviewed' : 'moderated' }}.
-        </template>
-      </p>
-      <CampaignSubmissionsTab v-if="reviewBacklog.length"
-                          :campaign="campaign" :submissions="reviewBacklog"
-                          :is-logged-in="auth.isLoggedIn" :current-username="auth.user?.username || ''"
-                          :is-organizer="isOrganizer" :is-jury="isJury"
-                          :self-mode="selfMode" :criteria="criteria"
-                          :pending-action="pendingAction"
-                          @refresh="refresh" @withdraw="withdraw" @moderate="moderateSub"
-                          @override="overrideSub" @recalculate="recalculate"
-                          @save-review="saveReview" @save-claims="saveClaims"
-                          @moderate-claim="moderateClaim" />
-    </template>
+    <!-- REVIEW BACKLOG: the flat list pinned server-side to what still
+         needs attention, so it keeps every moderation control. -->
+    <SubmissionsListTab v-if="tab === 'review'" mode="backlog"
+                        :campaign="campaign" :refresh-tick="submissionsTick"
+                        :is-logged-in="auth.isLoggedIn" :current-username="auth.user?.username || ''"
+                        :is-organizer="isOrganizer" :is-jury="isJury"
+                        :self-mode="selfMode" :criteria="criteria"
+                        :pending-action="pendingAction"
+                        @refresh="refresh" @withdraw="withdraw" @moderate="moderateSub"
+                        @override="overrideSub" @recalculate="recalculate"
+                        @save-review="saveReview" @save-claims="saveClaims"
+                        @moderate-claim="moderateClaim" />
 
     <!-- LEADERBOARD -->
     <CampaignLeaderboardTab v-if="tab === 'leaderboard'"
@@ -511,10 +473,10 @@ const statusStyles = {
 
     <!-- WIKIDATA BULK -->
     <CampaignBulkTab v-if="tab === 'bulk'"
-                        :campaign="campaign" :submissions="submissions"
+                        :campaign="campaign" :refresh-tick="submissionsTick"
                         :is-organizer="isOrganizer" :is-logged-in="auth.isLoggedIn"
                         :current-username="auth.user?.username || ''"
-                        @refresh="reloadSubmissions"
+                        @refresh="submissionsTick += 1"
                         @show-details="detailsUser = $event" />
 
     <!-- STATISTICS -->

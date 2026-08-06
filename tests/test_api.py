@@ -220,12 +220,14 @@ def test_full_self_assessment_flow(client):
     assert r.status_code == 403
 
     # --- moderation -----------------------------------------------------
-    submissions = client.get(f"/api/campaigns/{slug}/submissions").json
+    # claims ride on detail rows; the default lean rows carry only points
+    submissions = client.get(
+        f"/api/campaigns/{slug}/submissions?detail=1").json["items"]
     claim_id = submissions[0]["claims"][0]["id"]
     r = client.post(f"/api/claims/{claim_id}/moderate",
                     json={"status": "adjusted", "points_final": 1})
     assert r.status_code == 200
-    submissions = client.get(f"/api/campaigns/{slug}/submissions").json
+    submissions = client.get(f"/api/campaigns/{slug}/submissions").json["items"]
     assert submissions[0]["points"] == 16  # 5 + 10 + adjusted 1
 
     r = client.post(f"/api/submissions/{sub['id']}/moderate",
@@ -285,14 +287,15 @@ def test_jury_mode_flow(client):
                          "scores": {"quality": 8}, "comment": "solid"})
     assert r.status_code == 200
     assert r.json["total"] == 8
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json["items"]
     assert subs[0]["points"] == 8
 
     # upsert: revising replaces, not duplicates
     r = client.put(f"/api/submissions/{sub['id']}/review",
                    json={"total": 6, "decision": "accept"})
     assert r.status_code == 200
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    subs = client.get(
+        f"/api/campaigns/{slug}/submissions?detail=1").json["items"]
     assert subs[0]["points"] == 6
     assert len(subs[0]["reviews"]) == 1
 
@@ -1005,7 +1008,7 @@ def test_reject_submission_with_reason(client):
     assert r.json["status"] == "rejected"
     assert r.json["moderation_note"] == "Duplicate of an earlier submission."
 
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json["items"]
     assert subs[0]["moderation_note"] == "Duplicate of an earlier submission."
 
     # clearing the note: an empty string is stored as null, not ""
@@ -1034,7 +1037,7 @@ def test_submission_rejected_when_submitter_has_no_detected_contribution(client)
     assert "No edits by you" in r.json["detail"]
 
     # confirm it really wasn't created
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json["items"]
     assert not any(s["title"] == "Untouched" for s in subs)
 
 
@@ -1054,7 +1057,7 @@ def test_submission_rejected_when_page_does_not_exist_on_the_wiki(client):
     assert r.status_code == 400
     assert "does not exist" in r.json["detail"]
 
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json["items"]
     assert not any(s["title"] == "Nonexistent" for s in subs)
 
 
@@ -1093,7 +1096,7 @@ def test_junk_titles_rejected_before_any_wiki_lookup(client, monkeypatch):
                     json={"title": "Example.jpg", "kind": "commons_file"})
     assert r.status_code == 400 and "File:" in r.json["detail"]
 
-    assert client.get(f"/api/campaigns/{slug}/submissions").json == []
+    assert client.get(f"/api/campaigns/{slug}/submissions").json["items"] == []
 
 
 def test_invalid_title_reported_as_nonexistent_not_crash(monkeypatch):
@@ -1833,7 +1836,7 @@ def test_recalculate_all_bulk_wikidata(client, monkeypatch):
     assert r.json == {"refreshed": 1, "skipped": 0, "failed": 0,
                       "total": 1, "cap": 500}
 
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json["items"]
     bulk = [s for s in subs if s["kind"] == "wikidata_edits"][0]
     assert bulk["metrics"]["statements"] == 15
     assert bulk["points"] == 3                     # floor(15/5)
@@ -1905,7 +1908,7 @@ def test_sweep_skips_heavy_editors_without_losing_their_counts(client, monkeypat
     assert r.json["refreshed"] == 0
     assert r.json["cap"] == 500
 
-    subs = client.get(f"/api/campaigns/{slug}/submissions").json
+    subs = client.get(f"/api/campaigns/{slug}/submissions").json["items"]
     bulk = [s for s in subs if s["kind"] == "wikidata_edits"][0]
     assert bulk["metrics"]["statements"] == 20     # not clobbered
     assert bulk["points"] == 4
@@ -1943,7 +1946,7 @@ def test_timestamps_are_serialized_as_utc(client, monkeypatch):
 
     # ...and still after a round-trip through the database, which is where
     # the tzinfo was being lost.
-    listed = client.get(f"/api/campaigns/{slug}/submissions").json[0]
+    listed = client.get(f"/api/campaigns/{slug}/submissions").json["items"][0]
     assert listed["metadata_fetched_at"].endswith("Z")
     recalculated = client.post(
         f"/api/submissions/{sub['id']}/recalculate").json

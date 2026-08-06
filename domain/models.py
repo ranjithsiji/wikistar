@@ -327,6 +327,14 @@ class Submission(Base):
     status: Mapped[SubmissionStatus] = mapped_column(
         Enum(SubmissionStatus), default=SubmissionStatus.submitted
     )
+    # Denormalised total of compute_breakdown(), kept fresh by
+    # routers.common.rescore_* from every write that can change a score
+    # (reviews, claims, moderation, metadata refresh, rule/settings
+    # edits). Lists, the leaderboard and statistics read points with
+    # plain SQL instead of rescoring the campaign on every request.
+    # NULL means "not scored yet" (rows from before this column existed);
+    # ensure_scored() backfills a campaign lazily on first read.
+    points_cached: Mapped[float | None] = mapped_column(Numeric(9, 2))
     # Why an organizer rejected (or otherwise moderated) this submission,
     # shown to the participant alongside the status badge.
     moderation_note: Mapped[str | None] = mapped_column(String(1000))

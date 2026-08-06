@@ -1,6 +1,5 @@
-"""Helpers shared by the routers: lookups, serializers, audit logging."""
-import json
-
+"""Helpers shared by the routers: lookups, serializers, audit logging,
+and the cached-points bookkeeping (rescore_* / ensure_scored)."""
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -9,12 +8,13 @@ from core.webutil import HTTPException
 from domain.models import (
     AuditLog,
     Campaign,
+    CampaignMember,
     CampaignStatus,
-    Claim,
     MemberRole,
     Review,
     Submission,
     SubmissionKind,
+    SubmissionStatus,
     User,
 )
 from domain.schemas import (
@@ -81,7 +81,10 @@ def load_submissions(db: Session, campaign_id: int) -> list[Submission]:
         .filter_by(campaign_id=campaign_id)
         .options(
             selectinload(Submission.user),
-            selectinload(Submission.reviews),
+            # The reviewer rides along: serializing a review names its
+            # reviewer, and without this every review row costs its own
+            # SELECT — thousands of round-trips on a large campaign.
+            selectinload(Submission.reviews).selectinload(Review.reviewer),
             selectinload(Submission.claims),
         )
         .order_by(Submission.submitted_at.desc())
@@ -152,7 +155,13 @@ def campaign_detail_out(db: Session, campaign: Campaign,
     out.settings = campaign.effective_settings
     out.created_by_username = campaign.creator.username if campaign.creator else None
     out.rules = [RuleOut.model_validate(r) for r in campaign.rules if r.active]
-    out.members = [MemberOut.model_validate(m) for m in campaign.members]
+    # Loaded with their users in one go: serializing a member names its
+    # user, and iterating campaign.members would lazy-load one user per
+    # row — hundreds of SELECTs for a campaign with many participants.
+    members = (db.query(CampaignMember)
+               .options(selectinload(CampaignMember.user))
+               .filter_by(campaign_id=campaign.id).all())
+    out.members = [MemberOut.model_validate(m) for m in members]
     out.suggested_articles = [p.title for p in campaign.suggested_pages
                               if p.kind == SubmissionKind.article]
     out.suggested_items = [
@@ -219,134 +228,90 @@ def visible_campaigns(db: Session, campaigns: list[Campaign],
     return [c for c in campaigns if decided.get(c.id)]
 
 
-_LEADERBOARD_CACHE: dict[int, tuple[tuple, list[LeaderboardRow]]] = {}
-_LEADERBOARD_CACHE_MAX = 64
+# ---- cached points ---------------------------------------------------------
+# Points are a function of the submission, its reviews/claims and the
+# campaign's rules/settings. The scoring engine stays the single source
+# of truth, but its result is written to Submission.points_cached by the
+# handful of writes that can change it — so every read path (lists,
+# leaderboard, statistics) is plain SQL over that column instead of a
+# campaign-wide rescore per request.
+
+def rescore_submission(campaign: Campaign, sub: Submission,
+                       settings: dict | None = None) -> None:
+    """Refresh one submission's cached points. Call from any write that
+    changes this submission's score inputs (review, claim, moderation,
+    metadata refresh) — after flushing, so relationship collections see
+    the write."""
+    settings = settings if settings is not None else campaign.effective_settings
+    bd = compute_breakdown(sub, campaign.rules,
+                           suggested_titles(campaign, sub.kind),
+                           campaign.scoring_mode, settings)
+    sub.points_cached = bd.total
 
 
-def _leaderboard_version(db: Session, campaign: Campaign) -> tuple:
-    """A key that changes whenever anything the leaderboard is computed
-    from changes.
-
-    Deriving the key from the data — rather than expiring on a timer —
-    means a new review shows up in the standings immediately, instead of
-    users seeing points that lag by the length of a TTL.
-
-    updated_at deliberately plays no part: these are DATETIME columns, so
-    MariaDB truncates them to whole seconds, and two writes inside the
-    same second are indistinguishable. The key sums the values that
-    actually decide points instead, which cannot collapse that way.
-    """
-    # Enum columns are grouped and counted rather than summed: a status
-    # flip must change the key even when it doesn't move any number.
-    sub_agg = (
-        db.query(func.count(Submission.id),
-                 func.coalesce(func.sum(Submission.bytes_added), 0),
-                 func.coalesce(func.sum(Submission.points_override), 0),
-                 func.count(Submission.points_override),
-                 func.coalesce(func.sum(Submission.page_len), 0),
-                 # SUM over the boolean, not COUNT(...) FILTER: MariaDB
-                 # has no FILTER clause.
-                 func.coalesce(func.sum(Submission.is_new_page), 0))
-        .filter(Submission.campaign_id == campaign.id).one())
-    sub_status = tuple(
-        db.query(Submission.status, func.count(Submission.id))
-        .filter(Submission.campaign_id == campaign.id)
-        .group_by(Submission.status).order_by(Submission.status).all())
-    # Bulk submissions score from Submission.metrics, and recalculating one
-    # writes nothing else the aggregates above can see — so without this a
-    # participant whose counts had just been fixed kept their cached score
-    # (typically 0, from a run that hit the edit limit).
-    #
-    # The metrics themselves are the key, not metadata_fetched_at: that is a
-    # DATETIME, truncated to whole seconds, so two fetches inside the same
-    # second are indistinguishable — the same trap documented above for
-    # updated_at. Serialising the counts cannot collapse that way.
-    metrics_agg = tuple(
-        (sid, json.dumps(m, sort_keys=True, default=str) if m else "")
-        for sid, m in
-        db.query(Submission.id, Submission.metrics)
-        .filter(Submission.campaign_id == campaign.id,
-                Submission.kind.in_([SubmissionKind.wikidata_edits,
-                                     SubmissionKind.commons_edits]))
-        .order_by(Submission.id).all())
-    review_agg = (
-        db.query(func.count(Review.id),
-                 func.coalesce(func.sum(Review.total), 0))
-        .join(Submission, Review.submission_id == Submission.id)
-        .filter(Submission.campaign_id == campaign.id).one())
-    review_decisions = tuple(
-        db.query(Review.decision, func.count(Review.id))
-        .join(Submission, Review.submission_id == Submission.id)
-        .filter(Submission.campaign_id == campaign.id)
-        .group_by(Review.decision).order_by(Review.decision).all())
-    claim_agg = (
-        db.query(func.count(Claim.id),
-                 func.coalesce(func.sum(Claim.points_claimed), 0),
-                 func.coalesce(func.sum(Claim.points_final), 0),
-                 func.coalesce(func.sum(Claim.quantity), 0))
-        .join(Submission, Claim.submission_id == Submission.id)
-        .filter(Submission.campaign_id == campaign.id).one())
-    claim_status = tuple(
-        db.query(Claim.status, func.count(Claim.id))
-        .join(Submission, Claim.submission_id == Submission.id)
-        .filter(Submission.campaign_id == campaign.id)
-        .group_by(Claim.status).order_by(Claim.status).all())
-    # The campaign's own row covers rules, settings and suggested pages:
-    # every edit path reassigns a campaign column, and a rule/settings
-    # write cascades to it through the ORM.
-    return (campaign.updated_at, campaign.scoring_mode,
-            tuple(sub_agg), sub_status, metrics_agg,
-            tuple(review_agg), review_decisions,
-            tuple(claim_agg), claim_status)
-
-
-def compute_leaderboard(db: Session, campaign: Campaign,
-                        subs: list[Submission] | None = None
-                        ) -> list[LeaderboardRow]:
-    """Pass `subs` when the caller already holds the campaign's loaded
-    submissions (e.g. the stats endpoint) — they are the heaviest thing
-    this loads, and reloading them doubled that endpoint's DB work.
-
-    Results are memoised per process against a version key derived from
-    the underlying rows, so repeat calls (the dashboard scores every
-    campaign a user takes part in) skip the reload and rescoring while
-    never serving a standing that a write has already invalidated.
-    """
-    if subs is None:
-        version = _leaderboard_version(db, campaign)
-        cached = _LEADERBOARD_CACHE.get(campaign.id)
-        if cached is not None and cached[0] == version:
-            return cached[1]
-    else:
-        version = None
+def rescore_campaign(db: Session, campaign: Campaign) -> None:
+    """Refresh every submission's cached points — for writes with
+    campaign-wide effect (rule / settings / suggested-list edits) and
+    the lazy backfill of rows from before the cache existed."""
     settings = campaign.effective_settings
-    totals: dict[int, dict] = {}
-    if subs is None:
-        subs = load_submissions(db, campaign.id)
-    for sub in subs:
-        if sub.status.value == "rejected":
-            continue
-        bd = compute_breakdown(sub, campaign.rules,
-                               suggested_titles(campaign, sub.kind),
+    keys_by_kind: dict[SubmissionKind, set[str]] = {}
+    for sub in load_submissions(db, campaign.id):
+        keys = keys_by_kind.get(sub.kind)
+        if keys is None:
+            keys = keys_by_kind[sub.kind] = suggested_titles(campaign, sub.kind)
+        bd = compute_breakdown(sub, campaign.rules, keys,
                                campaign.scoring_mode, settings)
-        entry = totals.setdefault(
-            sub.user_id, {"user": sub.user, "submission_count": 0,
-                         "points": 0.0, "bytes_added": 0})
-        entry["submission_count"] += 1
-        entry["points"] = round(entry["points"] + bd.total, 2)
-        entry["bytes_added"] += sub.bytes_added or 0
-    ranked = sorted(totals.values(), key=lambda e: -e["points"])
-    rows: list[LeaderboardRow] = []
-    for i, e in enumerate(ranked):
+        sub.points_cached = bd.total
+
+
+def ensure_scored(db: Session, campaign: Campaign) -> None:
+    """Backfill points_cached lazily: rows from before the column existed
+    are NULL, so the first read of such a campaign rescored it once and
+    commits; afterwards this is a single indexed EXISTS check."""
+    missing = (db.query(Submission.id)
+               .filter(Submission.campaign_id == campaign.id,
+                       Submission.points_cached.is_(None))
+               .first())
+    if missing:
+        rescore_campaign(db, campaign)
+        db.commit()
+
+
+def compute_leaderboard(db: Session,
+                        campaign: Campaign) -> list[LeaderboardRow]:
+    """Standings from the cached points: one grouped query (with a
+    review-coverage subquery) instead of loading and rescoring every
+    submission. Rejected submissions never count, same as before."""
+    ensure_scored(db, campaign)
+    reviewed = (
+        db.query(Review.submission_id)
+        .join(Submission, Review.submission_id == Submission.id)
+        .filter(Submission.campaign_id == campaign.id)
+        .distinct().subquery())
+    rows = (
+        db.query(
+            User,
+            func.count(Submission.id),
+            func.coalesce(func.sum(Submission.points_cached), 0),
+            func.coalesce(func.sum(Submission.bytes_added), 0),
+            func.count(reviewed.c.submission_id))
+        .join(Submission, Submission.user_id == User.id)
+        .outerjoin(reviewed, reviewed.c.submission_id == Submission.id)
+        .filter(Submission.campaign_id == campaign.id,
+                Submission.status != SubmissionStatus.rejected)
+        .group_by(User.id)
+        .all())
+    ranked = sorted(
+        ((user, count, round(float(points or 0), 2), int(bytes_ or 0),
+          reviewed_count)
+         for user, count, points, bytes_, reviewed_count in rows),
+        key=lambda r: -r[2])
+    out: list[LeaderboardRow] = []
+    for i, (user, count, points, bytes_, reviewed_count) in enumerate(ranked):
         # Fountain-style ranking: equal totals share a rank.
-        rank = (rows[-1].rank if rows and rows[-1].points == e["points"]
-                else i + 1)
-        rows.append(LeaderboardRow(
-            rank=rank, user=UserOut.model_validate(e["user"]),
-            submission_count=e["submission_count"], points=e["points"],
-            bytes_added=e["bytes_added"]))
-    if version is not None:
-        if len(_LEADERBOARD_CACHE) >= _LEADERBOARD_CACHE_MAX:
-            _LEADERBOARD_CACHE.clear()  # crude bound; entries are cheap to rebuild
-        _LEADERBOARD_CACHE[campaign.id] = (version, rows)
-    return rows
+        rank = (out[-1].rank if out and out[-1].points == points else i + 1)
+        out.append(LeaderboardRow(
+            rank=rank, user=UserOut.model_validate(user),
+            submission_count=count, points=points, bytes_added=bytes_,
+            reviewed_count=reviewed_count))
+    return out

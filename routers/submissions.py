@@ -9,8 +9,9 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 
-from flask import Blueprint
-from sqlalchemy.orm import Session
+from flask import Blueprint, request
+from sqlalchemy import func
+from sqlalchemy.orm import Session, selectinload
 
 from integrations import mediawiki
 from auth import (
@@ -27,6 +28,7 @@ from domain.models import (
     CampaignMember,
     CampaignStatus,
     MemberRole,
+    Review,
     RuleApplies,
     RuleType,
     ScoringMode,
@@ -38,13 +40,17 @@ from domain.models import (
 from domain.scoring import BULK_KIND_METRICS, normalize_title
 from routers.common import (
     audit,
+    can_see_campaign,
+    ensure_scored,
     get_campaign_or_404,
     get_or_create_user,
     load_submissions,
+    rescore_submission,
     submission_out,
     suggested_titles,
 )
-from domain.schemas import SubmissionIn, SubmissionModerationIn
+from domain.schemas import (SubmissionIn, SubmissionListOut,
+                            SubmissionModerationIn)
 
 bp = Blueprint("submissions", __name__, url_prefix="/api")
 
@@ -319,27 +325,206 @@ def _check_eligibility(sub: Submission, campaign: Campaign, user: User,
                      f"after {registered_after}")
 
 
+# The list endpoint pages on the server: a large campaign's submissions
+# never travel (or get scored) wholesale for one screen. Page size is
+# capped; consumers that legitimately need "everything of one narrow
+# kind" (the bulk tab, a jury group expand) use the higher cap with a
+# kind/user filter, which bounds the rows to one per participant anyway.
+PAGE_SIZE_DEFAULT = 50
+PAGE_SIZE_MAX = 500
+
+# Review-state filters, mirrored from the frontend's backlog dropdown.
+# "awaiting_me" additionally excludes the caller's own submissions — you
+# can never review yourself, so they would sit in the queue forever.
+def _review_filter(q, state: str, user: User | None):
+    if state == "awaiting_me":
+        if user is None:
+            raise HTTPException(401, "Login required for this filter")
+        return q.filter(
+            Submission.user_id != user.id,
+            Submission.status != SubmissionStatus.rejected,
+            ~Submission.reviews.any(Review.reviewer_id == user.id))
+    if state == "unreviewed":
+        return q.filter(Submission.status != SubmissionStatus.rejected,
+                        ~Submission.reviews.any())
+    if state == "not_accepted":
+        return q.filter(Submission.status == SubmissionStatus.submitted)
+    if state == "rejected":
+        return q.filter(Submission.status == SubmissionStatus.rejected)
+    raise HTTPException(400, f"Unknown review filter {state!r}")
+
+
+def _int_arg(name: str, default: int, lo: int, hi: int) -> int:
+    try:
+        value = int(request.args.get(name, default) or default)
+    except ValueError:
+        raise HTTPException(400, f"{name} must be a number")
+    return min(max(value, lo), hi)
+
+
+def _submission_facets(db: Session, campaign: Campaign,
+                       user: User | None) -> dict:
+    """Campaign-wide counts for the filter dropdowns. Computed over the
+    non-bulk submissions (the paged list never shows bulk kinds), so a
+    dropdown always describes the whole campaign, not the current page."""
+    def base():
+        return (db.query(Submission)
+                .filter(Submission.campaign_id == campaign.id,
+                        ~Submission.kind.in_(list(BULK_KINDS))))
+
+    kinds = dict(
+        base().with_entities(Submission.kind, func.count(Submission.id))
+        .group_by(Submission.kind).all())
+    domains = [d for (d,) in
+               base().filter(Submission.kind == SubmissionKind.article)
+               .with_entities(Submission.wiki_domain).distinct().all()]
+    participants = [
+        n for (n,) in
+        base().join(User, Submission.user_id == User.id)
+        .with_entities(User.username).distinct().order_by(User.username).all()
+    ]
+    review = {
+        "unreviewed": _review_filter(base(), "unreviewed", user).count(),
+        "not_accepted": _review_filter(base(), "not_accepted", user).count(),
+        "rejected": _review_filter(base(), "rejected", user).count(),
+    }
+    if user is not None:
+        review["awaiting_me"] = _review_filter(base(), "awaiting_me",
+                                               user).count()
+    return {
+        "kinds": {k.value: n for k, n in kinds.items()},
+        "languages": sorted({d.split(".")[0] for d in domains}),
+        "participants": participants,
+        "review": review,
+    }
+
+
+def _marks_hidden(db: Session, campaign: Campaign, user: User | None,
+                  settings: dict) -> bool:
+    """Fountain's HiddenMarks: in anonymous-review campaigns only
+    organizers/admins see marks and points; jurors additionally see
+    their own review."""
+    if not settings.get("anonymous_reviews"):
+        return False
+    return not (user is not None and (
+        user.is_admin
+        or MemberRole.organizer in campaign_roles(db, campaign, user)))
+
+
 @bp.get("/campaigns/<slug>/submissions")
 def list_submissions(slug: str):
+    """One page of a campaign's submissions.
+
+    Rows are lean by default — stored columns plus the cached points, one
+    SQL query, no scoring at read time. The expanded card fetches the
+    full detail (breakdown, reviews, claims) per submission; the judging
+    screen passes detail=1 to get today's full rows for its page.
+
+    Query parameters (all optional):
+      page, per_page   1-based page and its size (capped)
+      kind             one submission kind
+      exclude_bulk     leave out the bulk kinds (the submissions screen)
+      user             one participant's username
+      mine             only the caller's own submissions
+      language         articles from this Wikipedia language
+      review           awaiting_me | unreviewed | not_accepted | rejected
+      facets           include campaign-wide filter counts
+      detail           full rows with reviews/claims/breakdown
+    """
     db, user = get_db(), get_current_user()
     campaign = get_campaign_or_404(db, slug)
     settings = campaign.effective_settings
-    out = [submission_out(campaign, s, settings)
-           for s in load_submissions(db, campaign.id)]
+    ensure_scored(db, campaign)
 
-    # Fountain's HiddenMarks: only organizers/admins see marks and points;
-    # jurors additionally see their own review.
-    if settings.get("anonymous_reviews"):
-        privileged = user is not None and (
-            user.is_admin
-            or MemberRole.organizer in campaign_roles(db, campaign, user))
-        if not privileged:
+    q = db.query(Submission).filter(Submission.campaign_id == campaign.id)
+    kind = request.args.get("kind", "").strip()
+    if kind:
+        try:
+            q = q.filter(Submission.kind == SubmissionKind(kind))
+        except ValueError:
+            raise HTTPException(400, f"Unknown submission kind {kind!r}")
+    if request.args.get("exclude_bulk"):
+        q = q.filter(~Submission.kind.in_(list(BULK_KINDS)))
+    if request.args.get("mine"):
+        q = q.filter(Submission.user_id == (user.id if user else -1))
+    username = request.args.get("user", "").strip()
+    if username:
+        q = q.filter(Submission.user.has(User.username == username))
+    language = request.args.get("language", "").strip().lower()
+    if language:
+        q = q.filter(Submission.kind == SubmissionKind.article,
+                     Submission.wiki_domain.startswith(f"{language}."))
+    review_state = request.args.get("review", "").strip()
+    if review_state:
+        q = _review_filter(q, review_state, user)
+
+    page = _int_arg("page", 1, 1, 1_000_000)
+    per_page = _int_arg("per_page", PAGE_SIZE_DEFAULT, 1, PAGE_SIZE_MAX)
+    total = q.count()
+    detail = bool(request.args.get("detail"))
+    options = [selectinload(Submission.user)]
+    if detail:
+        options += [
+            # reviewer included: serializing a review names its reviewer,
+            # and without this every review row costs its own SELECT.
+            selectinload(Submission.reviews).selectinload(Review.reviewer),
+            selectinload(Submission.claims),
+        ]
+    subs = (
+        q.options(*options)
+        .order_by(Submission.submitted_at.desc(), Submission.id.desc())
+        .offset((page - 1) * per_page).limit(per_page)
+        .all()
+    )
+
+    hidden = _marks_hidden(db, campaign, user, settings)
+    if detail:
+        out = [submission_out(campaign, s, settings) for s in subs]
+        if hidden:
             for item in out:
                 item.reviews = [r for r in item.reviews
                                 if user and r.reviewer.id == user.id]
                 if campaign.scoring_mode == ScoringMode.jury:
                     item.points = 0
                     item.breakdown = []
+    else:
+        out = []
+        for s in subs:
+            row = SubmissionListOut.model_validate(s)
+            row.points = float(s.points_cached or 0)
+            if hidden and campaign.scoring_mode == ScoringMode.jury:
+                row.points = 0
+            out.append(row)
+
+    payload = {
+        "items": out,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": max(1, -(-total // per_page)),
+    }
+    if request.args.get("facets"):
+        payload["facets"] = _submission_facets(db, campaign, user)
+    return respond(payload)
+
+
+@bp.get("/submissions/<int:submission_id>")
+def get_submission(submission_id: int):
+    """Full detail of one submission — points breakdown, reviews and
+    claims — for the expanded card. The paged list stays lean."""
+    db, user = get_db(), get_current_user()
+    sub = _get_submission_or_404(db, submission_id)
+    campaign = sub.campaign
+    if not can_see_campaign(db, campaign, user):
+        raise HTTPException(404, "Submission not found")
+    settings = campaign.effective_settings
+    out = submission_out(campaign, sub, settings)
+    if _marks_hidden(db, campaign, user, settings):
+        out.reviews = [r for r in out.reviews
+                       if user and r.reviewer.id == user.id]
+        if campaign.scoring_mode == ScoringMode.jury:
+            out.points = 0
+            out.breakdown = []
     return respond(out)
 
 
@@ -424,6 +609,7 @@ def create_submission(slug: str):
         meta = _fetch_metadata(sub, campaign, participant.username)
         _check_eligibility(sub, campaign, participant, settings, meta)
     db.add(sub)
+    rescore_submission(campaign, sub, settings)
 
     if MemberRole.participant not in roles:
         db.add(CampaignMember(campaign_id=campaign.id, user_id=participant.id,
@@ -525,10 +711,22 @@ def submission_english_names(slug: str):
     title for non-English articles. Two Wikidata calls total (pageprops
     lookups happen per wiki_domain) instead of one per submission row, so
     the submissions list can show "native title (English name)" without
-    an expensive per-row fetch."""
+    an expensive per-row fetch.
+
+    ?ids=1,2,3 restricts the lookup to those submissions — the list is
+    paged now, so the frontend asks for the rows on screen instead of
+    the whole campaign."""
     db = get_db()
     campaign = get_campaign_or_404(db, slug)
-    subs = load_submissions(db, campaign.id)
+    ids_raw = request.args.get("ids", "")
+    if ids_raw:
+        ids = [int(x) for x in ids_raw.split(",") if x.strip().isdigit()]
+        subs = (db.query(Submission)
+                .filter(Submission.campaign_id == campaign.id,
+                        Submission.id.in_(ids[:PAGE_SIZE_MAX]))
+                .all()) if ids else []
+    else:
+        subs = load_submissions(db, campaign.id)
 
     out: dict[int, dict] = {}
     item_subs = [s for s in subs if s.kind == SubmissionKind.wikidata_item]
@@ -580,6 +778,7 @@ def refresh_metadata(submission_id: int):
         _fetch_bulk_metrics(sub, campaign, sub.user.username, db)
     else:
         _fetch_metadata(sub, campaign, sub.user.username)
+    rescore_submission(campaign, sub)
     db.commit()
     db.refresh(sub)
     return respond(submission_out(campaign, sub))
@@ -606,6 +805,7 @@ def recalculate_points(submission_id: int):
     had_override = sub.points_override is not None
     if not is_owner:
         sub.points_override = None
+    rescore_submission(campaign, sub)
     audit(db, user, "recalculate", "submission", sub.id,
           {"campaign": campaign.slug, "title": sub.title,
            "cleared_override": had_override and not is_owner})
@@ -630,6 +830,7 @@ def moderate_submission(submission_id: int):
         sub.points_override = None
     elif payload.points_override is not None:
         sub.points_override = payload.points_override
+    rescore_submission(campaign, sub)
     audit(db, user, "moderate", "submission", sub.id,
           {"campaign": campaign.slug, "title": sub.title,
            "status": sub.status.value,
@@ -723,6 +924,7 @@ def recalculate_all_bulk_wikidata(slug: str):
             "excluded_qids": excluded,
         }
         sub.metadata_fetched_at = datetime.now(timezone.utc)
+        rescore_submission(campaign, sub, settings)
         refreshed += 1
 
     audit(db, user, "recalculate_bulk_all", "campaign", campaign.id,

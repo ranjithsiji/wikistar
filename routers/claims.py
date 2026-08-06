@@ -22,7 +22,7 @@ from domain.models import (
     ScoringMode,
     Submission,
 )
-from routers.common import audit, submission_out
+from routers.common import audit, rescore_submission, submission_out
 from domain.schemas import ClaimIn, ClaimModeration, ClaimOut
 from domain.scoring import AUTO_METRICS, claim_points
 
@@ -105,6 +105,9 @@ def upsert_claims(submission_id: int):
     audit(db, user, "claim", "submission", sub.id,
           {"campaign": campaign.slug, "title": sub.title,
            "claims": len(payload)})
+    db.flush()
+    db.expire(sub, ["claims"])
+    rescore_submission(campaign, sub, settings)
     db.commit()
     db.refresh(sub)
     return respond(submission_out(campaign, sub, settings))
@@ -133,6 +136,10 @@ def moderate_claim(claim_id: int):
     audit(db, user, "moderate_claim", "claim", claim.id,
           {"campaign": campaign.slug, "status": payload.status.value,
            "points_final": payload.points_final})
+    sub = claim.submission
+    db.flush()
+    db.expire(sub, ["claims"])
+    rescore_submission(campaign, sub)
     db.commit()
     db.refresh(claim)
     return respond(ClaimOut.model_validate(claim))
