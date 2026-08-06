@@ -19,10 +19,18 @@ limited by the wiki, not the database: expect a few per second.
 
 Safe to re-run; it only ever writes what the wiki currently reports.
 
+A row whose recorded contribution would drop to nothing (bytes_added to
+0, or is_new_page from True to False) is reported but NOT written: that
+is far more often a bad fetch — a transient API answer, or a page moved
+or deleted without a redirect — than a real correction, and applying it
+silently strips a participant's points. Check those by hand, then pass
+--allow-zeroing to apply them.
+
 Usage (from the project root):
     uv run python scripts/backfill_new_pages.py --dry-run
     uv run python scripts/backfill_new_pages.py
     uv run python scripts/backfill_new_pages.py --campaign kcm26
+    uv run python scripts/backfill_new_pages.py --campaign kcm26 --allow-zeroing
 """
 import sys
 from pathlib import Path
@@ -45,6 +53,7 @@ def _arg(flag: str) -> str | None:
 
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
+    allow_zeroing = "--allow-zeroing" in sys.argv
     only_slug = _arg("--campaign")
 
     from core.db import SessionLocal, sync_schema
@@ -109,7 +118,7 @@ def main() -> None:
         # Now the database work, in short transactions over data already
         # in hand. Batched so a dropped connection costs one batch, not
         # the whole run.
-        changed = 0
+        changed = zeroed = 0
         batch = []
         for sub_id, meta in fetched.items():
             sub = db.get(Submission, sub_id)
@@ -120,6 +129,20 @@ def main() -> None:
             after = (meta.is_new_page, meta.bytes_added)
             if before == after:
                 continue
+            # A recorded contribution that now reads as nothing is far
+            # more often a bad fetch (a transient API answer, a page moved
+            # without a redirect, a deletion) than a real correction, and
+            # applying it silently strips a participant's points. Report
+            # it and leave the row alone; --allow-zeroing overrides once
+            # the individual cases have been checked by hand.
+            if (before[1] and not after[1]) or (before[0] and not after[0]):
+                zeroed += 1
+                print(f"  {campaign.slug}/{sub.title!r} by {sub.user.username}: "
+                      f"would drop to is_new_page {after[0]}, "
+                      f"bytes_added {after[1]} (was {before[0]}, {before[1]})"
+                      f"{'' if allow_zeroing else ' — SKIPPED'}")
+                if not allow_zeroing:
+                    continue
             changed += 1
             print(f"  {campaign.slug}/{sub.title!r} by {sub.user.username}: "
                   f"is_new_page {before[0]} -> {after[0]}, "
@@ -139,10 +162,14 @@ def main() -> None:
         if dry_run:
             db.rollback()
             print(f"\nDry run: {changed} submission(s) would change, "
+                  f"{zeroed} would lose a recorded contribution"
+                  f"{' (applied)' if allow_zeroing else ' (skipped)'}, "
                   f"{failed} fetch failure(s). Nothing was written.")
         else:
             db.commit()
             print(f"\nUpdated {changed} submission(s), "
+                  f"{zeroed} would lose a recorded contribution"
+                  f"{' (applied)' if allow_zeroing else ' (skipped)'}, "
                   f"{failed} fetch failure(s).")
     finally:
         db.close()

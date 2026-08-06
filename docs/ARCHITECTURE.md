@@ -317,7 +317,7 @@ and writes nothing. All are idempotent and safe to re-run.
 | `recalculate_scores.py` | rescore from data already in the database | `--campaign` `--active` | no network; thousands of rows/second |
 | `recalculate_scores.py --refetch` | refetch each page's wiki metadata, then rescore | `--campaign` `--active` `--user` | several API round-trips per submission |
 | `recalculate_bulk.py` | recount Wikidata/Commons bulk submissions | `--campaign` `--active` `--user` `--kind` `--workers` | walks each participant's contribution history |
-| `backfill_new_pages.py` | re-detect `is_new_page` / `bytes_added` | `--campaign` | same as `--refetch` |
+| `backfill_new_pages.py` | re-detect `is_new_page` / `bytes_added` | `--campaign` `--allow-zeroing` | same as `--refetch` |
 | `backfill_suggested_qids.py` | resolve suggested articles' Wikidata items | — | one batched call per wiki |
 
 The two `backfill_*` scripts are one-off repairs for data recorded before
@@ -345,6 +345,13 @@ by hand. `recalculate_bulk.py` has no request deadline, so it uses the
 generous `wikidata_edit_limit_single` cap (default 5000) and scores them.
 Participants still past that cap are reported as needing a manual points
 override — the campaign settings decide both caps.
+
+**Never silently strip a score.** `backfill_new_pages.py` reports, but
+does not write, any row whose recorded contribution would drop to nothing
+(`bytes_added` to 0, or `is_new_page` from true to false). Such a change
+is far more often a bad fetch — a transient API answer, or a page moved
+or deleted without a redirect — than a real correction. Check those cases
+by hand and pass `--allow-zeroing` to apply them.
 
 **Failure behaviour.** A wiki error leaves the row's existing counts
 alone rather than replacing good data with zeros; the run reports it as a

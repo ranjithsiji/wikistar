@@ -670,10 +670,16 @@ def fetch_page_metadata(
     """
     meta = PageMetadata()
     with _client() as client:
+        # redirects=1: a page renamed after it was submitted leaves the
+        # submitted title behind as a redirect. Without following it this
+        # reads the redirect stub instead of the article — a couple of
+        # bytes, created by whoever moved the page — so the participant's
+        # own work reads as 0 bytes added and "not the creator", and a
+        # recalculation would silently strip their points.
         info = client.get(api_url(domain), params={
             "action": "query", "format": "json", "formatversion": 2,
             "prop": "info|pageprops", "ppprop": "wikibase_item",
-            "titles": title,
+            "titles": title, "redirects": 1,
         }).json()
         page = info["query"]["pages"][0]
         # "invalid" (title MediaWiki refuses to parse at all — stray

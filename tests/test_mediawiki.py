@@ -65,6 +65,59 @@ def test_same_user_follows_mediawiki_name_normalisation():
     assert not mediawiki.same_user("", "")
 
 
+def test_page_metadata_follows_a_redirect_left_by_a_rename(monkeypatch):
+    """A page renamed after submission leaves the submitted title behind
+    as a redirect. Reading the redirect stub instead of the article makes
+    the submitter's own work look like 0 bytes by someone else, and a
+    recalculation would then strip their points."""
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def get(self, url, params=None):
+            calls.append(params)
+            # The info query: only answered with the article when the
+            # caller asked the wiki to resolve redirects.
+            if params.get("prop", "").startswith("info"):
+                if not params.get("redirects"):
+                    # the stub: tiny, created by whoever moved the page
+                    return FakeResponse({"query": {"pages": [
+                        {"pageid": 999, "length": 91, "lastrevid": 5}]}})
+                return FakeResponse({"query": {"pages": [
+                    {"pageid": 123, "length": 11717, "lastrevid": 4652368}]}})
+            if params.get("rvdir") == "newer" and params.get("rvlimit") == 1:
+                return FakeResponse({"query": {"pages": [{"revisions": [
+                    {"timestamp": "2026-07-20T10:00:00Z",
+                     "user": "Atheenasiji"}]}]}})
+            if params.get("rvlimit") == "max":
+                return FakeResponse({"query": {"pages": [{"revisions": [
+                    {"size": 11717, "user": "Atheenasiji", "parentid": 0,
+                     "timestamp": "2026-07-20T10:00:00Z"}]}]}})
+            return FakeResponse({"query": {"pages": []}})
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_client():
+        yield FakeClient()
+
+    monkeypatch.setattr(mediawiki, "_client", fake_client)
+    meta = mediawiki.fetch_page_metadata(
+        "ml.wikipedia.org", "Old title", "Atheenasiji",
+        date(2026, 7, 15), date(2026, 8, 15))
+
+    assert calls[0].get("redirects"), "the info query must resolve redirects"
+    assert meta.page_len == 11717      # the article, not the 91-byte stub
+    assert meta.is_new_page is True
+    assert meta.bytes_added == 11717
+
+
 def test_bytes_are_credited_across_username_spellings():
     # The revision history spells the user one way and the stored account
     # another; the edits are still theirs.
