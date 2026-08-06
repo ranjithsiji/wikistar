@@ -1,7 +1,15 @@
-# WikiSTAR
+<p align="center">
+  <img src="frontend/src/assets/Wikistar.svg" alt="WikiSTAR logo" width="140">
+</p>
 
-Submission, review and self-assessment tool for Wikipedia/Wikidata
-editathons and writing contests.
+<h1 align="center">WikiSTAR</h1>
+
+<p align="center">
+  Submission, review and self-assessment tool for Wikipedia/Wikidata
+  editathons and writing contests.
+  <br>
+  <a href="https://wikistar.toolforge.org"><strong>wikistar.toolforge.org</strong></a>
+</p>
 
 > **v2 rewrite in progress.** The previous Flask implementation lives on
 > the [`legacy-v1`](../../tree/legacy-v1) branch. See
@@ -86,9 +94,10 @@ the full list, including the one-off backfills.
 
 ## Deployment (Toolforge)
 
-Classic python webservice (uwsgi). The repository root is the
-webservice source directory; Flask serves the built frontend from
-`frontend/dist` (`npm run build`).
+Runs at [wikistar.toolforge.org](https://wikistar.toolforge.org) as a
+classic python webservice (uwsgi). The repository root is the webservice
+source directory; Flask serves the built frontend from `frontend/dist`
+(`npm run build`).
 
 ```bash
 become wikistar
