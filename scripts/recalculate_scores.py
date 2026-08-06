@@ -102,19 +102,56 @@ def main() -> None:
                 continue
 
             if refetch:
-                from routers.submissions import _fetch_metadata
+                from integrations import mediawiki
 
-                page_subs = [s for s in subs if s.kind in PAGE_KINDS]
+                # Read what the fetches need into plain values first, then
+                # let go of the connection. A campaign of a few thousand
+                # submissions spends minutes in the MediaWiki API, and
+                # ToolsDB drops a connection idle that long — holding the
+                # session across the loop means one dropped connection
+                # poisons the session and every later row fails.
+                page_subs = [(s.id, s.wiki_domain, s.title, s.user.username)
+                             for s in subs if s.kind in PAGE_KINDS]
+                start, end = campaign.start_date, campaign.end_date
+                db.commit()
                 print(f"{campaign.slug}: refetching wiki metadata for "
                       f"{len(page_subs)} submission(s)…")
-                for i, sub in enumerate(page_subs, 1):
+                metas: dict[int, object] = {}
+                for i, (sub_id, domain, title, username) in enumerate(
+                        page_subs, 1):
                     try:
-                        _fetch_metadata(sub, campaign, sub.user.username)
+                        meta = mediawiki.fetch_page_metadata(
+                            domain, title, username, start, end)
+                        if meta.exists:
+                            metas[sub_id] = meta
                     except Exception as exc:
                         total_failed += 1
-                        print(f"  {sub.title!r}: fetch failed ({exc})")
+                        print(f"  {title!r}: fetch failed ({exc})")
                     if i % 100 == 0:
                         print(f"  …{i}/{len(page_subs)}")
+
+                # Apply the snapshots; the rescore below then runs over
+                # the refreshed rows. Mirrors routers.submissions'
+                # _fetch_metadata, minus the per-item Wikidata metrics
+                # call (that is recalculate_bulk.py's job).
+                from datetime import datetime, timezone
+
+                subs = load_submissions(db, campaign.id)
+                if only_user:
+                    subs = [s for s in subs if s.user.username == only_user]
+                by_id = {s.id: s for s in subs}
+                for sub_id, meta in metas.items():
+                    sub = by_id.get(sub_id)
+                    if sub is None:
+                        continue
+                    sub.page_id = meta.page_id
+                    sub.page_len = meta.page_len
+                    sub.current_rev_id = meta.current_rev_id
+                    sub.base_rev_id = meta.base_rev_id
+                    sub.bytes_added = meta.bytes_added
+                    sub.is_new_page = meta.is_new_page
+                    sub.wikidata_qid = meta.wikidata_qid
+                    sub.metadata_fetched_at = datetime.now(timezone.utc)
 
             # Rescore against the campaign's current rules and settings.
             # The suggested-list key set is built once per kind rather than

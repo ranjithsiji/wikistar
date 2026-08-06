@@ -59,6 +59,31 @@ uv run pytest
 uv run python scripts/reset_db.py
 ```
 
+## Maintenance scripts
+
+Scoring can be run from the command line instead of the UI, so it can go
+on a schedule or run after a campaign closes. Each of these takes
+`--dry-run` (reports what would change, writes nothing) and
+`--campaign <slug>`, and is safe to re-run.
+
+```bash
+# rescore from stored data — after editing rules, settings or a
+# suggested list. No network; fast enough to run often.
+uv run python scripts/recalculate_scores.py --campaign kcm26
+
+# refetch wiki metadata first, then rescore — when participants kept
+# editing after submitting. Rate-limited by the MediaWiki API.
+uv run python scripts/recalculate_scores.py --campaign kcm26 --refetch
+
+# recount participants' Wikidata/Commons bulk activity. Unlike the
+# in-app "Recalculate all", this is not bounded by the request timeout,
+# so it also scores the heaviest contributors the sweep skips.
+uv run python scripts/recalculate_bulk.py --campaign kcm26
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#server-side-scripts) for
+the full list, including the one-off backfills.
+
 ## Deployment (Toolforge)
 
 Classic python webservice (uwsgi). The repository root is the

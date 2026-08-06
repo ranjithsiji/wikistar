@@ -209,8 +209,16 @@ routers/
   admin.py        stats, audit log, user admin
   common.py       serializers, leaderboard, audit helper
 scripts/
-  reset_db.py    drop/recreate the schema (dev, or --tables-only on Toolforge)
+  reset_db.py               drop/recreate the schema (dev, or --tables-only
+                            on Toolforge)
+  recalculate_scores.py     rescore submissions from stored data, or
+                            --refetch their wiki metadata first
+  recalculate_bulk.py       recount Wikidata/Commons bulk submissions
+  backfill_suggested_qids.py  resolve suggested articles' Wikidata items
+  backfill_new_pages.py     re-detect is_new_page / bytes_added
 ```
+
+See [Server-side scripts](#server-side-scripts) for what each one is for.
 
 ## Design system (Codex)
 
@@ -272,6 +280,96 @@ submitted articles (needs OAuth write scope), multi-language UI.
 
 Interactive docs at `/docs` (OpenAPI). All state-changing routes require
 the session cookie; role checks are enforced per campaign.
+
+## Where points come from
+
+A submission's total is a function of the submission, its claims and
+reviews, and the campaign's rules and settings. `domain/scoring.py` is
+the only thing that computes it, but the result is stored on the row as
+`submissions.points_cached`, and every write that can change a score
+refreshes it in the same transaction — reviews, claims, moderation,
+metadata refresh, the bulk sweep, and campaign edits (rules, settings or
+the suggested list, which rescore the whole campaign).
+
+Read paths therefore never rescore: the leaderboard is one `GROUP BY`,
+statistics are `SUM`/`COUNT` aggregates, and the submissions list returns
+the stored number. Rows predating the column are `NULL` and are
+backfilled lazily on first read (`ensure_scored`).
+
+The consequence for operations: **anything that changes points outside a
+request has to write `points_cached` too.** That is why the scripts below
+call `rescore_submission` rather than only updating the underlying data.
+
+## Server-side scripts
+
+Scoring can be driven entirely from the command line, so it can run on a
+schedule or after a campaign closes instead of being triggered by someone
+clicking through the UI. Each script calls the same functions the API
+uses (`compute_breakdown` via `rescore_*`, `_fetch_bulk_metrics`,
+`_fetch_metadata`), so a score never depends on which entry point
+produced it.
+
+Every script accepts `--dry-run`, which prints each change it would make
+and writes nothing. All are idempotent and safe to re-run.
+
+| script | what it does | other flags | cost |
+| --- | --- | --- | --- |
+| `recalculate_scores.py` | rescore from data already in the database | `--campaign` `--active` | no network; thousands of rows/second |
+| `recalculate_scores.py --refetch` | refetch each page's wiki metadata, then rescore | `--campaign` `--active` `--user` | several API round-trips per submission |
+| `recalculate_bulk.py` | recount Wikidata/Commons bulk submissions | `--campaign` `--active` `--user` `--kind` `--workers` | walks each participant's contribution history |
+| `backfill_new_pages.py` | re-detect `is_new_page` / `bytes_added` | `--campaign` | same as `--refetch` |
+| `backfill_suggested_qids.py` | resolve suggested articles' Wikidata items | — | one batched call per wiki |
+
+The two `backfill_*` scripts are one-off repairs for data recorded before
+a bug was fixed, not routine maintenance; each explains the specific
+defect it repairs in its module docstring.
+
+```bash
+# after editing scoring rules, a setting, or a suggested list
+uv run python scripts/recalculate_scores.py --campaign kcm26
+
+# when the wiki data itself is stale (participants kept editing)
+uv run python scripts/recalculate_scores.py --campaign kcm26 --refetch
+
+# recount everyone's Wikidata bulk activity
+uv run python scripts/recalculate_bulk.py --campaign kcm26
+uv run python scripts/recalculate_bulk.py --campaign kcm26 --user Dana
+```
+
+**Why a script rather than the "Recalculate all" button.** The web sweep
+has to answer inside one HTTP request, so it runs against the lower
+`max_wikidata_edits_sweep` cap (default 500) and *skips* participants
+above it rather than overwriting their counts. On a large campaign that
+leaves the heaviest contributors unscored until someone recalculates each
+by hand. `recalculate_bulk.py` has no request deadline, so it uses the
+generous `wikidata_edit_limit_single` cap (default 5000) and scores them.
+Participants still past that cap are reported as needing a manual points
+override — the campaign settings decide both caps.
+
+**Failure behaviour.** A wiki error leaves the row's existing counts
+alone rather than replacing good data with zeros; the run reports it as a
+failure and continues with the next row. Because of that, a partially
+failed run is safe to simply run again.
+
+**Why the scripts read everything up front.** Each one loads the rows it
+needs into plain values, commits to release the database connection, and
+only then starts the wiki calls — the database is touched again once the
+fetching is done. This is not an optimisation: ToolsDB closes connections
+that have been idle for a few minutes, a run of a few thousand
+submissions spends far longer than that in the MediaWiki API, and a
+session held open across it dies on the first dropped connection. Worse,
+SQLAlchemy then refuses every subsequent statement (`Can't reconnect
+until invalid transaction is rolled back`), so one dead connection would
+otherwise fail every remaining row and silently undercount the report.
+For the same reason nothing inside a fetch loop may touch an ORM object:
+a lazy load there is a database query in disguise, and it surfaces
+confusingly as a "fetch failed" against the wiki.
+
+**Scheduling.** The default (no-network) mode of `recalculate_scores.py`
+is cheap enough to run often. The refetching modes are rate-limited by
+the MediaWiki API at roughly a few submissions per second — a
+thousand-submission campaign takes a while, so run those nightly or by
+hand, not on a short interval.
 
 ## Running
 

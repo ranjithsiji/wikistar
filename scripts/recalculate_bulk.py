@@ -75,7 +75,8 @@ def main() -> None:
 
     from core.db import SessionLocal, sync_schema
     from routers.common import rescore_submission
-    from routers.submissions import _fetch_bulk_metrics
+    from routers.submissions import (_fetch_bulk_metrics,
+                                     _individually_submitted_qids)
 
     sync_schema()
     db = SessionLocal()
@@ -115,32 +116,54 @@ def main() -> None:
         print(f"Recalculating {len(subs)} bulk submission(s) across "
               f"{len(campaigns)} campaign(s), {workers} at a time…")
 
-        # The wiki fetches run concurrently because each one is a long
-        # sequence of paginated round-trips; the results are applied here,
-        # on the thread that owns the session. Only plain values cross the
-        # thread boundary — an ORM object must not.
-        def fetch(sub: Submission) -> tuple[int, dict | None, str]:
-            campaign = campaigns[sub.campaign_id]
-            probe = Submission(
-                campaign_id=sub.campaign_id, user_id=sub.user_id,
-                kind=sub.kind, title=sub.title, wiki_domain=sub.wiki_domain)
-            try:
-                # db is passed so individually-submitted items are excluded
-                # from the bulk total exactly as the API does it. Reads
-                # only, and this call is what already runs inside a request.
-                _fetch_bulk_metrics(probe, campaign, sub.user.username, db)
-                return sub.id, probe.metrics, ""
-            except Exception as exc:
-                return sub.id, None, str(exc)
-
-        # Usernames and campaign windows are read before the pool starts,
-        # so worker threads never touch the session.
+        # Everything the fetches need is resolved on this thread, before
+        # the pool starts: a Session is not thread-safe, and the fetches
+        # take minutes, which is long enough for ToolsDB to drop an idle
+        # connection and poison a session held open across them.
+        #
+        # _fetch_bulk_metrics normally takes the session so it can exclude
+        # items the participant submitted individually. That query is run
+        # here instead and the answer passed in as a stub, so the workers
+        # get the same exclusion without touching the database.
+        plan = []
         for sub in subs:
-            _ = sub.user.username
+            own = _individually_submitted_qids(
+                db, campaigns[sub.campaign_id], sub.user_id)
+            plan.append((sub.id, sub.campaign_id, sub.user_id, sub.kind,
+                         sub.title, sub.wiki_domain, sub.user.username, own))
+        db.commit()  # release the connection before the slow part
+
+        class _OwnQids:
+            """Stands in for the session inside the worker: answers the one
+            query _fetch_bulk_metrics makes, from the set resolved above."""
+
+            def __init__(self, qids: set[str]):
+                self._qids = qids
+
+            def query(self, *args, **kwargs):
+                return self
+
+            def filter(self, *args, **kwargs):
+                return self
+
+            def all(self):
+                return [(q,) for q in self._qids]
+
+        def fetch(item) -> tuple[int, dict | None, str]:
+            (sub_id, campaign_id, user_id, kind, title, domain,
+             username, own) = item
+            campaign = campaigns[campaign_id]
+            probe = Submission(campaign_id=campaign_id, user_id=user_id,
+                               kind=kind, title=title, wiki_domain=domain)
+            try:
+                _fetch_bulk_metrics(probe, campaign, username, _OwnQids(own))
+                return sub_id, probe.metrics, ""
+            except Exception as exc:
+                return sub_id, None, str(exc)
 
         results: dict[int, tuple[dict | None, str]] = {}
-        with ThreadPoolExecutor(max_workers=min(workers, len(subs))) as pool:
-            for sub_id, metrics, err in pool.map(fetch, subs):
+        with ThreadPoolExecutor(max_workers=min(workers, len(plan))) as pool:
+            for sub_id, metrics, err in pool.map(fetch, plan):
                 results[sub_id] = (metrics, err)
 
         changed = unchanged = failed = capped = 0

@@ -64,34 +64,58 @@ def main() -> None:
                 return
             query = query.filter(Submission.campaign_id == campaign.id)
 
-        subs = query.all()
-        if not subs:
+        # Everything the wiki fetches need is read up front, into plain
+        # values. A long run makes thousands of slow API calls, and
+        # ToolsDB closes a connection that has been idle for a few
+        # minutes — so the session must not be held open across them, and
+        # nothing inside the fetch loop may touch the database. (Reading
+        # sub.user.username lazily in that loop was doing exactly that,
+        # which is why a dropped connection surfaced as "fetch failed".)
+        targets = [
+            (s.id, s.campaign_id, s.wiki_domain, s.title, s.user.username)
+            for s in query.all()
+        ]
+        if not targets:
             print("Nothing to do: no page submissions found.")
             return
-        print(f"Checking {len(subs)} submission(s)…")
+        windows = {
+            c.id: (c.slug, c.start_date, c.end_date)
+            for c in db.query(Campaign).filter(
+                Campaign.id.in_({t[1] for t in targets})).all()
+        }
+        db.commit()  # release the connection before the slow part
+        print(f"Checking {len(targets)} submission(s)…")
 
-        # Cache the campaign per id: every submission needs its window,
-        # and a campaign's settings are read again when rescoring.
-        campaigns: dict[int, Campaign] = {}
-        changed = failed = 0
-        for i, sub in enumerate(subs, 1):
-            campaign = campaigns.get(sub.campaign_id)
-            if campaign is None:
-                campaign = campaigns[sub.campaign_id] = db.get(
-                    Campaign, sub.campaign_id)
-            if campaign is None:
+        fetched: dict[int, object] = {}
+        failed = 0
+        for i, (sub_id, campaign_id, domain, title, username) in enumerate(
+                targets, 1):
+            window = windows.get(campaign_id)
+            if window is None:
                 continue
+            slug, start, end = window
             try:
-                meta = mediawiki.fetch_page_metadata(
-                    sub.wiki_domain, sub.title, sub.user.username,
-                    campaign.start_date, campaign.end_date)
+                meta = mediawiki.fetch_page_metadata(domain, title, username,
+                                                     start, end)
             except Exception as exc:
                 failed += 1
-                print(f"  {campaign.slug}/{sub.title!r}: fetch failed ({exc})")
+                print(f"  {slug}/{title!r}: fetch failed ({exc})")
                 continue
-            if not meta.exists:
-                continue
+            if meta.exists:
+                fetched[sub_id] = meta
+            if i % 100 == 0:
+                print(f"  …{i}/{len(targets)} checked")
 
+        # Now the database work, in short transactions over data already
+        # in hand. Batched so a dropped connection costs one batch, not
+        # the whole run.
+        changed = 0
+        batch = []
+        for sub_id, meta in fetched.items():
+            sub = db.get(Submission, sub_id)
+            if sub is None:
+                continue
+            campaign = db.get(Campaign, sub.campaign_id)
             before = (sub.is_new_page, sub.bytes_added)
             after = (meta.is_new_page, meta.bytes_added)
             if before == after:
@@ -100,23 +124,22 @@ def main() -> None:
             print(f"  {campaign.slug}/{sub.title!r} by {sub.user.username}: "
                   f"is_new_page {before[0]} -> {after[0]}, "
                   f"bytes_added {before[1]} -> {after[1]}")
-            if not dry_run:
-                sub.is_new_page = meta.is_new_page
-                sub.bytes_added = meta.bytes_added
-                sub.page_len = meta.page_len
-                sub.wikidata_qid = meta.wikidata_qid
-                rescore_submission(campaign, sub)
-                # Committed in batches: a long run should not hold one
-                # transaction open across thousands of wiki round-trips.
-                if changed % 50 == 0:
-                    db.commit()
-            if i % 100 == 0:
-                print(f"  …{i}/{len(subs)} checked")
+            if dry_run:
+                continue
+            sub.is_new_page = meta.is_new_page
+            sub.bytes_added = meta.bytes_added
+            sub.page_len = meta.page_len
+            sub.wikidata_qid = meta.wikidata_qid
+            rescore_submission(campaign, sub)
+            batch.append(sub_id)
+            if len(batch) >= 50:
+                db.commit()
+                batch = []
 
         if dry_run:
+            db.rollback()
             print(f"\nDry run: {changed} submission(s) would change, "
                   f"{failed} fetch failure(s). Nothing was written.")
-            db.rollback()
         else:
             db.commit()
             print(f"\nUpdated {changed} submission(s), "
